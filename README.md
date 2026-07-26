@@ -30,6 +30,12 @@ Bu paketin amacı Stone'u mümkün olduğunca az Codex promptuyla, kararları te
 - GitHub repo listeleme, clone, pull, commit ve push
 - Yeni bilgisayarda bütün projeleri geri yükleme
 
+## Stone MCP
+
+Stone MCP is a separately deployable, provider-neutral MCP service. The same authenticated tool contract is intended for ChatGPT Work, Claude, Claude Cowork and future standards-compatible MCP clients. It is not a maintainer-hosted backend: self-hosters connect their own Firebase project and supply their own server secrets.
+
+See [services/mcp/README.md](services/mcp/README.md) for local setup, Firebase Admin configuration, OAuth metadata, provider connection notes and deployment checks.
+
 ## Dağıtım modeli
 
 - Stone, Google Play Store'da veya public App Store listesinde dağıtılmaz.

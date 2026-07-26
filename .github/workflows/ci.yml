@@ -23,5 +23,7 @@ jobs:
       - run: pnpm test
       - run: pnpm test:integration
       - run: pnpm verify:native-dependencies
+      - run: pnpm verify:mcp
+      - run: pnpm mcp:build
       - run: pnpm expo:doctor
       - run: pnpm mobile:export
