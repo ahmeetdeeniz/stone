@@ -338,7 +338,7 @@ function toDocument(row: DocumentRow): Document {
 function buildSearchQuery(value: string | undefined): string | null {
   const terms = value
     ?.trim()
-    .replace(/["*:()\[\]]/gu, " ")
+    .replace(/["*:()[\]]/gu, " ")
     .split(/\s+/u)
     .filter(Boolean)
     .slice(0, 8);

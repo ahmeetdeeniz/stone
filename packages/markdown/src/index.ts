@@ -295,7 +295,7 @@ export function containsUnsafeRawHtml(source: string): boolean {
 export function sanitizeFileName(value: string, fallback = "stone-note"): string {
   const clean = value
     .normalize("NFKC")
-    .replace(/[<>:"/\\|?*\u0000-\u001F]/gu, "-")
+    .replace(/[<>:"/\\|?*]/gu, "-")
     .replace(/\s+/gu, " ")
     .replace(/^\.+|\.+$/gu, "")
     .trim();
@@ -312,7 +312,19 @@ export function validateImportFile(name: string, bytes: Uint8Array, maxBytes = 5
   }
   try {
     const decoded = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-    if (decoded.includes("\u0000")) throw new Error("binary");
+    if (
+      [...decoded].some((character) => {
+        const code = character.charCodeAt(0);
+        return (
+          code === 0 ||
+          (code >= 1 && code <= 8) ||
+          code === 11 ||
+          code === 12 ||
+          (code >= 14 && code <= 31)
+        );
+      })
+    )
+      throw new Error("binary");
     return normalizeMarkdown(decoded);
   } catch {
     throw new MarkdownParseError("The selected file is not valid UTF-8 Markdown.");
@@ -447,7 +459,7 @@ function findInlineTokens(source: string, from: number, to: number): MarkdownInl
   for (const [type, pattern] of patterns) {
     for (const match of text.matchAll(pattern)) {
       const index = match.index ?? 0;
-      const full = match[0]!;
+      const full = match[0];
       const linkFields = type === "link" ? { label: match[1]!, url: match[2]! } : {};
       tokens.push({
         type,
