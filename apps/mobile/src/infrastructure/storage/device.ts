@@ -39,6 +39,10 @@ export class SQLiteDeviceRepository implements DeviceRepository {
       id,
     );
   }
+
+  public async bindOwner(id: string, ownerId: string): Promise<void> {
+    await this.database.runAsync("UPDATE devices SET owner_id = ? WHERE id = ?", ownerId, id);
+  }
 }
 
 const DEVICE_ID_KEY = "stone.device.id";

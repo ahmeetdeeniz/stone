@@ -64,6 +64,7 @@ export interface SettingsRepository {
 
 export interface DeviceRepository {
   getOrCreate(input: Omit<Device, "lastSeenAt">): Promise<Device>;
+  bindOwner(id: string, ownerId: string): Promise<void>;
   touch(id: string, lastSeenAt: string): Promise<void>;
 }
 

@@ -8,6 +8,7 @@ export interface AppServices {
   settings: SettingsRepository;
   settingsUseCases: SettingsUseCases;
   device: SQLiteDeviceRepository;
+  deviceId: string;
 }
 
 export async function createAppServices(): Promise<AppServices> {
@@ -15,6 +16,7 @@ export async function createAppServices(): Promise<AppServices> {
   const settings = new SQLiteSettingsRepository(database);
   const settingsUseCases = new SettingsUseCases(settings);
   const device = new SQLiteDeviceRepository(database);
-  await device.getOrCreate(await createDeviceIdentity());
-  return { database, settings, settingsUseCases, device };
+  const deviceIdentity = await createDeviceIdentity();
+  await device.getOrCreate(deviceIdentity);
+  return { database, settings, settingsUseCases, device, deviceId: deviceIdentity.id };
 }

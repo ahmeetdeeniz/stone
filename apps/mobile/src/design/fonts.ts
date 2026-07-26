@@ -6,7 +6,7 @@ import {
   Inter_700Bold,
 } from "@expo-google-fonts/inter";
 import { useFonts as useExpoFonts } from "expo-font";
-import bongitaFont from "../../assets/fonts/Bongita-Regular.otf";
+import { BONGITA_FONT_FAMILY, bongitaFont } from "./font-assets";
 
 export function useStoneFonts(): boolean {
   const [interLoaded] = useInterFonts({
@@ -15,6 +15,8 @@ export function useStoneFonts(): boolean {
     Inter_600SemiBold,
     Inter_700Bold,
   });
-  const [bongitaLoaded] = useExpoFonts({ Bongita: bongitaFont });
+  const [bongitaLoaded] = useExpoFonts({
+    [BONGITA_FONT_FAMILY]: bongitaFont,
+  });
   return interLoaded && bongitaLoaded;
 }

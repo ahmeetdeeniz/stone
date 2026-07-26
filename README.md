@@ -32,7 +32,7 @@ Bu paketin amacı Stone'u mümkün olduğunca az Codex promptuyla, kararları te
 
 1. Boş bir GitHub reposu oluştur.
 2. Bu paketin içeriğini repo köküne kopyala.
-3. `apps/mobile/assets/fonts/Bongita-Regular.ttf` yoluna kendi Bongita font dosyanı koy.
+3. Onaylı `apps/mobile/assets/fonts/Bongita-Regular.otf` dosyasını koru; OTF uzantısını değiştirme.
 4. Firebase projesini oluşturup `docs/17-FIREBASE-SETUP.md` dosyasındaki adımları uygula.
 5. Codex'i repo kökünde aç.
 6. Önce `goals/01-FOUNDATION.goal.md` içeriğini `/goal` olarak gönder.

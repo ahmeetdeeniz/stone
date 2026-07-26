@@ -16,9 +16,13 @@ interface AuthContextValue {
   service: AuthService | null;
 }
 
+interface AuthProviderProps extends PropsWithChildren {
+  onUserChanged?: (user: AuthUser | null) => void | Promise<void>;
+}
+
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-export function AuthProvider({ children }: PropsWithChildren) {
+export function AuthProvider({ children, onUserChanged }: AuthProviderProps) {
   const [service, setService] = useState<AuthService | null>(null);
   const [status, setStatus] = useState<AuthContextValue["status"]>("loading");
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -32,13 +36,16 @@ export function AuthProvider({ children }: PropsWithChildren) {
       unsubscribe = nextService.subscribe((nextUser) => {
         setUser(nextUser);
         setStatus("ready");
+        void Promise.resolve(onUserChanged?.(nextUser)).catch((caught: unknown) => {
+          setError(caught instanceof Error ? caught.message : "Cihaz kimliği güncellenemedi.");
+        });
       });
     } catch (caught) {
       setStatus("error");
       setError(caught instanceof Error ? caught.message : "Kimlik doğrulama başlatılamadı.");
     }
     return () => unsubscribe?.();
-  }, []);
+  }, [onUserChanged]);
 
   const value = useMemo(() => ({ status, user, error, service }), [error, service, status, user]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

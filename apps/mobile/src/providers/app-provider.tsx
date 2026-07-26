@@ -1,7 +1,15 @@
-import { createContext, useContext, useEffect, useState, type PropsWithChildren } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useState,
+  type PropsWithChildren,
+} from "react";
 import { ThemeProvider } from "../design/theme";
 import { LoadingState } from "../components/states";
 import { ErrorState } from "../components/states";
+import type { AuthUser } from "../infrastructure/firebase/auth";
 import { createAppServices, type AppServices } from "../services/composition-root";
 import { AuthProvider } from "./auth-provider";
 
@@ -15,11 +23,16 @@ export function AppProvider({ children }: PropsWithChildren) {
         setError(caught instanceof Error ? caught.message : "Yerel altyapı başlatılamadı."),
       );
   }, []);
+  const bindDeviceOwner = useCallback(
+    (user: AuthUser | null) =>
+      services && user ? services.device.bindOwner(services.deviceId, user.uid) : undefined,
+    [services],
+  );
   return (
     <ThemeProvider>
       {services ? (
         <AppServicesContext.Provider value={services}>
-          <AuthProvider>{children}</AuthProvider>
+          <AuthProvider onUserChanged={bindDeviceOwner}>{children}</AuthProvider>
         </AppServicesContext.Provider>
       ) : error ? (
         <ErrorState message={error} />

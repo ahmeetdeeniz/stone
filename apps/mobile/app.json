@@ -10,14 +10,21 @@
     "plugins": ["expo-router", "@react-native-firebase/app"],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.stone.workspace"
+      "bundleIdentifier": "com.imtempra.stone"
     },
     "android": {
-      "package": "com.stone.workspace"
+      "package": "com.imtempra.stone"
     },
     "assetBundlePatterns": ["**/*"],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "94c185f1-913f-41d0-a888-e06f04d2b279"
+      }
+    },
+    "owner": "tt3mpra"
   }
 }
