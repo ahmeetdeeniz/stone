@@ -43,12 +43,12 @@ Stone Windows desktop is a Tauri 2 development build. It is intended for direct 
 
 To use it locally:
 
-1. Copy `.env.example` to `.env` and provide your own `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_PROJECT_ID`, and `VITE_FIREBASE_AUTH_DOMAIN`.
+1. Copy `apps/desktop/.env.example` to `apps/desktop/.env.local` and provide your own `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_PROJECT_ID`, and `VITE_FIREBASE_AUTH_DOMAIN`. Desktop env files live in `apps/desktop/` (not the monorepo root), so the mobile app's `EXPO_PUBLIC_*` variables never leak into the desktop bundle. `apps/desktop/.env.local` is ignored by Git; only `apps/desktop/.env.example` is committed as the public template.
 2. Keep the approved `apps/mobile/assets/fonts/Bongita-Regular.otf` asset in the repository; do not rename or replace it.
 3. Run `pnpm install`, then `pnpm desktop:dev`.
-4. Install the Visual C++ build tools and WebView2 when creating a Windows Tauri installer with `pnpm desktop:tauri:build`.
+4. Install the Visual C++ build tools and WebView2 when creating a Windows Tauri installer locally with `pnpm desktop:tauri:build`. A production NSIS installer can also be built without any local Windows toolchain via the `Desktop Windows Release` GitHub Actions workflow — see below.
 
-The desktop app stores local data in its Tauri application data directory, uses the Windows credential store for Firebase refresh tokens, and links only Markdown files selected by the user. Each self-hosted installation must use its own Firebase project and may configure its own mobile package and iOS bundle identifiers.
+The desktop app stores local data in its Tauri application data directory, uses the Windows credential store for Firebase refresh tokens, and links only Markdown files selected by the user. Each self-hosted installation must use its own Firebase project and may configure its own mobile package and iOS bundle identifiers. The desktop app **compiles** without any Firebase configuration present (the values are simply empty at build time); signing in shows a clear "VITE_FIREBASE_API_KEY yapılandırılmamış" error at runtime instead of a confusing network failure if `apps/desktop/.env.local` was never configured.
 
 ### GitHub desktop setup
 
@@ -59,7 +59,7 @@ The desktop GitHub integration uses GitHub OAuth Device Flow and never asks for 
 3. Open the app's settings and enable "Device Flow".
 4. Copy the generated Client ID (not the client secret — Stone never uses it).
 
-Set only that public client ID in the local root `.env` file (never commit real values; `.env` is ignored):
+Set only that public client ID in `apps/desktop/.env.local` (never commit real values; `.env` and `.env.local` are ignored):
 
 ```text
 VITE_GITHUB_CLIENT_ID=your-own-github-oauth-app-client-id
@@ -69,13 +69,27 @@ Do not add a GitHub client secret, access token, or personal credential to the r
 
 Stone performs repository listing, cloning, pull, status, and reviewed stage/commit/push through the user's local Git installation. Force push, reset, clean, branch deletion, rebase, merge, and automatic conflict resolution are intentionally unavailable.
 
+### Production Windows installer (GitHub Actions)
+
+`.github/workflows/desktop-release.yml` builds the production Stone Windows installer (NSIS `setup.exe`) on a `windows-latest` GitHub-hosted runner. It:
+
+- installs the repository's pinned Node and pnpm versions and runs `pnpm install --frozen-lockfile`;
+- installs the stable Rust MSVC toolchain and restores pnpm/Cargo caches;
+- runs `pnpm format:check`, `pnpm typecheck`, `pnpm lint`, `pnpm test`, `pnpm verify:desktop`, and `pnpm desktop:build` before attempting the native build;
+- builds only the NSIS bundle (`tauri build --bundles nsis`) and computes a SHA-256 checksum file next to the installer;
+- uploads the installer and checksum as a workflow artifact named `stone-desktop-windows-nsis`.
+
+No Firebase or GitHub OAuth credentials are configured in this workflow: the desktop app compiles with empty `VITE_*` values (see above), so no secrets are needed just to produce the installer, and none are embedded in the artifact. The workflow never commits generated installers back to the repository.
+
+It runs on `workflow_dispatch` (manual trigger from the Actions tab) and on pushes of version tags matching `v*.*.*`. To download a build: open the repository's **Actions** tab on GitHub, select the **Desktop Windows Release** workflow, open the run you want, and download the `stone-desktop-windows-nsis` artifact from the run summary page.
+
 #### Live end-to-end verification against a disposable repository
 
 `pnpm verify:github` statically checks the GitHub integration's wiring (endpoints, safety boundaries, forbidden Git operations) and needs no credentials. It runs in CI.
 
 `pnpm verify:github:live` is a separate, opt-in command that drives the same production GitHub/Git code against a real GitHub account and a disposable repository — Device Flow, keychain persistence, authenticated pagination, project linking, restore/clone, status/pull, and a reviewed stage/commit/push. It is intentionally **not** part of CI and never runs with real credentials automatically:
 
-- It requires `VITE_GITHUB_CLIENT_ID` (from `.env`) and an explicit `STONE_LIVE_E2E_REPO=<your-account>/<disposable-repo>` environment variable; without both it prints what is missing and exits successfully without making any network, keychain, or Git call.
+- It requires `VITE_GITHUB_CLIENT_ID` (from `apps/desktop/.env.local`) and an explicit `STONE_LIVE_E2E_REPO=<your-account>/<disposable-repo>` environment variable; without both it prints what is missing and exits successfully without making any network, keychain, or Git call.
 - Use a throwaway private repository you don't mind Stone pushing a small verification commit to (a `STONE_GOAL7_E2E.md` file with a timestamp) — never point it at a real project repository.
 - It prints a Device Flow verification URL and user code for you to authorize in a browser, then continues automatically; it never logs the resulting access token, device code, or keychain contents.
 - Restores happen in a unique temporary directory outside the Stone source tree, which is removed automatically when the run finishes.

@@ -5,9 +5,9 @@ import { normalizeMarkdown } from "@stone/markdown";
 import { listen } from "@tauri-apps/api/event";
 import GithubPanel from "./GithubPanel";
 import {
-  config,
   desktopApi,
   isTauri,
+  requireFirebaseConfigured,
   type AuthSession,
   type DesktopDocument,
   type FileFingerprint,
@@ -60,7 +60,7 @@ function AuthScreen({
     setBusy(true);
     onError(null);
     try {
-      if (!config.firebaseApiKey) throw new Error("VITE_FIREBASE_API_KEY yapılandırılmamış.");
+      requireFirebaseConfigured();
       onAuthenticated(await desktopApi.authSignIn(email.trim(), password));
     } catch (caught) {
       onError(caught instanceof Error ? caught.message : "Giriş yapılamadı.");
@@ -73,7 +73,7 @@ function AuthScreen({
     setBusy(true);
     onError(null);
     try {
-      if (!config.firebaseApiKey) throw new Error("VITE_FIREBASE_API_KEY yapılandırılmamış.");
+      requireFirebaseConfigured();
       await desktopApi.authPasswordReset(email.trim());
       setResetSent(true);
     } catch (caught) {

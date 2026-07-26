@@ -22,18 +22,36 @@ export interface DesktopConfig {
   githubClientId: string;
 }
 
-const environment = import.meta.env as unknown as Record<string, unknown>;
-const environmentString = (key: string): string => {
-  const value = environment[key];
-  return typeof value === "string" ? value : "";
-};
+/** Reads only `VITE_*` keys, so the mobile app's `EXPO_PUBLIC_*` variables (which share the
+ * monorepo but are never meant for the desktop bundle) can never accidentally populate desktop
+ * config, regardless of which `.env` files happen to be loaded. Exported as a pure function
+ * (rather than reading `import.meta.env` inline) so this contract is directly unit-testable. */
+export function resolveDesktopConfig(environment: Record<string, unknown>): DesktopConfig {
+  const environmentString = (key: string): string => {
+    const value = environment[key];
+    return typeof value === "string" ? value : "";
+  };
+  return {
+    firebaseApiKey: environmentString("VITE_FIREBASE_API_KEY"),
+    firebaseProjectId: environmentString("VITE_FIREBASE_PROJECT_ID"),
+    firebaseAuthDomain: environmentString("VITE_FIREBASE_AUTH_DOMAIN"),
+    githubClientId: environmentString("VITE_GITHUB_CLIENT_ID"),
+  };
+}
 
-export const config: DesktopConfig = {
-  firebaseApiKey: environmentString("VITE_FIREBASE_API_KEY"),
-  firebaseProjectId: environmentString("VITE_FIREBASE_PROJECT_ID"),
-  firebaseAuthDomain: environmentString("VITE_FIREBASE_AUTH_DOMAIN"),
-  githubClientId: environmentString("VITE_GITHUB_CLIENT_ID"),
-};
+export const config: DesktopConfig = resolveDesktopConfig(import.meta.env);
+
+/** Throws a clear, actionable error when required Firebase config is missing, instead of
+ * failing silently or with an opaque network error. Desktop builds compile without this
+ * configuration; it is only required at runtime for sign-in. Takes an explicit `apiKey`
+ * (defaulting to the real config) so the throw/no-throw behavior is directly testable. */
+export function requireFirebaseConfigured(apiKey: string = config.firebaseApiKey): void {
+  if (!apiKey) {
+    throw new Error(
+      "VITE_FIREBASE_API_KEY yapılandırılmamış. apps/desktop/.env.local dosyasına ekleyin (bkz. apps/desktop/.env.example).",
+    );
+  }
+}
 
 export const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
