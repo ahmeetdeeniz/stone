@@ -6,6 +6,7 @@ const readJson = (file) => JSON.parse(fs.readFileSync(path.join(root, file), "ut
 const desktop = readJson("apps/desktop/package.json");
 const tauri = readJson("apps/desktop/src-tauri/tauri.conf.json");
 const rust = fs.readFileSync(path.join(root, "apps/desktop/src-tauri/src/lib.rs"), "utf8");
+const build = fs.readFileSync(path.join(root, "apps/desktop/src-tauri/build.rs"), "utf8");
 
 const requiredDependencies = [
   "@tauri-apps/api",
@@ -38,5 +39,8 @@ for (const command of [
 }
 if (!rust.includes("MAX_MARKDOWN_BYTES") || !rust.includes("ExternalEditConflict")) {
   throw new Error("Desktop Markdown safety checks are missing.");
+}
+if (!build.includes("stone_icon()") || !build.includes("window_icon_path")) {
+  throw new Error("Tauri Windows icon build wiring is missing.");
 }
 console.log("Desktop Tauri, dependency, storage, keychain, auth and linked-file wiring verified.");

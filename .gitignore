@@ -3,6 +3,8 @@ node_modules/
 .expo/
 dist/
 target/
+/apps/desktop/src-tauri/icons/
+/apps/desktop/src-tauri/gen/
 coverage/
 *.tsbuildinfo
 .env

@@ -283,11 +283,24 @@ fn safe_full_name(full_name: &str) -> Result<(&str, &str), String> {
         return Err("GitHub repository adı owner/name biçiminde olmalı.".to_owned());
     }
     for value in [owner, name] {
-        if value == "." || value == ".." || value.contains('\\') || value.contains(':') {
+        if value == "."
+            || value == ".."
+            || value.is_empty()
+            || value.ends_with(' ')
+            || value.ends_with('.')
+            || !value.chars().all(|character| {
+                character.is_ascii_alphanumeric() || matches!(character, '-' | '_' | '.')
+            })
+        {
             return Err("GitHub repository adı güvenli değil.".to_owned());
         }
     }
     Ok((owner, name))
+}
+
+pub fn destination_name(full_name: &str) -> Result<String, String> {
+    let (owner, name) = safe_full_name(full_name)?;
+    Ok(format!("{owner}--{name}"))
 }
 
 fn available_space(path: &Path) -> Result<u64, String> {
@@ -337,10 +350,10 @@ pub fn clone_repository(
     access_token: &str,
     cancelled: &dyn Fn() -> bool,
 ) -> Result<GitOperationResult, String> {
-    let (_, name) = safe_full_name(full_name)?;
+    let destination_name = destination_name(full_name)?;
     let root = PathBuf::from(root);
     fs::create_dir_all(&root).map_err(|error| error.to_string())?;
-    let destination = root.join(name);
+    let destination = root.join(destination_name);
     if destination.exists() {
         return Err(format!("Hedef klasör zaten var: {}", destination.display()));
     }
@@ -349,7 +362,7 @@ pub fn clone_repository(
         .saturating_mul(2)
         .max(50 * 1024 * 1024);
     check_space(root.to_string_lossy().as_ref(), estimated)?;
-    let output = require_success(run_git(
+    let clone_result = run_git(
         &[
             "clone".to_owned(),
             "--".to_owned(),
@@ -359,7 +372,17 @@ pub fn clone_repository(
         None,
         Some(access_token),
         Some(cancelled),
-    )?)?;
+    )
+    .and_then(require_success);
+    let output = match clone_result {
+        Ok(output) => output,
+        Err(error) => {
+            cleanup_partial_destination(&destination).map_err(|cleanup_error| {
+                format!("{error} (kısmi clone temizlenemedi: {cleanup_error})")
+            })?;
+            return Err(error);
+        }
+    };
     let mut warnings = Vec::new();
     if size_kb > 1_000_000 {
         warnings
@@ -371,6 +394,18 @@ pub fn clone_repository(
         );
     }
     Ok(GitOperationResult { output, warnings })
+}
+
+fn cleanup_partial_destination(path: &Path) -> Result<(), String> {
+    let metadata = match fs::symlink_metadata(path) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => return Err(error.to_string()),
+    };
+    if metadata.file_type().is_symlink() || !metadata.is_dir() {
+        return Ok(());
+    }
+    fs::remove_dir_all(path).map_err(|error| error.to_string())
 }
 
 pub fn stage_commit_push(
@@ -387,13 +422,34 @@ pub fn stage_commit_push(
     if paths.is_empty() {
         return Err("Commit için en az bir dosya seçin.".to_owned());
     }
+    let staged = require_success(run_git(
+        &[
+            "diff".to_owned(),
+            "--cached".to_owned(),
+            "--name-only".to_owned(),
+        ],
+        Some(&path),
+        None,
+        None,
+    )?)?;
+    if !staged.trim().is_empty() {
+        return Err(
+            "Repository'de daha önce stage edilmiş dosyalar var; önce bunları Git review ekranında yönetin."
+                .to_owned(),
+        );
+    }
     let mut args = vec!["add".to_owned(), "--".to_owned()];
     for value in paths {
         let candidate = Path::new(&value);
-        if candidate.is_absolute()
-            || candidate
-                .components()
-                .any(|part| part == Component::ParentDir)
+        if value.trim().is_empty()
+            || value == "."
+            || candidate.is_absolute()
+            || candidate.components().any(|part| {
+                matches!(
+                    part,
+                    Component::ParentDir | Component::RootDir | Component::Prefix(_)
+                )
+            })
         {
             return Err("Stage yolu repository dışına çıkamaz.".to_owned());
         }

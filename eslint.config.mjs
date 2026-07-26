@@ -8,6 +8,8 @@ export default tseslint.config(
       "**/node_modules/**",
       "**/.expo/**",
       "**/dist/**",
+      "**/target/**",
+      "**/gen/**",
       "**/coverage/**",
       "eslint.config.mjs",
       "vitest*.config.ts",

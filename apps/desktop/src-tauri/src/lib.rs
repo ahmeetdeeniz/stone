@@ -69,7 +69,7 @@ struct PublicAuthSession {
     expires_at: i64,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct DocumentInput {
     id: String,
@@ -382,10 +382,10 @@ fn save_document(
         .map_err(|error| error.to_string())?;
     let revision = previous.unwrap_or(0) + 1;
     let timestamp = now();
-    transaction.execute("INSERT INTO documents(id, kind, title, markdown, path, revision, updated_at, created_at, deleted_at, updated_by_device_id) VALUES(?1, 'note', ?2, ?3, ?4, ?5, ?6, ?6, NULL, ?7) ON CONFLICT(id) DO UPDATE SET title=excluded.title, markdown=excluded.markdown, path=excluded.path, revision=excluded.revision, updated_at=excluded.updated_at, updated_by_device_id=excluded.updated_by_device_id", params![document.id, document.title, document.markdown, document.path, revision, timestamp, db.device_id])?;
-    transaction.execute("INSERT INTO document_revisions(id, document_id, revision, markdown, created_at) VALUES(?1, ?2, ?3, ?4, ?5)", params![Uuid::new_v4().to_string(), document.id, revision, document.markdown, timestamp])?;
+    transaction.execute("INSERT INTO documents(id, kind, title, markdown, path, revision, updated_at, created_at, deleted_at, updated_by_device_id) VALUES(?1, 'note', ?2, ?3, ?4, ?5, ?6, ?6, NULL, ?7) ON CONFLICT(id) DO UPDATE SET title=excluded.title, markdown=excluded.markdown, path=excluded.path, revision=excluded.revision, updated_at=excluded.updated_at, updated_by_device_id=excluded.updated_by_device_id", params![document.id, document.title, document.markdown, document.path, revision, timestamp, db.device_id]).map_err(|error| error.to_string())?;
+    transaction.execute("INSERT INTO document_revisions(id, document_id, revision, markdown, created_at) VALUES(?1, ?2, ?3, ?4, ?5)", params![Uuid::new_v4().to_string(), document.id, revision, document.markdown, timestamp]).map_err(|error| error.to_string())?;
     let payload = serde_json::to_string(&document).map_err(|error| error.to_string())?;
-    transaction.execute("INSERT INTO outbox(id, owner_id, entity_type, entity_id, operation, base_revision, revision, payload, created_at, status) VALUES(?1, '', 'document', ?2, 'upsert', ?3, ?4, ?5, ?6, 'pending')", params![Uuid::new_v4().to_string(), document.id, previous.unwrap_or(0), revision, payload, timestamp])?;
+    transaction.execute("INSERT INTO outbox(id, owner_id, entity_type, entity_id, operation, base_revision, revision, payload, created_at, status) VALUES(?1, '', 'document', ?2, 'upsert', ?3, ?4, ?5, ?6, 'pending')", params![Uuid::new_v4().to_string(), document.id, previous.unwrap_or(0), revision, payload, timestamp]).map_err(|error| error.to_string())?;
     transaction.commit().map_err(|error| error.to_string())?;
     Ok(DesktopDocument {
         id: document.id,
@@ -416,9 +416,9 @@ fn open_markdown_file(
         markdown: content,
         path: Some(canonical.to_string_lossy().into_owned()),
     };
-    let result = save_document(document, state)?;
+    let result = save_document(document, state.clone())?;
     let db = state.lock().map_err(|_| "Veritabanı kilidi alınamadı.")?;
-    db.connection.execute("INSERT INTO linked_files(path, document_id, sha256, modified_ms, size, linked_folder) VALUES(?1, ?2, ?3, ?4, ?5, NULL) ON CONFLICT(path) DO UPDATE SET document_id=excluded.document_id, sha256=excluded.sha256, modified_ms=excluded.modified_ms, size=excluded.size", params![result.path, result.id, file_fingerprint.sha256, file_fingerprint.modified_ms, file_fingerprint.size]).map_err(|error| error.to_string())?;
+    db.connection.execute("INSERT INTO linked_files(path, document_id, sha256, modified_ms, size, linked_folder) VALUES(?1, ?2, ?3, ?4, ?5, NULL) ON CONFLICT(path) DO UPDATE SET document_id=excluded.document_id, sha256=excluded.sha256, modified_ms=excluded.modified_ms, size=excluded.size", params![result.path, result.id, file_fingerprint.sha256, file_fingerprint.modified_ms, file_fingerprint.size as i64]).map_err(|error| error.to_string())?;
     Ok(result)
 }
 
@@ -1095,7 +1095,7 @@ fn validate_github_repository(repository: &github::GitHubRepository) -> Result<(
 }
 
 #[tauri::command]
-fn github_link_repository(
+async fn github_link_repository(
     input: GitHubLinkInput,
     state: State<'_, Mutex<Database>>,
 ) -> Result<GitHubLink, String> {
@@ -1103,14 +1103,22 @@ fn github_link_repository(
     if input.project_id.trim().is_empty() {
         return Err("Stone proje kimliği boş olamaz.".to_owned());
     }
+    let repository = github::repository(&input.repository.full_name).await?;
+    validate_github_repository(&repository)?;
+    if repository.id != input.repository.id
+        || repository.html_url != input.repository.html_url
+        || repository.clone_url != input.repository.clone_url
+    {
+        return Err("GitHub repository bilgisi sunucuda doğrulanamadı.".to_owned());
+    }
     let timestamp = now();
     let db = state.lock().map_err(|_| "Veritabanı kilidi alınamadı.")?;
     db.connection
-        .execute("INSERT INTO github_links(project_id, repository_id, full_name, name, private, html_url, clone_url, ssh_url, size_kb, default_branch, visibility, local_path, updated_at) VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13) ON CONFLICT(project_id) DO UPDATE SET repository_id=excluded.repository_id, full_name=excluded.full_name, name=excluded.name, private=excluded.private, html_url=excluded.html_url, clone_url=excluded.clone_url, ssh_url=excluded.ssh_url, size_kb=excluded.size_kb, default_branch=excluded.default_branch, visibility=excluded.visibility, local_path=excluded.local_path, updated_at=excluded.updated_at", params![input.project_id, input.repository.id as i64, input.repository.full_name, input.repository.name, input.repository.private, input.repository.html_url, input.repository.clone_url, input.repository.ssh_url, input.repository.size_kb as i64, input.repository.default_branch, input.repository.visibility, input.local_path, timestamp])
+        .execute("INSERT INTO github_links(project_id, repository_id, full_name, name, private, html_url, clone_url, ssh_url, size_kb, default_branch, visibility, local_path, updated_at) VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13) ON CONFLICT(project_id) DO UPDATE SET repository_id=excluded.repository_id, full_name=excluded.full_name, name=excluded.name, private=excluded.private, html_url=excluded.html_url, clone_url=excluded.clone_url, ssh_url=excluded.ssh_url, size_kb=excluded.size_kb, default_branch=excluded.default_branch, visibility=excluded.visibility, local_path=excluded.local_path, updated_at=excluded.updated_at", params![input.project_id, repository.id as i64, repository.full_name, repository.name, repository.private, repository.html_url, repository.clone_url, repository.ssh_url, repository.size_kb as i64, repository.default_branch, repository.visibility, input.local_path, timestamp])
         .map_err(|error| error.to_string())?;
     Ok(GitHubLink {
         project_id: input.project_id,
-        repository: input.repository,
+        repository,
         local_path: input.local_path,
         updated_at: timestamp,
     })
@@ -1251,13 +1259,19 @@ fn restore_repositories(
             });
             continue;
         }
-        let path = PathBuf::from(&root).join(
-            repository
-                .full_name
-                .split('/')
-                .next_back()
-                .unwrap_or("repository"),
-        );
+        let path = match git::destination_name(&repository.full_name) {
+            Ok(name) => PathBuf::from(&root).join(name),
+            Err(error) => {
+                results.push(RestoreItemResult {
+                    full_name: repository.full_name,
+                    status: "failed".to_owned(),
+                    path: None,
+                    error: Some(error),
+                    warnings: Vec::new(),
+                });
+                continue;
+            }
+        };
         match git::clone_repository(
             &root,
             &repository.full_name,
@@ -1272,7 +1286,7 @@ fn restore_repositories(
                 error: None,
                 warnings: result.warnings,
             }),
-            Err(error) if check_cancelled() => results.push(RestoreItemResult {
+            Err(_error) if check_cancelled() => results.push(RestoreItemResult {
                 full_name: repository.full_name,
                 status: "cancelled".to_owned(),
                 path: None,

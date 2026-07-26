@@ -10,7 +10,11 @@ const packageJson = JSON.parse(fs.readFileSync(path.join(root, "package.json"), 
 for (const required of [
   "https://github.com/login/device/code",
   "https://github.com/login/oauth/access_token",
-  "repo user:email",
+  'scope", "repo',
+  "DeviceTokenResponse",
+  "authorization_pending",
+  "access_token: Option",
+  "pub async fn repository",
   "/user/repos",
   "X-GitHub-Api-Version",
   'rel=\\"next\\"',
@@ -54,6 +58,19 @@ for (const forbiddenExecutable of [
 }
 if (!git.includes("GIT_TERMINAL_PROMPT") || !git.includes("STONE_GITHUB_TOKEN")) {
   throw new Error("Git credential isolation is missing.");
+}
+for (const safetyBoundary of [
+  "pub fn destination_name",
+  "cleanup_partial_destination",
+  '"diff".to_owned()',
+  '"--cached".to_owned()',
+]) {
+  if (!git.includes(safetyBoundary)) {
+    throw new Error(`Git safety boundary missing: ${safetyBoundary}`);
+  }
+}
+if (!rust.includes("github::repository(&input.repository.full_name).await")) {
+  throw new Error("Repository link server validation is missing.");
 }
 if (packageJson.scripts?.["verify:github"] !== "node scripts/verify-github-desktop.mjs") {
   throw new Error("GitHub verification script is not wired at the repository root.");

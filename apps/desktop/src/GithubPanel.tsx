@@ -14,6 +14,7 @@ const githubClientConfigured = config.githubClientId.length > 0;
 export default function GithubPanel() {
   const [account, setAccount] = useState<GitHubAccount | null>(null);
   const [repos, setRepos] = useState<GitHubRepository[]>([]);
+  const [knownRepos, setKnownRepos] = useState<Map<number, GitHubRepository>>(new Map());
   const [links, setLinks] = useState<GitHubLink[]>([]);
   const [page, setPage] = useState(1);
   const [hasNext, setHasNext] = useState(false);
@@ -55,9 +56,13 @@ export default function GithubPanel() {
     try {
       const result = await desktopApi.githubListRepositories(nextPage);
       setRepos(result.repositories);
+      setKnownRepos((current) => {
+        const next = new Map(current);
+        for (const repository of result.repositories) next.set(repository.id, repository);
+        return next;
+      });
       setPage(result.page);
       setHasNext(result.hasNext);
-      setSelected(new Set());
     } catch (error) {
       setNotice(toMessage(error));
     } finally {
@@ -104,6 +109,8 @@ export default function GithubPanel() {
     await desktopApi.githubDisconnect();
     setAccount(null);
     setRepos([]);
+    setKnownRepos(new Map());
+    setSelected(new Set());
     setDevice(null);
     setNotice("GitHub bağlantısı kaldırıldı.");
   }
@@ -114,7 +121,7 @@ export default function GithubPanel() {
   }
 
   async function restore() {
-    const chosen = repos
+    const chosen = [...knownRepos.values()]
       .filter((repo) => selected.has(repo.id))
       .map((repo) => ({ fullName: repo.fullName, sizeKb: repo.sizeKb }));
     if (!root || chosen.length === 0) return;
@@ -140,7 +147,9 @@ export default function GithubPanel() {
     const retry = results
       .filter((result) => result.status === "failed")
       .map((result) => {
-        const repository = repos.find((candidate) => candidate.fullName === result.fullName);
+        const repository = [...knownRepos.values()].find(
+          (candidate) => candidate.fullName === result.fullName,
+        );
         return repository ? { fullName: repository.fullName, sizeKb: repository.sizeKb } : null;
       })
       .filter((value): value is { fullName: string; sizeKb: number } => value !== null);
@@ -380,7 +389,7 @@ export default function GithubPanel() {
               setSelected(allSelected ? new Set() : new Set(repos.map((repo) => repo.id)))
             }
           >
-            {allSelected ? "Seçimi kaldır" : "Tümünü seç"}
+            {allSelected ? "Bu sayfanın seçimini kaldır" : "Bu sayfanın tümünü seç"}
           </button>
           <button
             className="primary-button"

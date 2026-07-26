@@ -1,5 +1,5 @@
 use keyring::Entry;
-use reqwest::{header, Client, Response, StatusCode};
+use reqwest::{header, Client, Response};
 use serde::{Deserialize, Serialize};
 
 const API_BASE: &str = "https://api.github.com";
@@ -71,15 +71,11 @@ pub struct GitHubRepositoryPage {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "snake_case")]
-struct DeviceError {
-    error: String,
+struct DeviceTokenResponse {
+    access_token: Option<String>,
+    error: Option<String>,
     error_description: Option<String>,
     interval: Option<u64>,
-}
-
-#[derive(Debug, Deserialize)]
-struct DeviceToken {
-    access_token: String,
 }
 
 fn keychain() -> Result<Entry, String> {
@@ -136,6 +132,21 @@ async fn account(client: &Client, access_token: &str) -> Result<GitHubAccount, S
     response.json().await.map_err(|error| error.to_string())
 }
 
+pub async fn repository(full_name: &str) -> Result<GitHubRepository, String> {
+    let access_token = token()?.ok_or_else(|| "GitHub hesabı bağlı değil.".to_owned())?;
+    let response = api_headers(
+        json_client().get(format!("{API_BASE}/repos/{full_name}")),
+        &access_token,
+    )
+    .send()
+    .await
+    .map_err(|error| format!("GitHub repository bilgisi alınamadı: {error}"))?;
+    if !response.status().is_success() {
+        return Err(api_error(response).await);
+    }
+    response.json().await.map_err(|error| error.to_string())
+}
+
 pub async fn status() -> Result<Option<GitHubAccount>, String> {
     let Some(access_token) = token()? else {
         return Ok(None);
@@ -150,7 +161,7 @@ pub async fn device_start(client_id: String) -> Result<GitHubDeviceStart, String
     let response = json_client()
         .post(DEVICE_CODE_URL)
         .header(header::ACCEPT, "application/json")
-        .form(&[("client_id", client_id), ("scope", "repo user:email")])
+        .form(&[("client_id", client_id), ("scope", "repo".to_owned())])
         .send()
         .await
         .map_err(|error| format!("GitHub Device Flow bağlantısı başarısız: {error}"))?;
@@ -178,34 +189,46 @@ pub async fn device_poll(
         .send()
         .await
         .map_err(|error| format!("GitHub Device Flow bağlantısı başarısız: {error}"))?;
-    if response.status() == StatusCode::OK {
-        let access = response
-            .json::<DeviceToken>()
-            .await
-            .map_err(|error| error.to_string())?;
+    if !response.status().is_success() {
+        return Err(api_error(response).await);
+    }
+    let payload = response
+        .json::<DeviceTokenResponse>()
+        .await
+        .map_err(|error| error.to_string())?;
+    if let Some(access_token) = payload.access_token {
         keychain()?
-            .set_password(&access.access_token)
+            .set_password(&access_token)
             .map_err(|error| error.to_string())?;
         return Ok(GitHubDevicePoll {
             status: "authorized".to_owned(),
             interval: 5,
-            account: Some(account(&json_client(), &access.access_token).await?),
+            account: Some(account(&json_client(), &access_token).await?),
         });
     }
-    let error = response
-        .json::<DeviceError>()
-        .await
-        .map_err(|parse_error| parse_error.to_string())?;
-    let status = match error.error.as_str() {
+    let error = payload
+        .error
+        .ok_or_else(|| "GitHub Device Flow yanıtı geçersiz.".to_owned())?;
+    let status = match error.as_str() {
         "authorization_pending" => "pending",
         "slow_down" => "slow_down",
         "access_denied" => "denied",
         "expired_token" | "token_expired" => "expired",
-        other => return Err(format!("GitHub Device Flow hatası: {other}")),
+        other => {
+            return Err(format!(
+                "GitHub Device Flow hatası: {}{}",
+                other,
+                payload
+                    .error_description
+                    .as_deref()
+                    .map(|value| format!(" ({value})"))
+                    .unwrap_or_default()
+            ));
+        }
     };
     Ok(GitHubDevicePoll {
         status: status.to_owned(),
-        interval: error.interval.unwrap_or(5),
+        interval: payload.interval.unwrap_or(5),
         account: None,
     })
 }

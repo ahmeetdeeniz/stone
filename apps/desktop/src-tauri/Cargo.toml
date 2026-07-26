@@ -23,6 +23,6 @@ serde_json = "1.0.145"
 sha2 = "0.10.9"
 tauri = { version = "2.11.1", features = [] }
 thiserror = "2.0.17"
-uuid = { version = "1.18.1", features = ["v4", "serde"] }
+uuid = { version = "1.18.1", features = ["v4", "v5", "serde"] }
 rfd = "0.15.4"
 windows-sys = { version = "0.61.2", features = ["Win32_Storage_FileSystem"] }
