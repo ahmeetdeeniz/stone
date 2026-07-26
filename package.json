@@ -1,0 +1,33 @@
+{
+  "name": "stone",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@11.17.0",
+  "scripts": {
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "eslint .",
+    "typecheck": "pnpm --recursive --if-present typecheck",
+    "test": "vitest run",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "expo": "pnpm --filter @stone/mobile expo",
+    "expo:doctor": "pnpm --filter @stone/mobile doctor",
+    "mobile": "pnpm --filter @stone/mobile export",
+    "mobile:export": "pnpm --filter @stone/mobile export",
+    "mobile:android": "pnpm --filter @stone/mobile android",
+    "mobile:ios": "pnpm --filter @stone/mobile ios"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.26.0",
+    "@types/node": "^22.15.0",
+    "@types/react": "^19.1.0",
+    "@typescript-eslint/eslint-plugin": "^8.32.0",
+    "@typescript-eslint/parser": "^8.32.0",
+    "eslint": "^9.26.0",
+    "eslint-config-prettier": "^10.1.2",
+    "prettier": "^3.5.3",
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.32.0",
+    "vitest": "^3.1.2"
+  }
+}

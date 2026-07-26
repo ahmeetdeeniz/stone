@@ -1,0 +1,23 @@
+{
+  "expo": {
+    "name": "Stone",
+    "slug": "stone",
+    "version": "0.1.0",
+    "orientation": "default",
+    "scheme": "stone",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "plugins": ["expo-router", "@react-native-firebase/app"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.stone.workspace"
+    },
+    "android": {
+      "package": "com.stone.workspace"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

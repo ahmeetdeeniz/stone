@@ -1,0 +1,10 @@
+{
+  "files": [],
+  "references": [
+    { "path": "packages/domain" },
+    { "path": "packages/markdown" },
+    { "path": "packages/editor" },
+    { "path": "packages/sync" },
+    { "path": "apps/mobile" }
+  ]
+}
