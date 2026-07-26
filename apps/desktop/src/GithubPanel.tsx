@@ -134,12 +134,42 @@ export default function GithubPanel() {
       await desktopApi.restoreDiskCheck(root, chosen);
       const summary = await desktopApi.restoreRepositories(nextRunId, root, chosen);
       setResults(summary.results);
+      void desktopApi
+        .githubListLinks()
+        .then(setLinks)
+        .catch(() => undefined);
       setNotice(summary.cancelled ? "Restore iptal edildi." : "Restore tamamlandı.");
     } catch (error) {
       setNotice(toMessage(error));
     } finally {
       setBusy(false);
       setRestoring(false);
+    }
+  }
+
+  async function selectAllRepositories() {
+    if (allSelected) {
+      setSelected(new Set());
+      return;
+    }
+    setBusy(true);
+    try {
+      const all = new Map(knownRepos);
+      let nextPage = 1;
+      for (let request = 0; request < 100; request += 1) {
+        const result = await desktopApi.githubListRepositories(nextPage);
+        for (const repository of result.repositories) all.set(repository.id, repository);
+        if (!result.hasNext) break;
+        nextPage += 1;
+        if (request === 99) throw new Error("GitHub repository sayfa sınırı aşıldı.");
+      }
+      setKnownRepos(all);
+      setSelected(new Set(all.keys()));
+      setNotice(`${all.size} repository restore için seçildi.`);
+    } catch (error) {
+      setNotice(toMessage(error));
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -385,11 +415,10 @@ export default function GithubPanel() {
           </div>
           <button
             className="text-button"
-            onClick={() =>
-              setSelected(allSelected ? new Set() : new Set(repos.map((repo) => repo.id)))
-            }
+            disabled={busy}
+            onClick={() => void selectAllRepositories()}
           >
-            {allSelected ? "Bu sayfanın seçimini kaldır" : "Bu sayfanın tümünü seç"}
+            {allSelected ? "Seçimi kaldır" : "Tüm repository'leri seç"}
           </button>
           <button
             className="primary-button"

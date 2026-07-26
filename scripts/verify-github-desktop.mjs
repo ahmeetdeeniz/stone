@@ -35,6 +35,11 @@ for (const command of [
 ]) {
   if (!rust.includes(command)) throw new Error(`GitHub desktop command missing: ${command}`);
 }
+for (const restoreBoundary of ["persist_restore_path", "UPDATE github_links SET local_path"]) {
+  if (!rust.includes(restoreBoundary)) {
+    throw new Error(`Restore persistence boundary missing: ${restoreBoundary}`);
+  }
+}
 for (const forbidden of [
   "reset --hard",
   "git clean",

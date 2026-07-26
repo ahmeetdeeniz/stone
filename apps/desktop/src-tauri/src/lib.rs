@@ -1197,6 +1197,21 @@ fn git_clone(
     git::clone_repository(&root, &full_name, size_kb, &token, &|| false)
 }
 
+fn persist_restore_path(
+    state: &Mutex<Database>,
+    full_name: &str,
+    path: &Path,
+) -> Result<(), String> {
+    let db = state.lock().map_err(|_| "Veritabanı kilidi alınamadı.")?;
+    db.connection
+        .execute(
+            "UPDATE github_links SET local_path = ?1, updated_at = ?2 WHERE full_name = ?3",
+            params![path.to_string_lossy(), now(), full_name],
+        )
+        .map_err(|error| error.to_string())?;
+    Ok(())
+}
+
 #[tauri::command]
 fn restore_disk_check(
     root: String,
@@ -1219,6 +1234,7 @@ fn restore_repositories(
     run_id: String,
     root: String,
     repositories: Vec<RestoreRepositoryInput>,
+    database: State<'_, Mutex<Database>>,
     cancellation: State<'_, RestoreCancellation>,
 ) -> Result<RestoreSummary, String> {
     if run_id.trim().is_empty() || repositories.is_empty() {
@@ -1279,13 +1295,21 @@ fn restore_repositories(
             &token,
             &check_cancelled,
         ) {
-            Ok(result) => results.push(RestoreItemResult {
-                full_name: repository.full_name,
-                status: "cloned".to_owned(),
-                path: Some(path.to_string_lossy().into_owned()),
-                error: None,
-                warnings: result.warnings,
-            }),
+            Ok(result) => {
+                let mut warnings = result.warnings;
+                if let Err(error) = persist_restore_path(&database, &repository.full_name, &path) {
+                    warnings.push(format!(
+                        "Clone tamamlandı ancak Stone link yolu kaydedilemedi: {error}"
+                    ));
+                }
+                results.push(RestoreItemResult {
+                    full_name: repository.full_name,
+                    status: "cloned".to_owned(),
+                    path: Some(path.to_string_lossy().into_owned()),
+                    error: None,
+                    warnings,
+                });
+            }
             Err(_error) if check_cancelled() => results.push(RestoreItemResult {
                 full_name: repository.full_name,
                 status: "cancelled".to_owned(),
