@@ -16,15 +16,15 @@ use std::{
 use tauri::{AppHandle, Emitter, Manager, State};
 use uuid::Uuid;
 
-mod git;
-mod github;
+pub mod git;
+pub mod github;
 
 const MAX_MARKDOWN_BYTES: u64 = 10 * 1024 * 1024;
 const KEYCHAIN_SERVICE: &str = "com.imtempra.stone";
 const KEYCHAIN_ACCOUNT: &str = "firebase-refresh-token";
 
-struct Database {
-    connection: Connection,
+pub struct Database {
+    pub connection: Connection,
     device_id: String,
 }
 struct Watchers(Mutex<HashMap<String, RecommendedWatcher>>);
@@ -134,44 +134,44 @@ struct FirebaseError {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
-struct GitHubLinkInput {
-    project_id: String,
-    repository: github::GitHubRepository,
-    local_path: Option<String>,
+pub struct GitHubLinkInput {
+    pub project_id: String,
+    pub repository: github::GitHubRepository,
+    pub local_path: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
-struct GitHubLink {
-    project_id: String,
-    repository: github::GitHubRepository,
-    local_path: Option<String>,
-    updated_at: String,
+pub struct GitHubLink {
+    pub project_id: String,
+    pub repository: github::GitHubRepository,
+    pub local_path: Option<String>,
+    pub updated_at: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
-struct RestoreRepositoryInput {
-    full_name: String,
-    size_kb: u64,
+pub struct RestoreRepositoryInput {
+    pub full_name: String,
+    pub size_kb: u64,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
-struct RestoreItemResult {
-    full_name: String,
-    status: String,
-    path: Option<String>,
-    error: Option<String>,
-    warnings: Vec<String>,
+pub struct RestoreItemResult {
+    pub full_name: String,
+    pub status: String,
+    pub path: Option<String>,
+    pub error: Option<String>,
+    pub warnings: Vec<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
-struct RestoreSummary {
-    run_id: String,
-    cancelled: bool,
-    results: Vec<RestoreItemResult>,
+pub struct RestoreSummary {
+    pub run_id: String,
+    pub cancelled: bool,
+    pub results: Vec<RestoreItemResult>,
 }
 
 pub fn run() {
@@ -235,7 +235,9 @@ pub fn run() {
 }
 
 impl Database {
-    fn open(path: PathBuf) -> rusqlite::Result<Self> {
+    /// `pub` so the opt-in live-integration test suite (`tests/github_live.rs`) can open the
+    /// exact production schema against a disposable database file; not used by any UI path.
+    pub fn open(path: PathBuf) -> rusqlite::Result<Self> {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)
                 .map_err(|_| rusqlite::Error::InvalidPath(parent.to_path_buf()))?;
@@ -1072,7 +1074,7 @@ async fn github_list_repositories(page: u32) -> Result<github::GitHubRepositoryP
     github::repositories(page).await
 }
 
-fn validate_github_repository(repository: &github::GitHubRepository) -> Result<(), String> {
+pub fn validate_github_repository(repository: &github::GitHubRepository) -> Result<(), String> {
     let mut parts = repository.full_name.split('/');
     let owner = parts.next().unwrap_or_default();
     let name = parts.next().unwrap_or_default();
@@ -1094,10 +1096,13 @@ fn validate_github_repository(repository: &github::GitHubRepository) -> Result<(
     Ok(())
 }
 
-#[tauri::command]
-async fn github_link_repository(
+/// Holds the full validate-fetch-persist logic. `pub` and taking a plain `&Mutex<Database>`
+/// (rather than a Tauri-managed `State`) so the opt-in live-integration test suite
+/// (`tests/github_live.rs`) can call the exact production linking path against a disposable
+/// database and a real GitHub repository. The `#[tauri::command]` below is a thin wrapper.
+pub async fn link_repository(
     input: GitHubLinkInput,
-    state: State<'_, Mutex<Database>>,
+    state: &Mutex<Database>,
 ) -> Result<GitHubLink, String> {
     validate_github_repository(&input.repository)?;
     if input.project_id.trim().is_empty() {
@@ -1125,7 +1130,16 @@ async fn github_link_repository(
 }
 
 #[tauri::command]
-fn github_list_links(state: State<'_, Mutex<Database>>) -> Result<Vec<GitHubLink>, String> {
+async fn github_link_repository(
+    input: GitHubLinkInput,
+    state: State<'_, Mutex<Database>>,
+) -> Result<GitHubLink, String> {
+    link_repository(input, &state).await
+}
+
+/// `pub` for the same reason as [`link_repository`]: lets the live-integration test suite
+/// read back persisted links (e.g. after a simulated restart) using the real query.
+pub fn list_links(state: &Mutex<Database>) -> Result<Vec<GitHubLink>, String> {
     let db = state.lock().map_err(|_| "Veritabanı kilidi alınamadı.")?;
     let mut statement = db.connection.prepare("SELECT project_id, repository_id, full_name, name, private, html_url, clone_url, ssh_url, size_kb, default_branch, visibility, local_path, updated_at FROM github_links ORDER BY updated_at DESC").map_err(|error| error.to_string())?;
     let rows = statement
@@ -1154,6 +1168,11 @@ fn github_list_links(state: State<'_, Mutex<Database>>) -> Result<Vec<GitHubLink
         .map_err(|error| error.to_string())?;
     rows.collect::<Result<Vec<_>, _>>()
         .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn github_list_links(state: State<'_, Mutex<Database>>) -> Result<Vec<GitHubLink>, String> {
+    list_links(&state)
 }
 
 #[tauri::command]
@@ -1197,7 +1216,7 @@ fn git_clone(
     git::clone_repository(&root, &full_name, size_kb, &token, &|| false)
 }
 
-fn persist_restore_path(
+pub fn persist_restore_path(
     state: &Mutex<Database>,
     full_name: &str,
     path: &Path,

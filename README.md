@@ -52,15 +52,37 @@ The desktop app stores local data in its Tauri application data directory, uses 
 
 ### GitHub desktop setup
 
-The desktop GitHub integration uses GitHub OAuth Device Flow. Create your own GitHub OAuth App, enable Device Flow, and set only its public client ID in the local root `.env` file:
+The desktop GitHub integration uses GitHub OAuth Device Flow and never asks for or accepts a client secret, personal access token, or `gh` CLI login. Each self-hosted contributor creates and owns a single GitHub OAuth App:
+
+1. On GitHub, go to Settings → Developer settings → OAuth Apps → New OAuth App.
+2. Give it any name and homepage URL; the callback URL is not used by Device Flow.
+3. Open the app's settings and enable "Device Flow".
+4. Copy the generated Client ID (not the client secret — Stone never uses it).
+
+Set only that public client ID in the local root `.env` file (never commit real values; `.env` is ignored):
 
 ```text
 VITE_GITHUB_CLIENT_ID=your-own-github-oauth-app-client-id
 ```
 
-Do not add a GitHub client secret, access token, or personal credential to the repository. The app stores the resulting access token only in the operating system credential store. Each self-hosted user connects their own GitHub account, and repository access follows that account's GitHub permissions. Run `pnpm desktop:dev` from the repository root to test the flow locally.
+Do not add a GitHub client secret, access token, or personal credential to the repository. When you connect, Stone starts the real Device Flow, shows a verification URL and short code to enter at github.com, and polls until you authorize it. The resulting access token is stored only in the operating system credential store (Windows Credential Manager on desktop); disconnecting removes it. Each self-hosted user connects their own GitHub account, and repository access follows that account's GitHub permissions. Run `pnpm desktop:dev` from the repository root to test the flow locally.
 
 Stone performs repository listing, cloning, pull, status, and reviewed stage/commit/push through the user's local Git installation. Force push, reset, clean, branch deletion, rebase, merge, and automatic conflict resolution are intentionally unavailable.
+
+#### Live end-to-end verification against a disposable repository
+
+`pnpm verify:github` statically checks the GitHub integration's wiring (endpoints, safety boundaries, forbidden Git operations) and needs no credentials. It runs in CI.
+
+`pnpm verify:github:live` is a separate, opt-in command that drives the same production GitHub/Git code against a real GitHub account and a disposable repository — Device Flow, keychain persistence, authenticated pagination, project linking, restore/clone, status/pull, and a reviewed stage/commit/push. It is intentionally **not** part of CI and never runs with real credentials automatically:
+
+- It requires `VITE_GITHUB_CLIENT_ID` (from `.env`) and an explicit `STONE_LIVE_E2E_REPO=<your-account>/<disposable-repo>` environment variable; without both it prints what is missing and exits successfully without making any network, keychain, or Git call.
+- Use a throwaway private repository you don't mind Stone pushing a small verification commit to (a `STONE_GOAL7_E2E.md` file with a timestamp) — never point it at a real project repository.
+- It prints a Device Flow verification URL and user code for you to authorize in a browser, then continues automatically; it never logs the resulting access token, device code, or keychain contents.
+- Restores happen in a unique temporary directory outside the Stone source tree, which is removed automatically when the run finishes.
+
+```text
+STONE_LIVE_E2E_REPO=your-account/your-disposable-repo pnpm verify:github:live
+```
 
 ## Dağıtım modeli
 

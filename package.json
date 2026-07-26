@@ -23,6 +23,7 @@
     "desktop:tauri:build": "pnpm --filter @stone/desktop run tauri:build",
     "verify:desktop": "node scripts/verify-desktop.mjs",
     "verify:github": "node scripts/verify-github-desktop.mjs",
+    "verify:github:live": "node scripts/verify-github-live.mjs",
     "verify:public-boundary": "node scripts/verify-public-boundary.mjs",
     "editor:bundle": "pnpm --filter @stone/editor run build:web",
     "verify:native-dependencies": "node scripts/verify-native-dependencies.mjs",

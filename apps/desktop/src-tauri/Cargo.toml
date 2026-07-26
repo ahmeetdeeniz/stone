@@ -26,3 +26,9 @@ thiserror = "2.0.17"
 uuid = { version = "1.18.1", features = ["v4", "v5", "serde"] }
 rfd = "0.15.4"
 windows-sys = { version = "0.61.2", features = ["Win32_Storage_FileSystem"] }
+
+[dev-dependencies]
+# Only used by the opt-in tests/github_live.rs suite (`cargo test --test github_live -- --ignored`)
+# to drive the real async GitHub/Git production functions from a test process.
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time"] }
+base64 = "0.22.1"

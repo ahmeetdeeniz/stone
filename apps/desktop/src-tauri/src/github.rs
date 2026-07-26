@@ -298,6 +298,20 @@ pub async fn device_poll(
     })
 }
 
+/// Page size is fixed at 50 in production. `STONE_GITHUB_PAGE_SIZE` only exists so the
+/// opt-in live E2E verifier can force multiple live pages on accounts with few repositories;
+/// it has no effect unless explicitly set.
+fn page_size() -> String {
+    std::env::var("STONE_GITHUB_PAGE_SIZE")
+        .ok()
+        .filter(|value| {
+            value
+                .parse::<u32>()
+                .is_ok_and(|value| (1..=100).contains(&value))
+        })
+        .unwrap_or_else(|| "50".to_owned())
+}
+
 pub async fn repositories(page: u32) -> Result<GitHubRepositoryPage, String> {
     let access_token = token()?.ok_or_else(|| "GitHub hesabı bağlı değil.".to_owned())?;
     let page = page.max(1);
@@ -308,7 +322,7 @@ pub async fn repositories(page: u32) -> Result<GitHubRepositoryPage, String> {
             ("affiliation", "owner,collaborator,organization_member"),
             ("sort", "updated"),
             ("direction", "desc"),
-            ("per_page", "50"),
+            ("per_page", page_size().as_str()),
             ("page", page_value.as_str()),
         ]),
         &access_token,
