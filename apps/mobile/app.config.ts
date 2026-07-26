@@ -52,6 +52,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
   const firebasePublicConfig = readFirebasePublicConfig(googleServicesFile);
   return {
     ...config,
+    plugins: [...(config.plugins ?? []), "expo-background-task"],
     extra: {
       ...config.extra,
       ...firebasePublicConfig,

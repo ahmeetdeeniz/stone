@@ -602,14 +602,19 @@ export class SQLiteProjectRepository implements ProjectRepository {
       }
       if (!document) throw new StorageError("Inbox creation did not complete.");
       const current = toDocument(document);
-      const updated = await this.updateDocument(
-        current,
-        appendToSection(current.markdown, "# Inbox", `\n- ${text}`),
-        current.title,
-        deviceId,
-      );
-      await this.replaceTaskIndex(updated);
-      return updated;
+      let updatedDocument: Document | null = null;
+      await this.database.withTransactionAsync(async () => {
+        const updated = await this.updateDocument(
+          current,
+          appendToSection(current.markdown, "# Inbox", `\n- ${text}`),
+          current.title,
+          deviceId,
+        );
+        await this.replaceTaskIndex(updated);
+        updatedDocument = updated;
+      });
+      if (!updatedDocument) throw new StorageError("Inbox update did not complete.");
+      return updatedDocument;
     });
   }
 

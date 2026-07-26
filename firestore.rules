@@ -16,17 +16,155 @@ service cloud.firestore {
       return signedIn(uid)
         && resource.data.ownerId == uid
         && request.resource.data.ownerId == uid
+        && request.resource.data.revision is int
         && request.resource.data.revision == resource.data.revision + 1;
+    }
+
+    function nullableString(value) {
+      return value == null || value is string;
+    }
+
+    function validDocument(uid, documentId) {
+      return signedIn(uid)
+        && request.resource.data.keys().hasOnly([
+          'id', 'ownerId', 'kind', 'title', 'markdown', 'path', 'projectId', 'isPinned',
+          'revision', 'createdAt', 'updatedAt', 'deletedAt', 'updatedByDeviceId',
+          'idempotencyKey', 'lastEventId'
+        ])
+        && request.resource.data.id == documentId
+        && request.resource.data.ownerId == uid
+        && request.resource.data.kind is string
+        && request.resource.data.title is string
+        && request.resource.data.title.size() <= 512
+        && request.resource.data.markdown is string
+        && request.resource.data.markdown.size() <= 512000
+        && nullableString(request.resource.data.path)
+        && nullableString(request.resource.data.projectId)
+        && request.resource.data.isPinned is bool
+        && request.resource.data.revision is int
+        && request.resource.data.createdAt is string
+        && request.resource.data.updatedAt is string
+        && nullableString(request.resource.data.deletedAt)
+        && request.resource.data.updatedByDeviceId is string
+        && request.resource.data.idempotencyKey is string
+        && request.resource.data.lastEventId is string;
+    }
+
+    function validProject(uid, projectId) {
+      return signedIn(uid)
+        && request.resource.data.keys().hasOnly([
+          'id', 'ownerId', 'canonicalDocumentId', 'title', 'slug', 'status', 'priority', 'tags',
+          'targetDate', 'currentVersion', 'nextVersion', 'nextAction', 'repositoryUrl', 'platforms',
+          'health', 'revision', 'createdAt', 'updatedAt', 'deletedAt', 'updatedByDeviceId',
+          'idempotencyKey', 'lastEventId'
+        ])
+        && request.resource.data.id == projectId
+        && request.resource.data.ownerId == uid
+        && request.resource.data.canonicalDocumentId is string
+        && request.resource.data.title is string
+        && request.resource.data.title.size() <= 512
+        && request.resource.data.slug is string
+        && request.resource.data.status is string
+        && request.resource.data.priority is string
+        && request.resource.data.tags is list
+        && request.resource.data.tags.size() <= 100
+        && nullableString(request.resource.data.targetDate)
+        && nullableString(request.resource.data.currentVersion)
+        && nullableString(request.resource.data.nextVersion)
+        && nullableString(request.resource.data.nextAction)
+        && nullableString(request.resource.data.repositoryUrl)
+        && request.resource.data.platforms is list
+        && request.resource.data.platforms.size() <= 10
+        && request.resource.data.health is string
+        && request.resource.data.revision is int
+        && request.resource.data.createdAt is string
+        && request.resource.data.updatedAt is string
+        && nullableString(request.resource.data.deletedAt)
+        && request.resource.data.updatedByDeviceId is string
+        && request.resource.data.idempotencyKey is string
+        && request.resource.data.lastEventId is string;
+    }
+
+    function validVersion(uid, versionId) {
+      return signedIn(uid)
+        && request.resource.data.keys().hasOnly([
+          'id', 'ownerId', 'projectId', 'canonicalDocumentId', 'version', 'status', 'updatedAt',
+          'targetDate', 'androidStatus', 'iosStatus', 'completedTasks', 'totalTasks', 'revision',
+          'createdAt', 'deletedAt', 'updatedByDeviceId', 'idempotencyKey', 'lastEventId'
+        ])
+        && request.resource.data.id == versionId
+        && request.resource.data.ownerId == uid
+        && request.resource.data.projectId is string
+        && request.resource.data.canonicalDocumentId is string
+        && request.resource.data.version is string
+        && request.resource.data.status is string
+        && request.resource.data.updatedAt is string
+        && nullableString(request.resource.data.targetDate)
+        && request.resource.data.androidStatus is string
+        && request.resource.data.iosStatus is string
+        && request.resource.data.completedTasks is int
+        && request.resource.data.totalTasks is int
+        && request.resource.data.revision is int
+        && request.resource.data.createdAt is string
+        && nullableString(request.resource.data.deletedAt)
+        && request.resource.data.updatedByDeviceId is string
+        && request.resource.data.idempotencyKey is string
+        && request.resource.data.lastEventId is string;
+    }
+
+    function validDevice(uid, deviceId) {
+      return signedIn(uid)
+        && request.resource.data.keys().hasOnly([
+          'id', 'ownerId', 'platform', 'name', 'appVersion', 'lastSeenAt', 'revision',
+          'idempotencyKey', 'lastEventId'
+        ])
+        && request.resource.data.id == deviceId
+        && request.resource.data.ownerId == uid
+        && request.resource.data.platform is string
+        && request.resource.data.name is string
+        && request.resource.data.name.size() <= 256
+        && request.resource.data.appVersion is string
+        && request.resource.data.lastSeenAt is string
+        && request.resource.data.revision is int
+        && request.resource.data.idempotencyKey is string
+        && request.resource.data.lastEventId is string;
+    }
+
+    function validSettings(uid, settingsId) {
+      return signedIn(uid)
+        && request.resource.data.keys().hasOnly([
+          'id', 'ownerId', 'theme', 'reduceMotion', 'editorFontSize', 'trashRetentionDays',
+          'revision', 'idempotencyKey', 'lastEventId'
+        ])
+        && request.resource.data.id == settingsId
+        && request.resource.data.ownerId == uid
+        && request.resource.data.theme is string
+        && request.resource.data.reduceMotion is bool
+        && request.resource.data.editorFontSize is int
+        && request.resource.data.trashRetentionDays is int
+        && request.resource.data.revision is int
+        && request.resource.data.idempotencyKey is string
+        && request.resource.data.lastEventId is string;
     }
 
     function validSyncEvent(uid) {
       return signedIn(uid)
+        && request.resource.data.keys().hasOnly([
+          'eventId', 'ownerId', 'entityType', 'entityId', 'operation', 'revision',
+          'payloadVersion', 'payload', 'createdAt', 'idempotencyKey', 'serverUpdatedAt'
+        ])
         && request.resource.data.ownerId == uid
         && request.resource.data.eventId == request.resource.id
         && request.resource.data.idempotencyKey is string
         && request.resource.data.entityId is string
         && request.resource.data.entityType is string
-        && request.resource.data.revision is int;
+        && request.resource.data.operation in ['upsert', 'delete']
+        && request.resource.data.revision is int
+        && request.resource.data.payloadVersion == 1
+        && request.resource.data.payload is map
+        && request.resource.data.payload.size() <= 32
+        && request.resource.data.createdAt is string
+        && request.resource.data.serverUpdatedAt is timestamp;
     }
 
     match /users/{uid} {
@@ -35,36 +173,36 @@ service cloud.firestore {
 
       match /documents/{documentId} {
         allow read: if signedIn(uid);
-        allow create: if ownerCreate(uid);
-        allow update: if ownerUpdate(uid);
+        allow create: if validDocument(uid, documentId) && ownerCreate(uid);
+        allow update: if validDocument(uid, documentId) && ownerUpdate(uid);
         allow delete: if signedIn(uid) && resource.data.ownerId == uid;
       }
 
       match /projects/{projectId} {
         allow read: if signedIn(uid);
-        allow create: if ownerCreate(uid);
-        allow update: if ownerUpdate(uid);
+        allow create: if validProject(uid, projectId) && ownerCreate(uid);
+        allow update: if validProject(uid, projectId) && ownerUpdate(uid);
         allow delete: if signedIn(uid) && resource.data.ownerId == uid;
       }
 
       match /versions/{versionId} {
         allow read: if signedIn(uid);
-        allow create: if ownerCreate(uid);
-        allow update: if ownerUpdate(uid);
+        allow create: if validVersion(uid, versionId) && ownerCreate(uid);
+        allow update: if validVersion(uid, versionId) && ownerUpdate(uid);
         allow delete: if signedIn(uid) && resource.data.ownerId == uid;
       }
 
       match /devices/{deviceId} {
         allow read: if signedIn(uid);
-        allow create: if ownerCreate(uid) && request.resource.data.id == deviceId;
-        allow update: if ownerUpdate(uid) && request.resource.data.id == deviceId;
+        allow create: if validDevice(uid, deviceId) && ownerCreate(uid);
+        allow update: if validDevice(uid, deviceId) && ownerUpdate(uid);
         allow delete: if signedIn(uid) && resource.data.ownerId == uid;
       }
 
       match /settings/{settingsId} {
         allow read: if signedIn(uid);
-        allow create: if ownerCreate(uid) && request.resource.data.id == settingsId;
-        allow update: if ownerUpdate(uid) && request.resource.data.id == settingsId;
+        allow create: if validSettings(uid, settingsId) && ownerCreate(uid);
+        allow update: if validSettings(uid, settingsId) && ownerUpdate(uid);
         allow delete: if signedIn(uid) && resource.data.ownerId == uid;
       }
 

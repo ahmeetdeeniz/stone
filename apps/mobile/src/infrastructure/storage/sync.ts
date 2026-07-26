@@ -324,6 +324,13 @@ export class SQLiteSyncStore implements SyncLocalStore {
       change.entityId,
       change.ownerId,
     );
+    const basePayload = await this.basePayload(
+      change.entityType,
+      change.entityId,
+      change.ownerId,
+      pending.base_revision,
+      localPayload,
+    );
     const localRevision = await this.localRevision(
       change.ownerId,
       change.entityType,
@@ -338,7 +345,7 @@ export class SQLiteSyncStore implements SyncLocalStore {
       pending.base_revision,
       localRevision,
       change.revision,
-      null,
+      basePayload ? JSON.stringify(basePayload) : null,
       JSON.stringify(localPayload ?? {}),
       JSON.stringify(change.payload),
       new Date().toISOString(),
@@ -357,6 +364,28 @@ export class SQLiteSyncStore implements SyncLocalStore {
       entityId,
     );
     return row ? normalizeSqlPayload(entityType, row) : null;
+  }
+
+  private async basePayload(
+    entityType: SyncEntityType,
+    entityId: string,
+    ownerId: string,
+    revision: number,
+    localPayload: Record<string, unknown> | null,
+  ): Promise<Record<string, unknown> | null> {
+    if (entityType !== "document" || !localPayload || revision <= 0) return null;
+    const snapshot = await this.database.getFirstAsync<{
+      markdown: string;
+      created_at: string;
+    }>(
+      "SELECT r.markdown, r.created_at FROM document_revisions r JOIN documents d ON d.id = r.document_id WHERE d.owner_id = ? AND r.document_id = ? AND r.revision = ?",
+      ownerId,
+      entityId,
+      revision,
+    );
+    return snapshot
+      ? { ...localPayload, revision, markdown: snapshot.markdown, updatedAt: snapshot.created_at }
+      : null;
   }
 
   private async applyDocument(change: RemoteChange): Promise<void> {

@@ -12,13 +12,17 @@ import { ErrorState } from "../components/states";
 import type { AuthUser } from "../infrastructure/firebase/auth";
 import { createAppServices, type AppServices } from "../services/composition-root";
 import { AuthProvider } from "./auth-provider";
+import { registerBackgroundSync } from "../services/background-sync";
 
 export function AppProvider({ children }: PropsWithChildren) {
   const [services, setServices] = useState<AppServices | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     void createAppServices()
-      .then(setServices)
+      .then((nextServices) => {
+        setServices(nextServices);
+        void registerBackgroundSync().catch(() => undefined);
+      })
       .catch((caught: unknown) =>
         setError(caught instanceof Error ? caught.message : "Yerel altyapı başlatılamadı."),
       );
