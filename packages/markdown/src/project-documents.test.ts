@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   calculateTaskProgress,
@@ -34,7 +35,9 @@ describe("project Markdown documents", () => {
     const companions = createProjectDocumentSet();
     expect(companions.inbox).toContain("# Inbox");
     expect(companions.decisions).toContain("# Kararlar");
-    expect(companions.releaseChecklist).toContain("# Release Checklist");
+    expect(companions.releaseChecklist).toBe(
+      readFileSync(new URL("../../../templates/RELEASE-CHECKLIST.md", import.meta.url), "utf8"),
+    );
     expect(
       parseVersionFrontmatter(
         createVersionMarkdown({ id: "ver_1", projectId: "prj_1", version: "1.0.0" }),
