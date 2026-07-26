@@ -7,6 +7,6 @@
   "types": "./dist/index.d.ts",
   "scripts": {
     "typecheck": "tsc -b",
-    "test": "vitest run src"
+    "test": "vitest run --root ../.. --config vitest.config.ts"
   }
 }

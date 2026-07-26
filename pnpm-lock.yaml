@@ -127,7 +127,11 @@ importers:
 
   packages/editor: {}
 
-  packages/markdown: {}
+  packages/markdown:
+    dependencies:
+      yaml:
+        specifier: ^2.9.0
+        version: 2.9.0
 
   packages/sync: {}
 
