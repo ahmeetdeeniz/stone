@@ -3,6 +3,7 @@ node_modules/
 .expo/
 dist/
 coverage/
+*.tsbuildinfo
 .env
 .env.*
 !.env.example
@@ -17,4 +18,4 @@ google-services.json
 android/app/build/
 ios/build/
 ios/Pods/
-
+stone-codex-pack/
