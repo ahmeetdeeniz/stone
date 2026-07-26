@@ -1,13 +1,18 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync } from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 
 const workspaceRoot = path.resolve(import.meta.dirname, "..");
 const mobileRoot = path.join(workspaceRoot, "apps", "mobile");
+const rootPackage = readJson(path.join(workspaceRoot, "package.json"));
 const mobilePackage = readJson(path.join(mobileRoot, "package.json"));
 const easConfig = readJson(path.join(mobileRoot, "eas.json"));
 
 assert(mobilePackage.name === "@stone/mobile", "EAS app root must be apps/mobile.");
+assert(
+  rootPackage.scripts?.["eas:android:development"]?.includes("--dir apps/mobile"),
+  "The root Android EAS wrapper must invoke EAS from apps/mobile.",
+);
 assert(
   mobilePackage.dependencies?.["expo-document-picker"] === "~14.0.8",
   "expo-document-picker must be a mobile workspace dependency.",
@@ -66,26 +71,64 @@ assert(
   "react-native-webview does not contain its Android RNCWebViewModule source.",
 );
 
+verifyGeneratedAndroidAutolinking();
+
 console.log("Native dependency wiring verified for apps/mobile Android autolinking.");
 console.log("- expo-document-picker -> expo.modules.documentpicker.DocumentPickerModule");
 console.log("- react-native-webview -> RNCWebViewPackage / RNCWebViewModule");
+console.log("- Expo prebuild -> generated Android autolinking hooks");
+
+function verifyGeneratedAndroidAutolinking() {
+  const androidRoot = path.join(mobileRoot, "android");
+  const generatedByVerifier = !existsSync(androidRoot);
+
+  try {
+    if (generatedByVerifier) {
+      runPnpm(["exec", "expo", "prebuild", "--platform", "android", "--no-install"]);
+    }
+
+    const settingsGradle = readFileSync(path.join(androidRoot, "settings.gradle"), "utf8");
+    const appBuildGradle = readFileSync(path.join(androidRoot, "app", "build.gradle"), "utf8");
+    assert(
+      settingsGradle.includes('id("expo-autolinking-settings")'),
+      "Generated Android settings.gradle is missing Expo autolinking.",
+    );
+    assert(
+      settingsGradle.includes("expoAutolinking.useExpoModules()") &&
+        settingsGradle.includes("autolinkLibrariesFromCommand"),
+      "Generated Android settings.gradle is missing Expo/RN module discovery hooks.",
+    );
+    assert(
+      appBuildGradle.includes("autolinkLibrariesWithApp()"),
+      "Generated Android app/build.gradle is missing React Native autolinking.",
+    );
+  } finally {
+    if (generatedByVerifier && existsSync(androidRoot)) {
+      rmSync(androidRoot, { recursive: true, force: true });
+    }
+  }
+}
 
 function runAutolinking(args) {
-  const command = ["pnpm", "exec", "expo-modules-autolinking", ...args].join(" ");
+  return JSON.parse(runPnpm(["exec", "expo-modules-autolinking", ...args]).trim());
+}
+
+function runPnpm(args) {
+  const command = ["pnpm", ...args].join(" ");
   const result =
     process.platform === "win32"
       ? spawnSync(process.env.ComSpec ?? "cmd.exe", ["/d", "/s", "/c", command], {
           cwd: mobileRoot,
           encoding: "utf8",
         })
-      : spawnSync("pnpm", ["exec", "expo-modules-autolinking", ...args], {
+      : spawnSync("pnpm", args, {
           cwd: mobileRoot,
           encoding: "utf8",
         });
   if (result.status !== 0) {
     throw new Error(result.stderr || result.stdout || "Expo autolinking command failed.");
   }
-  return JSON.parse(result.stdout.trim());
+  return result.stdout;
 }
 
 function readJson(filePath) {
