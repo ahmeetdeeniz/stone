@@ -2,6 +2,8 @@
 
 Stone; kişisel kullanım için tasarlanan, Markdown notlarını ve yazılım projelerini aynı yerde yöneten, cihazlar arasında eşitlenen sade bir çalışma alanıdır.
 
+Stone'un deposu public ve self-host edilebilirdir. Maintainer'ın Firebase projesi veya kişisel build credential'ları ortak bir servis olarak sunulmaz; her kullanıcı kendi Firebase projesini ve kendi dağıtım hesaplarını bağlar.
+
 Bu paketin amacı Stone'u mümkün olduğunca az Codex promptuyla, kararları tekrar tekrar anlatmadan geliştirmektir.
 
 ## İlk sürümün özeti
@@ -22,22 +24,34 @@ Bu paketin amacı Stone'u mümkün olduğunca az Codex promptuyla, kararları te
 
 ## Sonraki aşamalar
 
-- ChatGPT Work / MCP bağlantısı
+- Provider-neutral Stone MCP bağlantısı (ChatGPT Work, Claude, Claude Cowork ve uyumlu gelecek client'lar)
 - Windows uygulaması
 - Yerel proje klasörleri
 - GitHub repo listeleme, clone, pull, commit ve push
 - Yeni bilgisayarda bütün projeleri geri yükleme
+
+## Dağıtım modeli
+
+- Stone, Google Play Store'da veya public App Store listesinde dağıtılmaz.
+- Android sürümü, kişisel olarak imzalanmış ve doğrudan kurulabilen bir APK'dır.
+- iOS sürümü, proje sahibinin Apple Developer hesabıyla private TestFlight kurulumu olarak dağıtılır.
+- Windows sürümü ileride doğrudan installer veya portable desktop build olarak dağıtılır.
+- Stone içindeki projelerin `Store Süreci`, release checklist'i ve Android/iOS release durumları bu dağıtım kararından bağımsız olarak kullanılmaya devam eder.
 
 ## Paketi kullanma
 
 1. Boş bir GitHub reposu oluştur.
 2. Bu paketin içeriğini repo köküne kopyala.
 3. Onaylı `apps/mobile/assets/fonts/Bongita-Regular.otf` dosyasını koru; OTF uzantısını değiştirme.
-4. Firebase projesini oluşturup `docs/17-FIREBASE-SETUP.md` dosyasındaki adımları uygula.
-5. Codex'i repo kökünde aç.
-6. Önce `goals/01-FOUNDATION.goal.md` içeriğini `/goal` olarak gönder.
-7. Goal tamamlanıp doğrulandıktan sonra sırayla 02, 03 ve 04'e geç.
-8. Mobil v1 tamamen bitmeden `goals/future` altındaki goal'ları çalıştırma.
+4. Kendi Firebase projenizi oluşturup Email/Password ve Firestore'u etkinleştir; `.env.example` dosyasını `.env` olarak kopyala, kendi `EXPO_PUBLIC_FIREBASE_*` değerlerini doldur ve kendi `google-services.json` ile `GoogleService-Info.plist` dosyalarını `apps/mobile/` altına koy.
+5. Kendi uygulama kimliklerini kullanacaksan `apps/mobile/app.json` içindeki `android.package` ve `ios.bundleIdentifier` değerlerini Firebase'de kaydettiğin benzersiz değerlerle değiştir. Resmi varsayılan kimlikler `com.imtempra.stone` değerleridir.
+6. Android için kişisel imzalı APK, iOS için proje sahibinin hesabıyla private TestFlight build'i üret. `docs/17-FIREBASE-SETUP.md` ve `docs/20-LOCAL-SETUP.md` ayrıntılı adımları içerir.
+7. Codex'i repo kökünde aç.
+8. Önce `goals/01-FOUNDATION.goal.md` içeriğini `/goal` olarak gönder.
+9. Goal tamamlanıp doğrulandıktan sonra sırayla 02, 03 ve 04'e geç.
+10. Mobil v1 tamamen bitmeden `goals/future` altındaki goal'ları çalıştırma.
+
+Kişisel `.env`, Firebase native config dosyaları, signing credential'ları, kullanıcı notları ve gerçek proje verileri Git'e eklenmemelidir. Bongita fontu repo içindeki `apps/mobile/assets/fonts/Bongita-Regular.otf` yolunda bulunmalıdır; indirilen veya sahte uzantılı bir font kullanılmaz.
 
 ## Kaynakların öncelik sırası
 
