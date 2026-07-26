@@ -39,6 +39,14 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      # Runs before the Rust toolchain/cache steps below, so wiping generated output here
+      # (dist/tsbuildinfo across every workspace package, and any stray Cargo target/) never
+      # discards anything Swatinem/rust-cache restores afterward. This is what catches
+      # dependency-order problems between @stone/* workspace packages that only reproduce on
+      # a clean checkout (see scripts/verify-clean-workspace.mjs) and replaces a plain
+      # `pnpm typecheck`, which it also runs as its final step.
+      - run: pnpm run verify:clean-workspace
+
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: x86_64-pc-windows-msvc
@@ -51,7 +59,6 @@ jobs:
       # compiles with empty VITE_* values and shows a clear runtime configuration error
       # instead of failing to build (see apps/desktop/src/desktop-api.ts).
       - run: pnpm format:check
-      - run: pnpm typecheck
       - run: pnpm lint
       - run: pnpm test
       - run: pnpm verify:desktop

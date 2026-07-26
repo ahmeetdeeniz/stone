@@ -25,6 +25,7 @@
     "verify:github": "node scripts/verify-github-desktop.mjs",
     "verify:github:live": "node scripts/verify-github-live.mjs",
     "verify:public-boundary": "node scripts/verify-public-boundary.mjs",
+    "verify:clean-workspace": "node scripts/verify-clean-workspace.mjs",
     "editor:bundle": "pnpm --filter @stone/editor run build:web",
     "verify:native-dependencies": "node scripts/verify-native-dependencies.mjs",
     "mcp:typecheck": "pnpm --filter @stone/mcp run typecheck",
