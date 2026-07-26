@@ -15,15 +15,20 @@ pub struct GitHubAccount {
     pub id: u64,
     pub login: String,
     pub name: Option<String>,
+    #[serde(rename(deserialize = "avatar_url", serialize = "avatarUrl"))]
     pub avatar_url: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct GitHubDeviceStart {
+    #[serde(rename(deserialize = "device_code", serialize = "deviceCode"))]
     pub device_code: String,
+    #[serde(rename(deserialize = "user_code", serialize = "userCode"))]
     pub user_code: String,
+    #[serde(rename(deserialize = "verification_uri", serialize = "verificationUri"))]
     pub verification_uri: String,
+    #[serde(rename(deserialize = "expires_in", serialize = "expiresIn"))]
     pub expires_in: u64,
     pub interval: u64,
 }
@@ -41,14 +46,21 @@ pub struct GitHubDevicePoll {
 pub struct GitHubRepository {
     pub id: u64,
     pub name: String,
+    #[serde(rename(deserialize = "full_name", serialize = "fullName"))]
     pub full_name: String,
     pub private: bool,
+    #[serde(rename(deserialize = "html_url", serialize = "htmlUrl"))]
     pub html_url: String,
+    #[serde(rename(deserialize = "clone_url", serialize = "cloneUrl"))]
     pub clone_url: String,
+    #[serde(rename(deserialize = "ssh_url", serialize = "sshUrl"))]
     pub ssh_url: String,
+    #[serde(rename(deserialize = "size", serialize = "sizeKb"))]
     pub size_kb: u64,
+    #[serde(rename(deserialize = "default_branch", serialize = "defaultBranch"))]
     pub default_branch: String,
     pub visibility: Option<String>,
+    #[serde(rename(deserialize = "updated_at", serialize = "updatedAt"))]
     pub updated_at: String,
     pub permissions: Option<GitHubPermissions>,
 }
@@ -59,6 +71,59 @@ pub struct GitHubPermissions {
     pub admin: bool,
     pub push: bool,
     pub pull: bool,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn github_wire_fields_deserialize_and_serialize_for_the_frontend() {
+        let repository: GitHubRepository = serde_json::from_str(
+            r#"{
+              "id": 42,
+              "name": "stone",
+              "full_name": "owner/stone",
+              "private": true,
+              "html_url": "https://github.com/owner/stone",
+              "clone_url": "https://github.com/owner/stone.git",
+              "ssh_url": "git@github.com:owner/stone.git",
+              "size": 2048,
+              "default_branch": "main",
+              "visibility": "private",
+              "updated_at": "2026-07-26T00:00:00Z",
+              "permissions": {"admin": true, "push": true, "pull": true}
+            }"#,
+        )
+        .expect("GitHub snake_case repository payload should parse");
+        assert_eq!(repository.full_name, "owner/stone");
+        assert_eq!(repository.size_kb, 2048);
+        let frontend = serde_json::to_value(repository).expect("frontend payload should serialize");
+        assert_eq!(frontend["fullName"], "owner/stone");
+        assert_eq!(frontend["sizeKb"], 2048);
+        assert_eq!(frontend["defaultBranch"], "main");
+    }
+
+    #[test]
+    fn device_flow_start_payload_maps_to_camel_case() {
+        let start: GitHubDeviceStart = serde_json::from_str(
+            r#"{
+              "device_code": "device",
+              "user_code": "ABCD-EFGH",
+              "verification_uri": "https://github.com/login/device",
+              "expires_in": 900,
+              "interval": 5
+            }"#,
+        )
+        .expect("GitHub device payload should parse");
+        let frontend = serde_json::to_value(start).expect("frontend payload should serialize");
+        assert_eq!(frontend["deviceCode"], "device");
+        assert_eq!(
+            frontend["verificationUri"],
+            "https://github.com/login/device"
+        );
+        assert_eq!(frontend["expiresIn"], 900);
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
