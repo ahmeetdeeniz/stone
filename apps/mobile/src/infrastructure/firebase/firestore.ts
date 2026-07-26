@@ -1,0 +1,219 @@
+import firestore, { type FirebaseFirestoreTypes } from "@react-native-firebase/firestore";
+import {
+  SyncRevisionConflictError,
+  SyncTransportError,
+  type OutboxEvent,
+  type RemoteChange,
+  type RemotePage,
+  type RemoteWriteResult,
+  type SyncEntityType,
+  type SyncOperation,
+  type SyncRemote,
+} from "@stone/sync";
+import { getFirebaseConfig } from "./config";
+
+const PAGE_LIMIT = 200;
+
+export class FirebaseSyncRemote implements SyncRemote {
+  public constructor() {
+    // Configuration is validated lazily so an unauthenticated shell can render
+    // its visible auth error without constructing a native Firestore client.
+  }
+
+  public async push(event: OutboxEvent): Promise<RemoteWriteResult> {
+    try {
+      getFirebaseConfig();
+      const database = firestore();
+      const entityReference = this.entityReference(
+        database,
+        event.ownerId,
+        event.entityType,
+        event.entityId,
+      );
+      const eventReference = database
+        .collection("users")
+        .doc(event.ownerId)
+        .collection("syncEvents")
+        .doc(event.id);
+      let acknowledgedAt = new Date().toISOString();
+      await database.runTransaction(async (transaction) => {
+        const snapshot = await transaction.get(entityReference);
+        const current = snapshot.exists() ? snapshot.data() : undefined;
+        if (current?.idempotencyKey === event.idempotencyKey) return;
+        const remoteRevision = Number(current?.revision ?? 0);
+        if (remoteRevision !== event.baseRevision) {
+          throw new SyncRevisionConflictError({
+            remote: toRemoteChange(event, current, snapshot.id),
+          });
+        }
+        const payload = {
+          ...event.payload,
+          ownerId: event.ownerId,
+          revision: event.revision,
+          idempotencyKey: event.idempotencyKey,
+          lastEventId: event.id,
+          updatedAt: event.payload.updatedAt ?? event.createdAt,
+        };
+        transaction.set(entityReference, payload, { merge: false });
+        transaction.set(
+          eventReference,
+          {
+            eventId: event.id,
+            ownerId: event.ownerId,
+            entityType: event.entityType,
+            entityId: event.entityId,
+            operation: event.operation,
+            revision: event.revision,
+            payloadVersion: event.payloadVersion,
+            payload,
+            createdAt: event.createdAt,
+            idempotencyKey: event.idempotencyKey,
+            serverUpdatedAt: firestore.FieldValue.serverTimestamp(),
+          },
+          { merge: false },
+        );
+        acknowledgedAt = new Date().toISOString();
+      });
+      return { kind: "acknowledged", serverUpdatedAt: acknowledgedAt };
+    } catch (error) {
+      if (error instanceof SyncRevisionConflictError) throw error;
+      throw toTransportError(error);
+    }
+  }
+
+  public async pull(ownerId: string, cursor: string | null, limit: number): Promise<RemotePage> {
+    try {
+      getFirebaseConfig();
+      const safeLimit = Math.max(1, Math.min(limit, PAGE_LIMIT));
+      let query = firestore()
+        .collection("users")
+        .doc(ownerId)
+        .collection("syncEvents")
+        .orderBy("eventId", "asc")
+        .limit(safeLimit);
+      if (cursor) query = query.startAfter(cursor);
+      const snapshot = await query.get();
+      const changes = snapshot.docs.map((document) => toRemoteChangeFromEvent(document));
+      const nextCursor = changes.at(-1)?.eventId ?? cursor;
+      return {
+        changes,
+        cursor: nextCursor,
+        hasMore: changes.length === safeLimit,
+      };
+    } catch (error) {
+      throw toTransportError(error);
+    }
+  }
+
+  public async deleteOwnerData(ownerId: string): Promise<void> {
+    try {
+      getFirebaseConfig();
+      const database = firestore();
+      for (const collection of [
+        "documents",
+        "projects",
+        "versions",
+        "devices",
+        "settings",
+        "syncEvents",
+        "conflicts",
+      ]) {
+        const snapshot = await database
+          .collection("users")
+          .doc(ownerId)
+          .collection(collection)
+          .get();
+        for (let index = 0; index < snapshot.docs.length; index += 450) {
+          const batch = database.batch();
+          for (const document of snapshot.docs.slice(index, index + 450))
+            batch.delete(document.ref);
+          await batch.commit();
+        }
+      }
+    } catch (error) {
+      throw toTransportError(error);
+    }
+  }
+
+  private entityReference(
+    database: FirebaseFirestoreTypes.Module,
+    ownerId: string,
+    entityType: SyncEntityType,
+    entityId: string,
+  ): FirebaseFirestoreTypes.DocumentReference {
+    return database
+      .collection("users")
+      .doc(ownerId)
+      .collection(collectionFor(entityType))
+      .doc(entityId);
+  }
+}
+
+function collectionFor(entityType: SyncEntityType): string {
+  switch (entityType) {
+    case "document":
+      return "documents";
+    case "project":
+      return "projects";
+    case "version":
+      return "versions";
+    case "device":
+      return "devices";
+    case "settings":
+      return "settings";
+  }
+}
+
+function toRemoteChange(
+  event: OutboxEvent,
+  current: FirebaseFirestoreTypes.DocumentData | undefined,
+  snapshotId: string,
+): RemoteChange {
+  return {
+    eventId: String(current?.lastEventId ?? `remote:${snapshotId}`),
+    ownerId: event.ownerId,
+    entityType: event.entityType,
+    entityId: event.entityId,
+    operation: "upsert",
+    revision: Number(current?.revision ?? 0),
+    payloadVersion: 1,
+    payload: toRecord(current ?? {}),
+    createdAt: String(current?.updatedAt ?? new Date().toISOString()),
+    idempotencyKey: String(current?.idempotencyKey ?? "remote"),
+  };
+}
+
+function toRemoteChangeFromEvent(
+  document: FirebaseFirestoreTypes.QueryDocumentSnapshot,
+): RemoteChange {
+  const data = document.data();
+  return {
+    eventId: String(data.eventId ?? document.id),
+    ownerId: String(data.ownerId),
+    entityType: data.entityType as SyncEntityType,
+    entityId: String(data.entityId),
+    operation: data.operation as SyncOperation,
+    revision: Number(data.revision),
+    payloadVersion: 1,
+    payload: toRecord(data.payload),
+    createdAt: String(data.createdAt),
+    idempotencyKey: String(data.idempotencyKey),
+  };
+}
+
+function toRecord(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return value as Record<string, unknown>;
+}
+
+function toTransportError(error: unknown): SyncTransportError {
+  if (error instanceof SyncTransportError) return error;
+  if (typeof error === "object" && error !== null && "code" in error) {
+    const code = String(error.code);
+    const retryable = !["permission-denied", "invalid-argument", "failed-precondition"].includes(
+      code,
+    );
+    return new SyncTransportError(`Firestore ${code}`, retryable);
+  }
+  return new SyncTransportError(error instanceof Error ? error.message : "Firestore sync failed.");
+}

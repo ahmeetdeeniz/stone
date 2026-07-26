@@ -28,11 +28,17 @@ export function AppProvider({ children }: PropsWithChildren) {
       services && user ? services.device.bindOwner(services.deviceId, user.uid) : undefined,
     [services],
   );
+  const syncOwner = useCallback(
+    (ownerId: string) => (services ? services.sync(ownerId).then(() => undefined) : undefined),
+    [services],
+  );
   return (
     <ThemeProvider>
       {services ? (
         <AppServicesContext.Provider value={services}>
-          <AuthProvider onUserChanged={bindDeviceOwner}>{children}</AuthProvider>
+          <AuthProvider onUserChanged={bindDeviceOwner} onSyncRequested={syncOwner}>
+            {children}
+          </AuthProvider>
         </AppServicesContext.Provider>
       ) : error ? (
         <ErrorState message={error} />

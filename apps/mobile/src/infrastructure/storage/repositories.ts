@@ -1,6 +1,7 @@
 import type { UserSettings, SettingsRepository } from "@stone/domain";
 import { validateSettings } from "@stone/domain";
 import type { StoneDatabase } from "./database";
+import { enqueueOutbox } from "./sync";
 
 export class SQLiteSettingsRepository implements SettingsRepository {
   public constructor(private readonly database: StoneDatabase) {}
@@ -12,8 +13,9 @@ export class SQLiteSettingsRepository implements SettingsRepository {
       reduce_motion: number;
       editor_font_size: number;
       trash_retention_days: number;
+      revision: number;
     }>(
-      "SELECT owner_id, theme, reduce_motion, editor_font_size, trash_retention_days FROM settings WHERE owner_id = ?",
+      "SELECT owner_id, theme, reduce_motion, editor_font_size, trash_retention_days, revision FROM settings WHERE owner_id = ?",
       ownerId,
     );
     const settings: UserSettings = row
@@ -36,13 +38,33 @@ export class SQLiteSettingsRepository implements SettingsRepository {
 
   public async save(settings: UserSettings): Promise<void> {
     const valid = validateSettings(settings);
-    await this.database.runAsync(
-      "INSERT INTO settings (owner_id, theme, reduce_motion, editor_font_size, trash_retention_days) VALUES (?, ?, ?, ?, ?) ON CONFLICT(owner_id) DO UPDATE SET theme = excluded.theme, reduce_motion = excluded.reduce_motion, editor_font_size = excluded.editor_font_size, trash_retention_days = excluded.trash_retention_days",
-      valid.ownerId,
-      valid.theme,
-      valid.reduceMotion ? 1 : 0,
-      valid.editorFontSize,
-      valid.trashRetentionDays,
-    );
+    await this.database.withTransactionAsync(async () => {
+      const current = await this.database.getFirstAsync<{ revision: number }>(
+        "SELECT revision FROM settings WHERE owner_id = ?",
+        valid.ownerId,
+      );
+      const revision = (current?.revision ?? 0) + 1;
+      await this.database.runAsync(
+        "INSERT INTO settings (owner_id, theme, reduce_motion, editor_font_size, trash_retention_days, revision) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(owner_id) DO UPDATE SET theme = excluded.theme, reduce_motion = excluded.reduce_motion, editor_font_size = excluded.editor_font_size, trash_retention_days = excluded.trash_retention_days, revision = excluded.revision",
+        valid.ownerId,
+        valid.theme,
+        valid.reduceMotion ? 1 : 0,
+        valid.editorFontSize,
+        valid.trashRetentionDays,
+        revision,
+      );
+      await enqueueOutbox(this.database, {
+        ownerId: valid.ownerId,
+        entityType: "settings",
+        entityId: valid.ownerId,
+        operation: "upsert",
+        baseRevision: revision - 1,
+        revision,
+        payloadVersion: 1,
+        payload: { ...valid, id: valid.ownerId, revision },
+        createdAt: new Date().toISOString(),
+        idempotencyKey: `${valid.ownerId}:settings:${revision}`,
+      });
+    });
   }
 }

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "expo-router";
 import { Alert, StyleSheet, View } from "react-native";
 import { ResponsiveContent } from "../../src/components/responsive";
@@ -7,18 +7,21 @@ import { spacing } from "../../src/design/tokens";
 import { useTheme } from "../../src/design/theme";
 import { useAuth } from "../../src/providers/auth-provider";
 import { useAppServices } from "../../src/providers/app-provider";
+import { shareWorkspaceExport } from "../../src/notes/workspace-files";
+import type { SyncState } from "../../src/infrastructure/storage/sync";
 
 export default function SettingsScreen() {
   const router = useRouter();
   const { preference, setPreference, colors } = useTheme();
   const { user, service } = useAuth();
-  const { settingsUseCases } = useAppServices();
+  const services = useAppServices();
   const [busy, setBusy] = useState(false);
   const [settingsLoaded, setSettingsLoaded] = useState(false);
+  const [syncState, setSyncState] = useState<SyncState | null>(null);
   useEffect(() => {
     if (!user) return;
     setSettingsLoaded(false);
-    void settingsUseCases
+    void services.settingsUseCases
       .load(user.uid)
       .then((stored) => {
         setPreference(stored.theme);
@@ -31,17 +34,39 @@ export default function SettingsScreen() {
           error instanceof Error ? error.message : "Ayarlar yerel olarak okunamadı.",
         );
       });
-  }, [setPreference, settingsUseCases, user]);
+  }, [services.settingsUseCases, setPreference, user]);
+  const loadSyncState = useCallback(async () => {
+    if (!user) return;
+    setSyncState(await services.syncStore.getState(user.uid));
+  }, [services.syncStore, user]);
+  useEffect(() => {
+    void loadSyncState();
+  }, [loadSyncState]);
   const updateTheme = async (option: "system" | "light" | "dark") => {
     setPreference(option);
     if (!user || !settingsLoaded) return;
     try {
-      await settingsUseCases.setTheme(user.uid, option);
+      await services.settingsUseCases.setTheme(user.uid, option);
     } catch (error) {
       Alert.alert(
         "Tema kaydedilemedi",
         error instanceof Error ? error.message : "Ayar değişikliği yerel olarak kaydedilemedi.",
       );
+    }
+  };
+  const runSync = async () => {
+    if (!user) return;
+    setBusy(true);
+    try {
+      await services.sync(user.uid);
+      await loadSyncState();
+    } catch (error) {
+      Alert.alert(
+        "Senkronizasyon başarısız",
+        error instanceof Error ? error.message : "Tekrar deneyin.",
+      );
+    } finally {
+      setBusy(false);
     }
   };
   const signOut = async () => {
@@ -58,12 +83,77 @@ export default function SettingsScreen() {
       setBusy(false);
     }
   };
+  const exportAll = async () => {
+    if (!user) return;
+    setBusy(true);
+    try {
+      await shareWorkspaceExport(await services.exportWorkspace(user.uid));
+    } catch (error) {
+      Alert.alert(
+        "Workspace dışa aktarılamadı",
+        error instanceof Error ? error.message : "Tekrar deneyin.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+  const deleteAccount = () => {
+    if (!user || !service) return;
+    Alert.alert(
+      "Hesabı ve tüm verileri sil?",
+      "Firebase verileri ve bu cihazdaki yerel veriler kalıcı olarak silinir.",
+      [
+        { text: "Vazgeç", style: "cancel" },
+        {
+          text: "Kalıcı olarak sil",
+          style: "destructive",
+          onPress: () => {
+            void (async () => {
+              setBusy(true);
+              try {
+                await services.deleteRemoteData(user.uid);
+                await service.deleteAccount();
+                await services.purgeLocalData(user.uid);
+              } catch (error) {
+                Alert.alert(
+                  "Hesap silinemedi",
+                  error instanceof Error ? error.message : "Tekrar deneyin.",
+                );
+              } finally {
+                setBusy(false);
+              }
+            })();
+          },
+        },
+      ],
+    );
+  };
   return (
     <Screen>
       <ResponsiveContent>
         <StoneText variant="title1" style={styles.title}>
           Ayarlar
         </StoneText>
+        <View style={[styles.section, { borderColor: colors.border }]}>
+          <StoneText variant="title3">Senkronizasyon</StoneText>
+          <StoneText variant="bodySmall" style={{ color: colors.textSecondary }}>
+            Durum: {syncState?.status ?? "saved"}
+            {syncState?.lastError ? ` · ${syncState.lastError}` : ""}
+          </StoneText>
+          <View style={styles.options}>
+            <StoneButton
+              label="Şimdi eşitle"
+              variant="secondary"
+              onPress={() => void runSync()}
+              disabled={busy || !user}
+            />
+            <StoneButton
+              label="Conflict merkezi"
+              variant="quiet"
+              onPress={() => router.push("/conflicts")}
+            />
+          </View>
+        </View>
         <View style={[styles.section, { borderColor: colors.border }]}>
           <StoneText variant="title3">Tema</StoneText>
           <StoneText variant="bodySmall" style={{ color: colors.textSecondary }}>
@@ -91,6 +181,18 @@ export default function SettingsScreen() {
             onPress={() => void signOut()}
             disabled={busy}
           />
+          <StoneButton
+            label="Workspace'i dışa aktar"
+            variant="quiet"
+            onPress={() => void exportAll()}
+            disabled={busy || !user}
+          />
+          <StoneButton
+            label="Hesabı ve verileri sil"
+            variant="quiet"
+            onPress={deleteAccount}
+            disabled={busy || !user}
+          />
         </View>
         <View style={[styles.section, { borderColor: colors.border }]}>
           <StoneText variant="title3">Not yönetimi</StoneText>
@@ -100,9 +202,6 @@ export default function SettingsScreen() {
             onPress={() => router.push("/trash")}
           />
         </View>
-        <StoneText variant="caption" style={{ color: colors.textMuted }}>
-          Veri aktarımı, çöp kutusu ve conflict merkezi sonraki milestone'larda eklenecek.
-        </StoneText>
       </ResponsiveContent>
     </Screen>
   );

@@ -3,9 +3,11 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type PropsWithChildren,
 } from "react";
+import { AppState } from "react-native";
 import type { AuthService, AuthUser } from "../infrastructure/firebase/auth";
 import { createFirebaseAuthService } from "../infrastructure/firebase/auth";
 
@@ -18,15 +20,17 @@ interface AuthContextValue {
 
 interface AuthProviderProps extends PropsWithChildren {
   onUserChanged?: (user: AuthUser | null) => void | Promise<void>;
+  onSyncRequested?: (ownerId: string) => void | Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-export function AuthProvider({ children, onUserChanged }: AuthProviderProps) {
+export function AuthProvider({ children, onUserChanged, onSyncRequested }: AuthProviderProps) {
   const [service, setService] = useState<AuthService | null>(null);
   const [status, setStatus] = useState<AuthContextValue["status"]>("loading");
   const [user, setUser] = useState<AuthUser | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const currentUserRef = useRef<AuthUser | null>(null);
 
   useEffect(() => {
     let unsubscribe: (() => void) | undefined;
@@ -34,18 +38,34 @@ export function AuthProvider({ children, onUserChanged }: AuthProviderProps) {
       const nextService = createFirebaseAuthService();
       setService(nextService);
       unsubscribe = nextService.subscribe((nextUser) => {
+        currentUserRef.current = nextUser;
         setUser(nextUser);
         setStatus("ready");
-        void Promise.resolve(onUserChanged?.(nextUser)).catch((caught: unknown) => {
-          setError(caught instanceof Error ? caught.message : "Cihaz kimliği güncellenemedi.");
-        });
+        void Promise.resolve(onUserChanged?.(nextUser))
+          .then(() => (nextUser ? onSyncRequested?.(nextUser.uid) : undefined))
+          .catch((caught: unknown) => {
+            setError(caught instanceof Error ? caught.message : "Cihaz kimliği güncellenemedi.");
+          });
       });
     } catch (caught) {
       setStatus("error");
       setError(caught instanceof Error ? caught.message : "Kimlik doğrulama başlatılamadı.");
     }
     return () => unsubscribe?.();
-  }, [onUserChanged]);
+  }, [onSyncRequested, onUserChanged]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (nextState) => {
+      if (nextState === "active" && currentUserRef.current) {
+        void Promise.resolve(onSyncRequested?.(currentUserRef.current.uid)).catch(
+          (caught: unknown) => {
+            setError(caught instanceof Error ? caught.message : "Senkronizasyon başlatılamadı.");
+          },
+        );
+      }
+    });
+    return () => subscription.remove();
+  }, [onSyncRequested]);
 
   const value = useMemo(() => ({ status, user, error, service }), [error, service, status, user]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

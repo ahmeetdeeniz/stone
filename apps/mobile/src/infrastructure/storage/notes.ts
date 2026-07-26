@@ -9,6 +9,7 @@ import type {
 import { StorageError } from "@stone/domain";
 import { normalizeMarkdown } from "@stone/markdown";
 import type { StoneDatabase } from "./database";
+import { enqueueOutbox } from "./sync";
 
 interface DocumentRow {
   id: string;
@@ -68,6 +69,18 @@ export class SQLiteNoteRepository implements NoteRepository {
         );
         await this.insertRevision(document.id, document.revision, markdown, document.updatedAt);
         await this.replaceSearchIndex({ ...document, markdown });
+        await enqueueOutbox(this.database, {
+          ownerId: document.ownerId,
+          entityType: "document",
+          entityId: document.id,
+          operation: document.deletedAt ? "delete" : "upsert",
+          baseRevision: Math.max(0, document.revision - 1),
+          revision: document.revision,
+          payloadVersion: 1,
+          payload: toSyncPayload({ ...document, markdown }),
+          createdAt: document.updatedAt,
+          idempotencyKey: `${document.updatedByDeviceId}:document:${document.id}:${document.revision}`,
+        });
       });
       return { ...document, title: document.title.trim(), markdown };
     });
@@ -278,6 +291,18 @@ export class SQLiteNoteRepository implements NoteRepository {
         );
         await this.insertRevision(id, next.revision, next.markdown, now);
         await this.replaceSearchIndex(next);
+        await enqueueOutbox(this.database, {
+          ownerId,
+          entityType: "document",
+          entityId: id,
+          operation: next.deletedAt ? "delete" : "upsert",
+          baseRevision: current.revision,
+          revision: next.revision,
+          payloadVersion: 1,
+          payload: toSyncPayload(next),
+          createdAt: next.updatedAt,
+          idempotencyKey: `${deviceId}:document:${id}:${next.revision}`,
+        });
         updated = next;
       });
       if (!updated) throw new StorageError("Note update did not complete.");
@@ -315,6 +340,24 @@ export class SQLiteNoteRepository implements NoteRepository {
       );
     }
   }
+}
+
+function toSyncPayload(document: Document): Record<string, unknown> {
+  return {
+    id: document.id,
+    ownerId: document.ownerId,
+    kind: document.kind,
+    title: document.title,
+    markdown: document.markdown,
+    path: document.path,
+    projectId: document.projectId,
+    isPinned: document.isPinned,
+    revision: document.revision,
+    createdAt: document.createdAt,
+    updatedAt: document.updatedAt,
+    deletedAt: document.deletedAt,
+    updatedByDeviceId: document.updatedByDeviceId,
+  };
 }
 
 function toDocument(row: DocumentRow): Document {

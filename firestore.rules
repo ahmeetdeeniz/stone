@@ -1,0 +1,85 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+
+    function ownerCreate(uid) {
+      return signedIn(uid)
+        && request.resource.data.ownerId == uid
+        && request.resource.data.revision == 1;
+    }
+
+    function ownerUpdate(uid) {
+      return signedIn(uid)
+        && resource.data.ownerId == uid
+        && request.resource.data.ownerId == uid
+        && request.resource.data.revision == resource.data.revision + 1;
+    }
+
+    function validSyncEvent(uid) {
+      return signedIn(uid)
+        && request.resource.data.ownerId == uid
+        && request.resource.data.eventId == request.resource.id
+        && request.resource.data.idempotencyKey is string
+        && request.resource.data.entityId is string
+        && request.resource.data.entityType is string
+        && request.resource.data.revision is int;
+    }
+
+    match /users/{uid} {
+      allow read: if signedIn(uid);
+      allow write: if false;
+
+      match /documents/{documentId} {
+        allow read: if signedIn(uid);
+        allow create: if ownerCreate(uid);
+        allow update: if ownerUpdate(uid);
+        allow delete: if signedIn(uid) && resource.data.ownerId == uid;
+      }
+
+      match /projects/{projectId} {
+        allow read: if signedIn(uid);
+        allow create: if ownerCreate(uid);
+        allow update: if ownerUpdate(uid);
+        allow delete: if signedIn(uid) && resource.data.ownerId == uid;
+      }
+
+      match /versions/{versionId} {
+        allow read: if signedIn(uid);
+        allow create: if ownerCreate(uid);
+        allow update: if ownerUpdate(uid);
+        allow delete: if signedIn(uid) && resource.data.ownerId == uid;
+      }
+
+      match /devices/{deviceId} {
+        allow read: if signedIn(uid);
+        allow create: if ownerCreate(uid) && request.resource.data.id == deviceId;
+        allow update: if ownerUpdate(uid) && request.resource.data.id == deviceId;
+        allow delete: if signedIn(uid) && resource.data.ownerId == uid;
+      }
+
+      match /settings/{settingsId} {
+        allow read: if signedIn(uid);
+        allow create: if ownerCreate(uid) && request.resource.data.id == settingsId;
+        allow update: if ownerUpdate(uid) && request.resource.data.id == settingsId;
+        allow delete: if signedIn(uid) && resource.data.ownerId == uid;
+      }
+
+      match /syncEvents/{eventId} {
+        allow read: if signedIn(uid);
+        allow create: if validSyncEvent(uid);
+        allow update: if false;
+        allow delete: if signedIn(uid) && resource.data.ownerId == uid;
+      }
+
+      match /conflicts/{conflictId} {
+        allow read: if signedIn(uid);
+        allow delete: if signedIn(uid) && resource.data.ownerId == uid;
+        allow create, update: if false;
+      }
+    }
+  }
+}

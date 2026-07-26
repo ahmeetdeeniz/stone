@@ -13,6 +13,7 @@ export interface AuthService {
   signUp(email: string, password: string): Promise<AuthUser>;
   sendPasswordReset(email: string): Promise<void>;
   signOut(): Promise<void>;
+  deleteAccount(): Promise<void>;
 }
 
 function mapUser(user: FirebaseAuthTypes.User): AuthUser {
@@ -56,6 +57,16 @@ export function createFirebaseAuthService(): AuthService {
         throw new AuthError(toAuthMessage(error));
       }
     },
+    async deleteAccount() {
+      try {
+        const currentUser = instance.currentUser;
+        if (!currentUser) throw new AuthError("Aktif kullanıcı bulunamadı.");
+        await currentUser.delete();
+      } catch (error) {
+        if (error instanceof AuthError) throw error;
+        throw new AuthError(toAuthMessage(error));
+      }
+    },
   };
 }
 
@@ -68,6 +79,7 @@ function toAuthMessage(error: unknown): string {
       "auth/invalid-email": "Geçerli bir e-posta adresi girin.",
       "auth/weak-password": "Şifre en az altı karakter olmalı.",
       "auth/too-many-requests": "Çok fazla deneme yapıldı. Daha sonra tekrar deneyin.",
+      "auth/requires-recent-login": "Bu işlem için yeniden giriş yapmanız gerekiyor.",
     };
     return messages[code] ?? "Kimlik doğrulama tamamlanamadı.";
   }

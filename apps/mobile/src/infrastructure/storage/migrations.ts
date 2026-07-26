@@ -77,4 +77,29 @@ export const migrations: readonly Migration[] = [
       "CREATE INDEX IF NOT EXISTS blockers_project_idx ON project_blockers (owner_id, project_id, resolved)",
     ],
   },
+  {
+    version: 4,
+    statements: [
+      "ALTER TABLE outbox ADD COLUMN owner_id TEXT NOT NULL DEFAULT ''",
+      "ALTER TABLE outbox ADD COLUMN revision INTEGER NOT NULL DEFAULT 1",
+      "ALTER TABLE outbox ADD COLUMN status TEXT NOT NULL DEFAULT 'pending'",
+      "ALTER TABLE outbox ADD COLUMN last_error TEXT",
+      "ALTER TABLE conflicts ADD COLUMN base_payload TEXT",
+      "ALTER TABLE conflicts ADD COLUMN local_payload TEXT NOT NULL DEFAULT '{}'",
+      "ALTER TABLE conflicts ADD COLUMN remote_payload TEXT NOT NULL DEFAULT '{}'",
+      "ALTER TABLE conflicts ADD COLUMN resolution TEXT",
+      "ALTER TABLE conflicts ADD COLUMN resolved_at TEXT",
+      "CREATE TABLE IF NOT EXISTS sync_state (owner_id TEXT PRIMARY KEY NOT NULL, status TEXT NOT NULL DEFAULT 'saved', last_error TEXT, updated_at TEXT NOT NULL)",
+      "CREATE TABLE IF NOT EXISTS sync_state_cursors (owner_id TEXT NOT NULL, collection TEXT NOT NULL, cursor TEXT, PRIMARY KEY (owner_id, collection))",
+      "CREATE INDEX IF NOT EXISTS outbox_owner_pending_idx ON outbox (owner_id, status, next_attempt_at, created_at)",
+      "CREATE INDEX IF NOT EXISTS conflicts_owner_status_idx ON conflicts (owner_id, status, created_at DESC)",
+    ],
+  },
+  {
+    version: 5,
+    statements: [
+      "ALTER TABLE devices ADD COLUMN revision INTEGER NOT NULL DEFAULT 1",
+      "ALTER TABLE settings ADD COLUMN revision INTEGER NOT NULL DEFAULT 1",
+    ],
+  },
 ];

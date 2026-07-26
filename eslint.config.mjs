@@ -13,6 +13,7 @@ export default tseslint.config(
       "vitest*.config.ts",
       "packages/editor/scripts/**",
       "scripts/**",
+      "firebase/**",
     ],
   },
   eslint.configs.recommended,

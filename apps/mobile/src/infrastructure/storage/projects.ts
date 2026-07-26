@@ -32,6 +32,7 @@ import {
 } from "@stone/markdown";
 import { StorageError } from "@stone/domain";
 import type { StoneDatabase } from "./database";
+import { enqueueOutbox } from "./sync";
 
 interface ProjectRow {
   id: string;
@@ -157,6 +158,18 @@ export class SQLiteProjectRepository implements ProjectRepository {
           await this.insertDocument(document);
           await this.replaceTaskIndex(document);
         }
+        await enqueueOutbox(this.database, {
+          ownerId: project.ownerId,
+          entityType: "project",
+          entityId: project.id,
+          operation: "upsert",
+          baseRevision: Math.max(0, project.revision - 1),
+          revision: project.revision,
+          payloadVersion: 1,
+          payload: toSyncPayload(project),
+          createdAt: project.updatedAt,
+          idempotencyKey: `${project.updatedByDeviceId}:project:${project.id}:${project.revision}`,
+        });
       });
       return project;
     });
@@ -263,6 +276,7 @@ export class SQLiteProjectRepository implements ProjectRepository {
           id,
         );
         updated = await this.refreshHealth(next);
+        await enqueueProject(this.database, updated, current.revision);
       });
       if (!updated) throw new StorageError("Project update did not complete.");
       return updated;
@@ -304,6 +318,18 @@ export class SQLiteProjectRepository implements ProjectRepository {
         );
         await this.insertDocument(input.document);
         await this.replaceTaskIndex(input.document, input.version.projectId, input.version.id);
+        await enqueueOutbox(this.database, {
+          ownerId: input.version.ownerId,
+          entityType: "version",
+          entityId: input.version.id,
+          operation: "upsert",
+          baseRevision: Math.max(0, input.version.revision - 1),
+          revision: input.version.revision,
+          payloadVersion: 1,
+          payload: toSyncPayload(input.version),
+          createdAt: input.version.updatedAt,
+          idempotencyKey: `${input.version.updatedByDeviceId}:version:${input.version.id}:${input.version.revision}`,
+        });
         const project = await this.requireProject(input.version.ownerId, input.version.projectId);
         await this.touchProject(project, input.version.updatedByDeviceId);
       });
@@ -363,6 +389,18 @@ export class SQLiteProjectRepository implements ProjectRepository {
           ownerId,
           id,
         );
+        await enqueueOutbox(this.database, {
+          ownerId,
+          entityType: "version",
+          entityId: id,
+          operation: "upsert",
+          baseRevision: current.revision,
+          revision: next.revision,
+          payloadVersion: 1,
+          payload: toSyncPayload(next),
+          createdAt: next.updatedAt,
+          idempotencyKey: `${deviceId}:version:${id}:${next.revision}`,
+        });
         await this.replaceTaskIndex({ ...document, markdown });
         const project = await this.requireProject(ownerId, current.projectId);
         await this.touchProject(project, deviceId);
@@ -678,6 +716,18 @@ export class SQLiteProjectRepository implements ProjectRepository {
       document.updatedAt,
     );
     await this.replaceSearchIndex({ ...document, markdown });
+    await enqueueOutbox(this.database, {
+      ownerId: document.ownerId,
+      entityType: "document",
+      entityId: document.id,
+      operation: document.deletedAt ? "delete" : "upsert",
+      baseRevision: Math.max(0, document.revision - 1),
+      revision: document.revision,
+      payloadVersion: 1,
+      payload: toSyncPayload({ ...document, markdown }),
+      createdAt: document.updatedAt,
+      idempotencyKey: `${document.updatedByDeviceId}:document:${document.id}:${document.revision}`,
+    });
   }
 
   private async updateDocument(
@@ -713,6 +763,18 @@ export class SQLiteProjectRepository implements ProjectRepository {
       next.updatedAt,
     );
     await this.replaceSearchIndex(next);
+    await enqueueOutbox(this.database, {
+      ownerId: next.ownerId,
+      entityType: "document",
+      entityId: next.id,
+      operation: next.deletedAt ? "delete" : "upsert",
+      baseRevision: document.revision,
+      revision: next.revision,
+      payloadVersion: 1,
+      payload: toSyncPayload(next),
+      createdAt: next.updatedAt,
+      idempotencyKey: `${deviceId}:document:${next.id}:${next.revision}`,
+    });
     return next;
   }
 
@@ -782,15 +844,36 @@ export class SQLiteProjectRepository implements ProjectRepository {
       ownerId,
       versionId,
     );
+    const updatedAt = new Date().toISOString();
     await this.database.runAsync(
       "UPDATE versions SET completed_tasks = ?, total_tasks = ?, revision = revision + 1, updated_at = ?, updated_by_device_id = ? WHERE owner_id = ? AND id = ?",
       progress?.completed ?? 0,
       progress?.total ?? 0,
-      new Date().toISOString(),
+      updatedAt,
       deviceId,
       ownerId,
       version.id,
     );
+    const updatedVersion = {
+      ...version,
+      completedTasks: progress?.completed ?? 0,
+      totalTasks: progress?.total ?? 0,
+      revision: version.revision + 1,
+      updatedAt,
+      updatedByDeviceId: deviceId,
+    };
+    await enqueueOutbox(this.database, {
+      ownerId,
+      entityType: "version",
+      entityId: version.id,
+      operation: "upsert",
+      baseRevision: version.revision,
+      revision: updatedVersion.revision,
+      payloadVersion: 1,
+      payload: toSyncPayload(updatedVersion),
+      createdAt: updatedVersion.updatedAt,
+      idempotencyKey: `${deviceId}:version:${version.id}:${updatedVersion.revision}`,
+    });
   }
 
   private async refreshHealth(project: Project): Promise<Project> {
@@ -822,14 +905,25 @@ export class SQLiteProjectRepository implements ProjectRepository {
       new Date().toISOString().slice(0, 10),
     );
     if (health.health !== project.health) {
+      const next: Project = {
+        ...project,
+        health: health.health,
+        revision: project.revision + 1,
+        updatedAt: new Date().toISOString(),
+      };
       await this.database.runAsync(
-        "UPDATE projects SET health = ? WHERE owner_id = ? AND id = ?",
-        health.health,
+        "UPDATE projects SET health = ?, revision = ?, updated_at = ?, updated_by_device_id = ? WHERE owner_id = ? AND id = ?",
+        next.health,
+        next.revision,
+        next.updatedAt,
+        next.updatedByDeviceId,
         project.ownerId,
         project.id,
       );
+      await enqueueProject(this.database, next, project.revision);
+      return next;
     }
-    return { ...project, health: health.health };
+    return project;
   }
 
   private async touchProject(project: Project, deviceId: string): Promise<Project> {
@@ -847,6 +941,18 @@ export class SQLiteProjectRepository implements ProjectRepository {
       project.ownerId,
       project.id,
     );
+    await enqueueOutbox(this.database, {
+      ownerId: next.ownerId,
+      entityType: "project",
+      entityId: next.id,
+      operation: "upsert",
+      baseRevision: project.revision,
+      revision: next.revision,
+      payloadVersion: 1,
+      payload: toSyncPayload(next),
+      createdAt: next.updatedAt,
+      idempotencyKey: `${deviceId}:project:${next.id}:${next.revision}`,
+    });
     return next;
   }
 
@@ -878,6 +984,87 @@ export class SQLiteProjectRepository implements ProjectRepository {
     if (!row) throw new StorageError("Canonical Markdown document not found.");
     return toDocument(row);
   }
+}
+
+async function enqueueProject(
+  database: StoneDatabase,
+  project: Project,
+  baseRevision: number,
+): Promise<void> {
+  await enqueueOutbox(database, {
+    ownerId: project.ownerId,
+    entityType: "project",
+    entityId: project.id,
+    operation: project.deletedAt ? "delete" : "upsert",
+    baseRevision,
+    revision: project.revision,
+    payloadVersion: 1,
+    payload: toSyncPayload(project),
+    createdAt: project.updatedAt,
+    idempotencyKey: `${project.updatedByDeviceId}:project:${project.id}:${project.revision}`,
+  });
+}
+
+function toSyncPayload(entity: Document | Project | ProjectVersion): Record<string, unknown> {
+  if ("kind" in entity) {
+    return {
+      id: entity.id,
+      ownerId: entity.ownerId,
+      kind: entity.kind,
+      title: entity.title,
+      markdown: entity.markdown,
+      path: entity.path,
+      projectId: entity.projectId,
+      isPinned: entity.isPinned,
+      revision: entity.revision,
+      createdAt: entity.createdAt,
+      updatedAt: entity.updatedAt,
+      deletedAt: entity.deletedAt,
+      updatedByDeviceId: entity.updatedByDeviceId,
+    };
+  }
+  if ("canonicalDocumentId" in entity && "projectId" in entity) {
+    return {
+      id: entity.id,
+      ownerId: entity.ownerId,
+      projectId: entity.projectId,
+      canonicalDocumentId: entity.canonicalDocumentId,
+      version: entity.version,
+      status: entity.status,
+      targetDate: entity.targetDate,
+      androidStatus: entity.androidStatus,
+      iosStatus: entity.iosStatus,
+      completedTasks: entity.completedTasks,
+      totalTasks: entity.totalTasks,
+      revision: entity.revision,
+      createdAt: entity.createdAt,
+      updatedAt: entity.updatedAt,
+      deletedAt: entity.deletedAt,
+      updatedByDeviceId: entity.updatedByDeviceId,
+    };
+  }
+  return {
+    id: entity.id,
+    ownerId: entity.ownerId,
+    canonicalDocumentId: entity.canonicalDocumentId,
+    title: entity.title,
+    slug: entity.slug,
+    status: entity.status,
+    priority: entity.priority,
+    tags: [...entity.tags],
+    targetDate: entity.targetDate,
+    currentVersion: entity.currentVersion,
+    nextVersion: entity.nextVersion,
+    nextAction: entity.nextAction,
+    repositoryUrl: entity.repositoryUrl,
+    platforms: [...entity.platforms],
+    health: entity.health,
+    revision: entity.revision,
+    createdAt: entity.createdAt,
+    updatedAt: entity.updatedAt,
+    deletedAt: entity.deletedAt,
+    updatedByDeviceId: entity.updatedByDeviceId,
+  };
 }
 
 function toProject(row: ProjectRow): Project {

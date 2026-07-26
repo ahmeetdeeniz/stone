@@ -19,6 +19,8 @@ coverage/
 GoogleService-Info.plist
 google-services.json
 android/app/build/
+apps/mobile/android/
+apps/mobile/ios/
 ios/build/
 ios/Pods/
 stone-codex-pack/
