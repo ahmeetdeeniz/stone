@@ -1,16 +1,18 @@
 import { type ComponentProps, type PropsWithChildren } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useTheme } from "../design/theme";
 import { radii, spacing, typography } from "../design/tokens";
 
 export function Screen({ children, padded = true }: PropsWithChildren<{ padded?: boolean }>) {
   const { colors } = useTheme();
   return (
-    <View
+    <SafeAreaView
       style={[styles.screen, { backgroundColor: colors.background }, padded && styles.screenPadded]}
+      edges={["top", "right", "bottom", "left"]}
     >
       {children}
-    </View>
+    </SafeAreaView>
   );
 }
 
