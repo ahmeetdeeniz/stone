@@ -5,6 +5,7 @@ export default defineConfig({
     include: [
       "packages/**/src/**/*.test.ts",
       "apps/mobile/src/**/*.test.ts",
+      "apps/desktop/src/**/*.test.ts",
       "services/mcp/src/**/*.test.ts",
       "firebase/**/*.test.ts",
     ],

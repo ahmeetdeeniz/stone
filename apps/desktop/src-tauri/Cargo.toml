@@ -1,0 +1,27 @@
+[package]
+name = "stone-desktop"
+version = "0.1.0"
+description = "Stone local-first Markdown workspace"
+authors = ["Stone contributors"]
+edition = "2021"
+
+[lib]
+name = "stone_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.4.1", features = [] }
+
+[dependencies]
+chrono = { version = "0.4.41", features = ["clock", "serde"] }
+keyring = { version = "4.1.5", default-features = true }
+notify = "8.2.0"
+reqwest = { version = "0.12.23", default-features = false, features = ["json", "rustls-tls"] }
+rusqlite = { version = "0.40.1", features = ["bundled"] }
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.145"
+sha2 = "0.10.9"
+tauri = { version = "2.11.1", features = [] }
+thiserror = "2.0.17"
+uuid = { version = "1.18.1", features = ["v4", "serde"] }
+rfd = "0.15.4"

@@ -4,4 +4,4 @@ dist
 coverage
 *.lock
 stone-codex-pack
-
+apps/desktop/src-tauri/target

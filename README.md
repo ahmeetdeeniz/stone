@@ -36,6 +36,19 @@ Stone MCP is a separately deployable, provider-neutral MCP service. The same aut
 
 See [services/mcp/README.md](services/mcp/README.md) for local setup, Firebase Admin configuration, OAuth metadata, provider connection notes and deployment checks.
 
+## Windows desktop
+
+Stone Windows desktop is a Tauri 2 development build. It is intended for direct installer or portable distribution, not a public app-store listing.
+
+To use it locally:
+
+1. Copy `.env.example` to `.env` and provide your own `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_PROJECT_ID`, and `VITE_FIREBASE_AUTH_DOMAIN`.
+2. Keep the approved `apps/mobile/assets/fonts/Bongita-Regular.otf` asset in the repository; do not rename or replace it.
+3. Run `pnpm install`, then `pnpm desktop:dev`.
+4. Install the Visual C++ build tools and WebView2 when creating a Windows Tauri installer with `pnpm desktop:tauri:build`.
+
+The desktop app stores local data in its Tauri application data directory, uses the Windows credential store for Firebase refresh tokens, and links only Markdown files selected by the user. Each self-hosted installation must use its own Firebase project and may configure its own mobile package and iOS bundle identifiers.
+
 ## Dağıtım modeli
 
 - Stone, Google Play Store'da veya public App Store listesinde dağıtılmaz.
