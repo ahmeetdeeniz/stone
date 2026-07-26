@@ -55,10 +55,12 @@ describe("markdown source boundary", () => {
     const tasks = extractTasks(source);
     expect(tasks).toHaveLength(2);
     const updated = toggleTask(source, tasks[0]!, true);
-    expect(updated).toBe("- [x] first\n\n```md\n- [ ] not a task\n```\n- [x] last\n");
-    expect(toggleTask(updated, tasks[1]!, false)).toBe(
-      "- [x] first\n\n```md\n- [ ] not a task\n```\n- [ ] last\n",
-    );
+    expect(updated).toContain('- [x] first\n<!-- stone-task: {"id":"tsk_');
+    expect(updated).toContain("```md\n- [ ] not a task\n```");
+    expect(updated).toContain("- [x] last\n");
+    const final = toggleTask(updated, tasks[1]!, false);
+    expect(final).toContain('- [ ] last\n<!-- stone-task: {"id":"tsk_');
+    expect(extractTasks(final).filter((task) => task.checked)).toHaveLength(1);
   });
 
   it("supports selection formatting without replacing source with a rich-text model", () => {

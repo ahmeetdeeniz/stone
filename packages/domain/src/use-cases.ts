@@ -1,13 +1,23 @@
 import type {
   Document,
+  Project,
+  ProjectBlocker,
+  ProjectDecision,
   NoteDraft,
   NoteListOptions,
   NoteRepository,
+  ProjectCreateInput,
+  ProjectListOptions,
+  ProjectRepository,
+  ProjectUpdate,
+  VersionCreateInput,
+  VersionUpdate,
   SettingsRepository,
   ThemePreference,
   UserSettings,
 } from "./entities.js";
 import { ValidationError } from "./errors.js";
+import { canTransitionProjectStatus } from "./project-logic.js";
 
 export class SettingsUseCases {
   public constructor(private readonly repository: SettingsRepository) {}
@@ -104,5 +114,102 @@ export class NoteUseCases {
 
   public clearDraft(ownerId: string, documentId: string): Promise<void> {
     return this.repository.clearDraft(ownerId, documentId);
+  }
+}
+
+export class ProjectUseCases {
+  public constructor(private readonly repository: ProjectRepository) {}
+
+  public create(input: ProjectCreateInput): Promise<Project> {
+    if (!input.project.title.trim()) throw new ValidationError("Project title is required.");
+    if (!input.project.slug.trim()) throw new ValidationError("Project slug is required.");
+    return this.repository.create({
+      ...input,
+      project: {
+        ...input.project,
+        title: input.project.title.trim(),
+        slug: input.project.slug.trim(),
+      },
+    });
+  }
+
+  public list(ownerId: string, options?: ProjectListOptions) {
+    return this.repository.list(ownerId, options);
+  }
+
+  public get(ownerId: string, id: string) {
+    return this.repository.getById(ownerId, id);
+  }
+
+  public update(ownerId: string, id: string, changes: ProjectUpdate, deviceId: string) {
+    if (changes.status) {
+      const currentPromise = this.repository.getById(ownerId, id);
+      return currentPromise.then((current) => {
+        if (!current) throw new ValidationError("Project not found.");
+        if (!canTransitionProjectStatus(current.status, changes.status!)) {
+          throw new ValidationError("Project status transition is invalid.");
+        }
+        return this.repository.update(ownerId, id, changes, deviceId);
+      });
+    }
+    return this.repository.update(ownerId, id, changes, deviceId);
+  }
+
+  public createVersion(input: VersionCreateInput) {
+    if (!input.version.version.trim()) throw new ValidationError("Version is required.");
+    return this.repository.createVersion(input);
+  }
+
+  public updateVersion(ownerId: string, id: string, changes: VersionUpdate, deviceId: string) {
+    return this.repository.updateVersion(ownerId, id, changes, deviceId);
+  }
+
+  public versions(ownerId: string, projectId: string) {
+    return this.repository.versions(ownerId, projectId);
+  }
+
+  public getVersion(ownerId: string, id: string) {
+    return this.repository.getVersion(ownerId, id);
+  }
+
+  public tasks(ownerId: string, projectId?: string) {
+    return this.repository.tasks(ownerId, projectId);
+  }
+
+  public toggleTask(ownerId: string, taskId: string, completed: boolean, deviceId: string) {
+    return this.repository.toggleTask(ownerId, taskId, completed, deviceId);
+  }
+
+  public blockers(ownerId: string, projectId: string) {
+    return this.repository.blockers(ownerId, projectId);
+  }
+
+  public addBlocker(ownerId: string, blocker: ProjectBlocker) {
+    if (!blocker.text.trim()) throw new ValidationError("Blocker text is required.");
+    return this.repository.addBlocker(ownerId, { ...blocker, text: blocker.text.trim() });
+  }
+
+  public resolveBlocker(ownerId: string, id: string, resolvedAt: string) {
+    return this.repository.resolveBlocker(ownerId, id, resolvedAt);
+  }
+
+  public addInboxItem(ownerId: string, text: string, deviceId: string) {
+    if (!text.trim()) throw new ValidationError("Inbox text is required.");
+    return this.repository.addInboxItem(ownerId, text.trim(), deviceId);
+  }
+
+  public addDecision(ownerId: string, decision: ProjectDecision, deviceId: string) {
+    if (!decision.title.trim() || !decision.decision.trim()) {
+      throw new ValidationError("Decision title and decision are required.");
+    }
+    return this.repository.addDecision(ownerId, decision, deviceId);
+  }
+
+  public today(ownerId: string, now: string) {
+    return this.repository.today(ownerId, now);
+  }
+
+  public exportProject(ownerId: string, projectId: string) {
+    return this.repository.exportProject(ownerId, projectId);
   }
 }

@@ -14,6 +14,17 @@ export type ProjectStatus =
   | "archived";
 
 export type ProjectPriority = "low" | "medium" | "high" | "critical";
+export type ProjectPlatform = "android" | "ios" | "windows" | "web" | "other";
+export type PlatformReleaseStatus =
+  | "not_planned"
+  | "preparing"
+  | "internal_testing"
+  | "external_testing"
+  | "review"
+  | "live"
+  | "paused"
+  | "rejected";
+export type ProjectHealth = "good" | "attention" | "risk" | "paused";
 export type ThemePreference = "system" | "light" | "dark";
 
 export interface SyncFields {
@@ -84,6 +95,160 @@ export interface NoteDraft {
   updatedAt: string;
   selectionFrom: number;
   selectionTo: number;
+}
+
+export interface Project extends SyncFields {
+  canonicalDocumentId: string;
+  title: string;
+  slug: string;
+  status: ProjectStatus;
+  priority: ProjectPriority;
+  tags: readonly string[];
+  targetDate: string | null;
+  currentVersion: string | null;
+  nextVersion: string | null;
+  nextAction: string | null;
+  repositoryUrl: string | null;
+  platforms: readonly ProjectPlatform[];
+  health: ProjectHealth;
+}
+
+export interface ProjectVersion extends SyncFields {
+  projectId: string;
+  canonicalDocumentId: string;
+  version: string;
+  status: ProjectStatus;
+  targetDate: string | null;
+  androidStatus: PlatformReleaseStatus;
+  iosStatus: PlatformReleaseStatus;
+  completedTasks: number;
+  totalTasks: number;
+}
+
+export interface ProjectTask {
+  id: string;
+  ownerId: string;
+  documentId: string;
+  projectId: string | null;
+  versionId: string | null;
+  lineAnchor: string;
+  text: string;
+  completed: boolean;
+  priority: ProjectPriority | null;
+  dueDate: string | null;
+  blocked: boolean;
+  blockerText: string | null;
+  canceled: boolean;
+  revision: number;
+  updatedAt: string;
+}
+
+export interface ProjectBlocker {
+  id: string;
+  projectId: string;
+  taskId: string | null;
+  text: string;
+  resolved: boolean;
+  createdAt: string;
+  resolvedAt: string | null;
+}
+
+export interface ProjectDecision {
+  id: string;
+  projectId: string;
+  title: string;
+  date: string;
+  decision: string;
+  reason: string;
+  alternatives: string;
+  outcome: string;
+}
+
+export interface ProjectListOptions {
+  includeArchived?: boolean;
+  status?: ProjectStatus;
+  priority?: ProjectPriority;
+  tag?: string;
+  platform?: ProjectPlatform;
+  search?: string;
+}
+
+export interface ProjectCreateInput {
+  project: Project;
+  documents: readonly Document[];
+}
+
+export interface ProjectUpdate {
+  title?: string;
+  status?: ProjectStatus;
+  priority?: ProjectPriority;
+  tags?: readonly string[];
+  targetDate?: string | null;
+  currentVersion?: string | null;
+  nextVersion?: string | null;
+  nextAction?: string | null;
+  repositoryUrl?: string | null;
+  platforms?: readonly ProjectPlatform[];
+}
+
+export interface VersionCreateInput {
+  version: ProjectVersion;
+  document: Document;
+}
+
+export interface VersionUpdate {
+  status?: ProjectStatus;
+  targetDate?: string | null;
+  androidStatus?: PlatformReleaseStatus;
+  iosStatus?: PlatformReleaseStatus;
+}
+
+export interface TodayItem {
+  id: string;
+  kind: "task" | "next_action" | "project_signal";
+  projectId: string;
+  projectTitle: string;
+  text: string;
+  dueDate: string | null;
+  priority: ProjectPriority | null;
+  blocked: boolean;
+  rank: number;
+  taskId: string | null;
+}
+
+export interface ProjectRepository {
+  create(input: ProjectCreateInput): Promise<Project>;
+  getById(ownerId: string, id: string): Promise<Project | null>;
+  list(ownerId: string, options?: ProjectListOptions): Promise<readonly Project[]>;
+  update(ownerId: string, id: string, changes: ProjectUpdate, deviceId: string): Promise<Project>;
+  versions(ownerId: string, projectId: string): Promise<readonly ProjectVersion[]>;
+  createVersion(input: VersionCreateInput): Promise<ProjectVersion>;
+  getVersion(ownerId: string, id: string): Promise<ProjectVersion | null>;
+  updateVersion(
+    ownerId: string,
+    id: string,
+    changes: VersionUpdate,
+    deviceId: string,
+  ): Promise<ProjectVersion>;
+  tasks(ownerId: string, projectId?: string): Promise<readonly ProjectTask[]>;
+  toggleTask(
+    ownerId: string,
+    taskId: string,
+    completed: boolean,
+    deviceId: string,
+  ): Promise<ProjectTask>;
+  blockers(ownerId: string, projectId: string): Promise<readonly ProjectBlocker[]>;
+  addBlocker(ownerId: string, blocker: ProjectBlocker): Promise<ProjectBlocker>;
+  resolveBlocker(ownerId: string, id: string, resolvedAt: string): Promise<void>;
+  addInboxItem(ownerId: string, text: string, deviceId: string): Promise<Document>;
+  addDecision(ownerId: string, decision: ProjectDecision, deviceId: string): Promise<Document>;
+  today(ownerId: string, now: string): Promise<readonly TodayItem[]>;
+  exportProject(ownerId: string, projectId: string): Promise<readonly ExportedProjectFile[]>;
+}
+
+export interface ExportedProjectFile {
+  path: string;
+  content: string;
 }
 
 export interface NoteRepository {

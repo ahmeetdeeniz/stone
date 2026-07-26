@@ -2,7 +2,9 @@ import { parseDocument, stringify } from "yaml";
 
 export type FrontmatterPrimitive = string | number | boolean | null;
 export type FrontmatterValue =
-  FrontmatterPrimitive | FrontmatterValue[] | { readonly [key: string]: FrontmatterValue };
+  | FrontmatterPrimitive
+  | ReadonlyArray<FrontmatterValue>
+  | { readonly [key: string]: FrontmatterValue };
 
 export interface MarkdownDocument {
   frontmatter: Readonly<Record<string, FrontmatterValue>>;
@@ -34,6 +36,16 @@ export interface MarkdownInlineToken {
   url?: string;
 }
 
+export interface StoneTaskMetadata {
+  id?: string;
+  priority?: "low" | "medium" | "high" | "critical";
+  due?: string;
+  blocked?: boolean;
+  blocker?: string;
+  canceled?: boolean;
+  readonly [key: string]: FrontmatterValue | undefined;
+}
+
 export interface MarkdownTask {
   id: string;
   from: number;
@@ -42,6 +54,10 @@ export interface MarkdownTask {
   markerTo: number;
   checked: boolean;
   text: string;
+  metadata?: StoneTaskMetadata;
+  metadataFrom?: number;
+  metadataTo?: number;
+  canceled: boolean;
 }
 
 export interface MarkdownBlock {
@@ -229,7 +245,11 @@ export function parseSyntaxTree(source: string): MarkdownSyntaxTree {
     index = end + 1;
   }
 
-  const tasks = blocks.flatMap((block) => (block.task ? [block.task] : []));
+  const tasks = attachTaskMetadata(
+    normalized,
+    blocks,
+    blocks.flatMap((block) => (block.task ? [block.task] : [])),
+  );
   return { source: normalized, blocks, tasks };
 }
 
@@ -238,10 +258,84 @@ export function extractTasks(source: string): readonly MarkdownTask[] {
 }
 
 export function toggleTask(source: string, task: MarkdownTask | string, checked: boolean): string {
-  const tree = parseSyntaxTree(source);
-  const target = typeof task === "string" ? tree.tasks.find((item) => item.id === task) : task;
+  let normalized = normalizeMarkdown(source);
+  let tree = parseSyntaxTree(normalized);
+  let target = resolveTask(tree.tasks, task);
   if (!target) return normalizeMarkdown(source);
-  return `${source.slice(0, target.markerFrom)}${checked ? "x" : " "}${source.slice(target.markerTo)}`;
+  if (!target.metadata?.id) {
+    normalized = ensureTaskMetadata(normalized, target);
+    tree = parseSyntaxTree(normalized);
+    target = tree.tasks.find(
+      (item) => item.metadata?.id === stableTaskId(tree.tasks, target!.text),
+    );
+    if (!target) return normalized;
+  }
+  return `${normalized.slice(0, target.markerFrom)}${checked ? "x" : " "}${normalized.slice(target.markerTo)}`;
+}
+
+export function parseStoneTaskMetadata(source: string): StoneTaskMetadata | null {
+  const match = source.match(/<!--\s*stone-task:\s*(\{[\s\S]*?\})\s*-->/u);
+  if (!match?.[1]) return null;
+  try {
+    const value = JSON.parse(match[1]) as unknown;
+    return isStoneTaskMetadata(value) ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+export function serializeStoneTaskMetadata(metadata: StoneTaskMetadata): string {
+  return `<!-- stone-task: ${JSON.stringify(metadata)} -->`;
+}
+
+export function ensureTaskMetadata(source: string, task: MarkdownTask): string {
+  const normalized = normalizeMarkdown(source);
+  if (task.metadata?.id) return normalized;
+  const tasks = parseSyntaxTree(normalized).tasks;
+  const id = stableTaskId(tasks, task.text);
+  const insertion = serializeStoneTaskMetadata({ id });
+  return `${normalized.slice(0, task.to)}${insertion}\n${normalized.slice(task.to)}`;
+}
+
+export function updateTaskMetadata(
+  source: string,
+  task: MarkdownTask | string,
+  patch: Partial<StoneTaskMetadata>,
+): string {
+  let normalized = normalizeMarkdown(source);
+  let tree = parseSyntaxTree(normalized);
+  let target = resolveTask(tree.tasks, task);
+  if (!target) return normalized;
+  if (!target.metadata?.id) {
+    normalized = ensureTaskMetadata(normalized, target);
+    tree = parseSyntaxTree(normalized);
+    target = tree.tasks.find(
+      (item) => item.metadata?.id === stableTaskId(tree.tasks, target!.text),
+    );
+  }
+  if (!target) return normalized;
+  const metadata = { ...(target.metadata ?? {}), ...patch };
+  const comment = serializeStoneTaskMetadata(metadata);
+  if (target.metadataFrom !== undefined && target.metadataTo !== undefined) {
+    return `${normalized.slice(0, target.metadataFrom)}${comment}${normalized.slice(target.metadataTo)}`;
+  }
+  return normalized;
+}
+
+export interface TaskProgress {
+  completed: number;
+  total: number;
+  ratio: number;
+}
+
+export function calculateTaskProgress(source: string): TaskProgress {
+  const tasks = extractTasks(source).filter((task) => !task.canceled);
+  const completed = tasks.filter((task) => task.checked).length;
+  return {
+    completed,
+    total: tasks.length,
+    ratio: tasks.length === 0 ? 0 : completed / tasks.length,
+  };
 }
 
 export function applyFormatting(source: string, range: TextRange, kind: FormattingKind): string {
@@ -434,7 +528,76 @@ function makeTask(line: SourceLine, list: ListLine): MarkdownTask {
     markerTo: line.from + list.markerTo,
     checked: list.checked === true,
     text: list.text,
+    canceled: false,
   };
+}
+
+function attachTaskMetadata(
+  source: string,
+  blocks: readonly MarkdownBlock[],
+  tasks: readonly MarkdownTask[],
+): MarkdownTask[] {
+  const comments = [...source.matchAll(/<!--\s*stone-task:\s*(\{[\s\S]*?\})\s*-->/gu)].flatMap(
+    (match) => {
+      const from = match.index ?? 0;
+      const to = from + match[0].length;
+      const metadata = parseStoneTaskMetadata(match[0]);
+      return metadata ? [{ from, to, metadata }] : [];
+    },
+  );
+  return tasks.map((task) => {
+    const comment = comments.find(
+      (candidate) =>
+        candidate.from >= task.to &&
+        /^\s*$/u.test(source.slice(task.to, candidate.from)) &&
+        !blocks.some(
+          (block) =>
+            block.type === "code" && candidate.from >= block.from && candidate.from < block.to,
+        ),
+    );
+    const metadata = comment?.metadata;
+    return {
+      ...task,
+      id: metadata?.id ?? task.id,
+      ...(comment && metadata
+        ? { metadata, metadataFrom: comment.from, metadataTo: comment.to }
+        : {}),
+      canceled: metadata?.canceled === true,
+    };
+  });
+}
+
+function resolveTask(
+  tasks: readonly MarkdownTask[],
+  task: MarkdownTask | string,
+): MarkdownTask | undefined {
+  if (typeof task === "string") return tasks.find((item) => item.id === task);
+  return (
+    tasks.find((item) => item.id === task.id) ??
+    tasks.find((item) => item.text === task.text && item.checked === task.checked)
+  );
+}
+
+function stableTaskId(tasks: readonly MarkdownTask[], text: string): string {
+  const occurrence = tasks.filter((item) => item.text === text).length;
+  let hash = 2166136261;
+  for (const character of `${text}:${occurrence}`) {
+    hash ^= character.codePointAt(0) ?? 0;
+    hash = Math.imul(hash, 16777619);
+  }
+  return `tsk_${(hash >>> 0).toString(16).padStart(8, "0")}`;
+}
+
+function isStoneTaskMetadata(value: unknown): value is StoneTaskMetadata {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  return Object.values(record).every(
+    (entry) =>
+      entry === null ||
+      typeof entry === "string" ||
+      typeof entry === "boolean" ||
+      typeof entry === "number",
+  );
 }
 
 function isTableHeader(lines: readonly SourceLine[], index: number): boolean {
@@ -499,3 +662,5 @@ function isFrontmatterValue(value: unknown): value is FrontmatterValue {
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 }
+
+export * from "./project-documents.js";
