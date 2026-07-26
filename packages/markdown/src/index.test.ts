@@ -11,6 +11,7 @@ import {
   sanitizeExternalUrl,
   sanitizeFileName,
   serializeMarkdown,
+  toggleLinePrefix,
   toggleTask,
   validateImportFile,
 } from "./index.js";
@@ -64,6 +65,12 @@ describe("markdown source boundary", () => {
     const source = "Türkçe metin\n";
     expect(applyFormatting(source, { from: 0, to: 6 }, "bold")).toBe("**Türkçe** metin\n");
     expect(applyFormatting("**metin**\n", { from: 2, to: 7 }, "bold")).toBe("metin\n");
+  });
+
+  it("toggles list prefixes without corrupting line spacing", () => {
+    expect(toggleLinePrefix("Türkçe\n", 0, "- ")).toBe("- Türkçe\n");
+    expect(toggleLinePrefix("- Türkçe\n", 0, "- ")).toBe("Türkçe\n");
+    expect(toggleLinePrefix("- [ ] görev\n", 0, "- [ ] ")).toBe("görev\n");
   });
 
   it("rejects unsafe links, raw HTML, invalid imports, and unsafe filenames", () => {

@@ -14,6 +14,7 @@
     "expo:doctor": "pnpm --filter @stone/mobile run doctor",
     "mobile": "pnpm --filter @stone/mobile run export",
     "mobile:export": "pnpm --filter @stone/mobile run export",
+    "editor:bundle": "pnpm --filter @stone/editor run build:web",
     "mobile:android": "pnpm --filter @stone/mobile run android",
     "mobile:ios": "pnpm --filter @stone/mobile run ios"
   },
@@ -23,6 +24,7 @@
     "@types/react": "^19.1.0",
     "@typescript-eslint/eslint-plugin": "^8.32.0",
     "@typescript-eslint/parser": "^8.32.0",
+    "esbuild": "^0.28.1",
     "eslint": "^9.26.0",
     "eslint-config-prettier": "^10.1.2",
     "prettier": "^3.5.3",

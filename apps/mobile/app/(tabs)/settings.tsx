@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useRouter } from "expo-router";
 import { Alert, StyleSheet, View } from "react-native";
 import { ResponsiveContent } from "../../src/components/responsive";
 import { Screen, StoneButton, StoneText } from "../../src/components/ui";
@@ -8,6 +9,7 @@ import { useAuth } from "../../src/providers/auth-provider";
 import { useAppServices } from "../../src/providers/app-provider";
 
 export default function SettingsScreen() {
+  const router = useRouter();
   const { preference, setPreference, colors } = useTheme();
   const { user, service } = useAuth();
   const { settingsUseCases } = useAppServices();
@@ -88,6 +90,14 @@ export default function SettingsScreen() {
             variant="secondary"
             onPress={() => void signOut()}
             disabled={busy}
+          />
+        </View>
+        <View style={[styles.section, { borderColor: colors.border }]}>
+          <StoneText variant="title3">Not yönetimi</StoneText>
+          <StoneButton
+            label="Çöp kutusunu aç"
+            variant="secondary"
+            onPress={() => router.push("/trash")}
           />
         </View>
         <StoneText variant="caption" style={{ color: colors.textMuted }}>

@@ -11,6 +11,7 @@ export default tseslint.config(
       "**/coverage/**",
       "eslint.config.mjs",
       "vitest*.config.ts",
+      "packages/editor/scripts/**",
     ],
   },
   eslint.configs.recommended,

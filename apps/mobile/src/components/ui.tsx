@@ -1,5 +1,13 @@
 import { type ComponentProps, type PropsWithChildren } from "react";
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import {
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+  type StyleProp,
+  type ViewStyle,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTheme } from "../design/theme";
 import { radii, spacing, typography } from "../design/tokens";
@@ -68,11 +76,16 @@ export function StoneButton({
 export function StoneInput({
   label,
   error,
+  containerStyle,
   ...props
-}: ComponentProps<typeof TextInput> & { label: string; error?: string }) {
+}: ComponentProps<typeof TextInput> & {
+  label: string;
+  error?: string;
+  containerStyle?: StyleProp<ViewStyle>;
+}) {
   const { colors } = useTheme();
   return (
-    <View style={styles.inputGroup}>
+    <View style={[styles.inputGroup, containerStyle]}>
       <StoneText variant="label" style={styles.inputLabel}>
         {label}
       </StoneText>

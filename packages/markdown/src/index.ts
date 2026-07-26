@@ -262,11 +262,12 @@ export function toggleLinePrefix(source: string, lineFrom: number, prefix: strin
   const lineEnd = normalized.indexOf("\n", lineFrom);
   const end = lineEnd === -1 ? normalized.length : lineEnd;
   const line = normalized.slice(lineFrom, end);
-  const existing = line.match(new RegExp(`^(\\s*)${escapeRegExp(prefix)}\\s+`, "u"));
+  const marker = prefix.trimEnd();
+  const existing = line.match(new RegExp(`^(\\s*)${escapeRegExp(marker)}(?:\\s+|$)`, "u"));
   if (existing) {
     return `${normalized.slice(0, lineFrom)}${line.slice(existing[0].length)}${normalized.slice(end)}`;
   }
-  return `${normalized.slice(0, lineFrom)}${prefix} ${line}${normalized.slice(end)}`;
+  return `${normalized.slice(0, lineFrom)}${prefix}${prefix.endsWith(" ") ? "" : " "}${line}${normalized.slice(end)}`;
 }
 
 export function cycleHeading(source: string, lineFrom: number): string {

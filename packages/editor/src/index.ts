@@ -1,5 +1,5 @@
 import { markdown } from "@codemirror/lang-markdown";
-import { EditorState, type Extension } from "@codemirror/state";
+import { Compartment, EditorState, type Extension } from "@codemirror/state";
 import {
   Decoration,
   EditorView,
@@ -20,6 +20,7 @@ import {
 } from "@stone/markdown";
 
 export const EDITOR_BRIDGE_PROTOCOL_VERSION = 1 as const;
+export const editableCompartment = new Compartment();
 
 export type EditorCommand =
   | "toggleBold"
@@ -187,10 +188,19 @@ export function isEditorBridgeMessage(value: unknown): value is EditorBridgeMess
   return false;
 }
 
-export function createEditorState(source: string, readOnly = false): EditorState {
+export function createEditorState(
+  source: string,
+  readOnly = false,
+  extraExtensions: readonly Extension[] = [],
+): EditorState {
   return EditorState.create({
     doc: source,
-    extensions: [markdown(), EditorView.editable.of(!readOnly), livePreviewExtension()],
+    extensions: [
+      markdown(),
+      editableCompartment.of(EditorView.editable.of(!readOnly)),
+      livePreviewExtension(),
+      ...extraExtensions,
+    ],
   });
 }
 
@@ -378,7 +388,8 @@ function editLine(
 ): { source: string; from: number; to: number } {
   const lineFrom = source.lastIndexOf("\n", Math.max(0, from - 1)) + 1;
   const next = edit(lineFrom);
-  return { source: next, from: lineFrom, to: lineFrom + next.length - source.length };
+  const nextLineEnd = next.indexOf("\n", lineFrom);
+  return { source: next, from: lineFrom, to: nextLineEnd === -1 ? next.length : nextLineEnd };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
