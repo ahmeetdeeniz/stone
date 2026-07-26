@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { getSearchQuery } from "@codemirror/search";
 import {
   applyEditorCommand,
   buildLivePreviewDecorations,
@@ -41,6 +42,11 @@ describe("editor boundary", () => {
   it("creates a real CodeMirror Markdown state", () => {
     const state = createEditorState("# Türkçe\n\n**bold**\n");
     expect(state.doc.toString()).toContain("Türkçe");
+  });
+
+  it("configures CodeMirror search state for find-in-note", () => {
+    const state = createEditorState("one two");
+    expect(getSearchQuery(state).search).toBe("");
   });
 
   it("builds inactive Live Preview decorations and keeps task source ranges", () => {

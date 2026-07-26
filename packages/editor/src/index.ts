@@ -1,4 +1,5 @@
 import { markdown } from "@codemirror/lang-markdown";
+import { highlightSelectionMatches, search } from "@codemirror/search";
 import { Compartment, EditorState, type Extension } from "@codemirror/state";
 import {
   Decoration,
@@ -198,6 +199,8 @@ export function createEditorState(
     extensions: [
       markdown(),
       editableCompartment.of(EditorView.editable.of(!readOnly)),
+      search(),
+      highlightSelectionMatches(),
       livePreviewExtension(),
       ...extraExtensions,
     ],

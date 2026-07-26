@@ -1,4 +1,5 @@
 import { defaultKeymap, history, historyKeymap, redo, undo } from "@codemirror/commands";
+import { findNext, SearchQuery, setSearchQuery } from "@codemirror/search";
 import { keymap } from "@codemirror/view";
 import { extractTasks, toggleTask } from "@stone/markdown";
 import { EditorView } from "@codemirror/view";
@@ -133,6 +134,10 @@ function executeCommand(command: Extract<EditorBridgeMessage, { type: "executeCo
     redo(view);
     return;
   }
+  if (command.payload.command === "find") {
+    findNext(view);
+    return;
+  }
   const result = applyEditorCommand(
     view.state.doc.toString(),
     selection.from,
@@ -177,6 +182,10 @@ window.addEventListener("message", (event) => {
     });
   } else if (value.type === "executeCommand") {
     executeCommand(value);
+  } else if (value.type === "setFindQuery" && view) {
+    view.dispatch({
+      effects: setSearchQuery.of(new SearchQuery({ search: value.payload.query })),
+    });
   } else if (value.type === "requestState" && view) {
     post({
       protocolVersion: 1,

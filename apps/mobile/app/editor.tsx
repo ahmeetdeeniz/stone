@@ -40,6 +40,7 @@ export default function EditorScreen() {
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<"saved" | "unsaved" | "saving" | "error">("saved");
   const [recoveredDraft, setRecoveredDraft] = useState<string | null>(null);
+  const [findQuery, setFindQuery] = useState("");
 
   useEffect(() => {
     if (!id || !user) return;
@@ -235,6 +236,47 @@ export default function EditorScreen() {
               <StoneButton label="Çöpe taşı" variant="quiet" onPress={moveToTrash} />
             </View>
           </View>
+          <View
+            style={[
+              styles.findBar,
+              { backgroundColor: colors.backgroundSecondary, borderBottomColor: colors.border },
+            ]}
+          >
+            <StoneInput
+              label="Not içinde ara"
+              value={findQuery}
+              onChangeText={(query) => {
+                setFindQuery(query);
+                webViewRef.current?.post({
+                  protocolVersion: 1,
+                  type: "setFindQuery",
+                  payload: { query },
+                });
+              }}
+              containerStyle={styles.findInput}
+              autoCapitalize="none"
+              autoCorrect={false}
+              returnKeyType="search"
+              onSubmitEditing={() =>
+                webViewRef.current?.post({
+                  protocolVersion: 1,
+                  type: "executeCommand",
+                  payload: { command: "find" },
+                })
+              }
+            />
+            <StoneButton
+              label="Bul"
+              variant="secondary"
+              onPress={() =>
+                webViewRef.current?.post({
+                  protocolVersion: 1,
+                  type: "executeCommand",
+                  payload: { command: "find" },
+                })
+              }
+            />
+          </View>
           {recoveredDraft ? (
             <View
               style={[
@@ -337,6 +379,15 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   error: { padding: spacing.sm },
+  findBar: {
+    borderBottomWidth: 1,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+  },
+  findInput: { flex: 1 },
   commandBar: {
     borderTopWidth: 1,
     padding: spacing.sm,
