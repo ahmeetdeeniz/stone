@@ -16,11 +16,32 @@ export default function SettingsScreen() {
   useEffect(() => {
     if (!user) return;
     setSettingsLoaded(false);
-    void settingsUseCases.load(user.uid).then((stored) => {
-      setPreference(stored.theme);
-      setSettingsLoaded(true);
-    });
+    void settingsUseCases
+      .load(user.uid)
+      .then((stored) => {
+        setPreference(stored.theme);
+        setSettingsLoaded(true);
+      })
+      .catch((error: unknown) => {
+        setSettingsLoaded(true);
+        Alert.alert(
+          "Tema yüklenemedi",
+          error instanceof Error ? error.message : "Ayarlar yerel olarak okunamadı.",
+        );
+      });
   }, [setPreference, settingsUseCases, user]);
+  const updateTheme = async (option: "system" | "light" | "dark") => {
+    setPreference(option);
+    if (!user || !settingsLoaded) return;
+    try {
+      await settingsUseCases.setTheme(user.uid, option);
+    } catch (error) {
+      Alert.alert(
+        "Tema kaydedilemedi",
+        error instanceof Error ? error.message : "Ayar değişikliği yerel olarak kaydedilemedi.",
+      );
+    }
+  };
   const signOut = async () => {
     if (!service) return;
     setBusy(true);
@@ -52,12 +73,7 @@ export default function SettingsScreen() {
                 key={option}
                 label={option === "system" ? "Sistem" : option === "light" ? "Açık" : "Koyu"}
                 variant={preference === option ? "primary" : "secondary"}
-                onPress={() => {
-                  setPreference(option);
-                  if (user && settingsLoaded) {
-                    void settingsUseCases.setTheme(user.uid, option);
-                  }
-                }}
+                onPress={() => void updateTheme(option)}
               />
             ))}
           </View>
