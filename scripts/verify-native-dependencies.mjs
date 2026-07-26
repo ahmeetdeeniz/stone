@@ -9,9 +9,15 @@ const mobilePackage = readJson(path.join(mobileRoot, "package.json"));
 const easConfig = readJson(path.join(mobileRoot, "eas.json"));
 
 assert(mobilePackage.name === "@stone/mobile", "EAS app root must be apps/mobile.");
+const androidEasScript = rootPackage.scripts?.["eas:android:development"];
 assert(
-  rootPackage.scripts?.["eas:android:development"]?.includes("--dir apps/mobile"),
+  androidEasScript?.includes("--dir apps/mobile"),
   "The root Android EAS wrapper must invoke EAS from apps/mobile.",
+);
+assert(
+  androidEasScript?.includes("--platform android") &&
+    androidEasScript?.includes("--profile development"),
+  "The root Android EAS wrapper must select the development Android profile.",
 );
 assert(
   mobilePackage.dependencies?.["expo-document-picker"] === "~14.0.8",
@@ -24,6 +30,25 @@ assert(
 assert(
   easConfig.build?.development?.developmentClient === true,
   "Development Client is not enabled.",
+);
+assert(
+  easConfig.build?.development?.distribution === "internal",
+  "The Android development profile must produce an internal Development Build.",
+);
+
+const resolvedMobileRoot = path.resolve(
+  runRootPnpm([
+    "--dir",
+    "apps/mobile",
+    "exec",
+    "node",
+    "-e",
+    "process.stdout.write(process.cwd())",
+  ]).trim(),
+);
+assert(
+  resolvedMobileRoot === mobileRoot,
+  `pnpm --dir apps/mobile resolved to ${resolvedMobileRoot}, expected ${mobileRoot}.`,
 );
 
 const expoModules = runAutolinking(["resolve", "--platform", "android", "--json"]);
@@ -127,6 +152,24 @@ function runPnpm(args) {
         });
   if (result.status !== 0) {
     throw new Error(result.stderr || result.stdout || "Expo autolinking command failed.");
+  }
+  return result.stdout;
+}
+
+function runRootPnpm(args) {
+  const command = ["pnpm", ...args].join(" ");
+  const result =
+    process.platform === "win32"
+      ? spawnSync(process.env.ComSpec ?? "cmd.exe", ["/d", "/s", "/c", command], {
+          cwd: workspaceRoot,
+          encoding: "utf8",
+        })
+      : spawnSync("pnpm", args, {
+          cwd: workspaceRoot,
+          encoding: "utf8",
+        });
+  if (result.status !== 0) {
+    throw new Error(result.stderr || result.stdout || "pnpm workspace command failed.");
   }
   return result.stdout;
 }
