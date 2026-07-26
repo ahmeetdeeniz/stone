@@ -20,6 +20,12 @@ jobs:
   build-windows-installer:
     runs-on: windows-latest
     steps:
+      # Defense-in-depth alongside the repository's .gitattributes (the actual source of
+      # truth for line endings): Git for Windows defaults to core.autocrlf=true, which would
+      # otherwise rewrite checked-out LF files to CRLF and break Prettier's format:check.
+      - name: Disable line-ending conversion on checkout
+        run: git config --global core.autocrlf false
+
       - uses: actions/checkout@v4
 
       - uses: pnpm/action-setup@v4

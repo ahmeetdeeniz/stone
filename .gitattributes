@@ -1,0 +1,43 @@
+# Normalize line endings to LF for every text file Git recognizes, regardless of the
+# committer's or CI runner's platform/core.autocrlf setting. This is the repository-level
+# source of truth for line endings; do not rely on core.autocrlf instead.
+* text=auto eol=lf
+
+# Source, docs, and configuration — explicit for clarity even though `text=auto` already
+# covers them.
+*.md text eol=lf
+*.mdx text eol=lf
+*.txt text eol=lf
+*.json text eol=lf
+*.jsonc text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.toml text eol=lf
+*.rs text eol=lf
+*.ts text eol=lf
+*.tsx text eol=lf
+*.js text eol=lf
+*.jsx text eol=lf
+*.mjs text eol=lf
+*.cjs text eol=lf
+*.css text eol=lf
+*.html text eol=lf
+*.svg text eol=lf
+*.sh text eol=lf
+.gitattributes text eol=lf
+.gitignore text eol=lf
+.env.example text eol=lf
+
+# Binary assets — never text-normalized, never diffed as text.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.otf binary
+*.ttf binary
+*.woff binary
+*.woff2 binary
+*.exe binary
+*.dll binary
+*.zip binary
