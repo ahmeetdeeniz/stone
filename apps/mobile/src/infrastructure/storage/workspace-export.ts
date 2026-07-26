@@ -1,4 +1,5 @@
 import type { ExportedProjectFile } from "@stone/domain";
+import { File } from "expo-file-system";
 import { normalizeMarkdown, sanitizeFileName } from "@stone/markdown";
 import type { StoneDatabase } from "./database";
 
@@ -11,6 +12,12 @@ interface ExportDocumentRow {
   project_id: string | null;
   revision: number;
   updated_at: string;
+}
+
+interface ExportDrawingRow {
+  id: string;
+  source_path: string;
+  preview_path: string;
 }
 
 export async function exportWorkspace(
@@ -38,7 +45,46 @@ export async function exportWorkspace(
       path: row.path ?? standalonePath(row),
     })),
   };
-  return [...documents, { path: "manifest.json", content: JSON.stringify(manifest, null, 2) }];
+  const drawings = await database.getAllAsync<ExportDrawingRow>(
+    "SELECT id, source_path, preview_path FROM drawings WHERE owner_id = ? AND deleted_at IS NULL ORDER BY id",
+    ownerId,
+  );
+  const assets: ExportedProjectFile[] = [];
+  for (const drawing of drawings) {
+    const sourceFile = new File(drawing.source_path);
+    if (sourceFile.exists)
+      assets.push({
+        path: `assets/drawings/${drawing.id}.stoneink`,
+        content: await sourceFile.text(),
+      });
+    const previewFile = new File(drawing.preview_path);
+    if (previewFile.exists)
+      assets.push({
+        path: `assets/drawings/${drawing.id}.png`,
+        content: await previewFile.base64(),
+        encoding: "base64",
+        mimeType: "image/png",
+      });
+  }
+  return [
+    ...documents,
+    ...assets,
+    {
+      path: "manifest.json",
+      content: JSON.stringify(
+        {
+          ...manifest,
+          drawings: drawings.map((drawing) => ({
+            id: drawing.id,
+            source: `assets/drawings/${drawing.id}.stoneink`,
+            preview: `assets/drawings/${drawing.id}.png`,
+          })),
+        },
+        null,
+        2,
+      ),
+    },
+  ];
 }
 
 function standalonePath(row: ExportDocumentRow): string {

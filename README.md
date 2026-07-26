@@ -46,6 +46,13 @@ See [services/mcp/README.md](services/mcp/README.md) for local setup, Firebase A
 
 ## Paketi kullanma
 
+### Tablet drawings
+
+Stone Ink drawings are stored as editable `.stoneink` vector sources plus PNG previews.
+Markdown notes use an ordinary image and an ignorable `stone-drawing` metadata comment, so
+the note remains portable outside Stone. The current tablet milestone requires Firebase
+Storage in your own Firebase project; no maintainer backend is used.
+
 1. Boş bir GitHub reposu oluştur.
 2. Bu paketin içeriğini repo köküne kopyala.
 3. Onaylı `apps/mobile/assets/fonts/Bongita-Regular.otf` dosyasını koru; OTF uzantısını değiştirme.

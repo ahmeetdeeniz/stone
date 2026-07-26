@@ -15,6 +15,7 @@ import { FirebaseSyncRemote } from "../infrastructure/firebase/firestore";
 import { SyncEngine, type SyncRunResult } from "@stone/sync";
 import { SQLitePrivacyRepository } from "../infrastructure/storage/privacy";
 import { exportWorkspace } from "../infrastructure/storage/workspace-export";
+import { SQLiteDrawingRepository } from "../infrastructure/storage/drawings";
 
 export interface AppServices {
   database: StoneDatabase;
@@ -24,6 +25,7 @@ export interface AppServices {
   noteUseCases: NoteUseCases;
   projects: SQLiteProjectRepository;
   projectUseCases: ProjectUseCases;
+  drawings: SQLiteDrawingRepository;
   device: SQLiteDeviceRepository;
   deviceId: string;
   syncStore: SQLiteSyncStore;
@@ -41,6 +43,7 @@ export async function createAppServices(): Promise<AppServices> {
   const noteUseCases = new NoteUseCases(notes);
   const projects = new SQLiteProjectRepository(database);
   const projectUseCases = new ProjectUseCases(projects);
+  const drawings = new SQLiteDrawingRepository(database);
   const device = new SQLiteDeviceRepository(database);
   const deviceIdentity = await createDeviceIdentity();
   await device.getOrCreate(deviceIdentity);
@@ -76,6 +79,7 @@ export async function createAppServices(): Promise<AppServices> {
     noteUseCases,
     projects,
     projectUseCases,
+    drawings,
     device,
     deviceId: deviceIdentity.id,
     syncStore,

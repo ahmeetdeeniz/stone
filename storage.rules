@@ -1,0 +1,22 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /users/{uid}/drawings/{drawingId}/{fileName} {
+      function owner() {
+        return request.auth != null && request.auth.uid == uid;
+      }
+
+      allow read: if owner();
+      allow write: if owner()
+        && fileName in ['source.stoneink', 'preview.png']
+        && request.resource.size <= 10 * 1024 * 1024
+        && ((fileName == 'source.stoneink' && request.resource.contentType == 'application/json')
+          || (fileName == 'preview.png' && request.resource.contentType == 'image/png'));
+      allow delete: if owner();
+    }
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

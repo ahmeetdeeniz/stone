@@ -46,6 +46,34 @@ export interface Document extends SyncFields {
   isPinned: boolean;
 }
 
+export interface Drawing extends SyncFields {
+  documentId: string | null;
+  title: string;
+  sourcePath: string;
+  previewPath: string;
+  sourceSha256: string;
+  previewSha256: string;
+  sourceSize: number;
+  previewSize: number;
+}
+
+export interface DrawingRevision {
+  id: string;
+  drawingId: string;
+  revision: number;
+  sourcePath: string;
+  previewPath: string;
+  createdAt: string;
+}
+
+export interface DrawingRepository {
+  getById(ownerId: string, id: string, includeDeleted?: boolean): Promise<Drawing | null>;
+  list(ownerId: string, documentId?: string): Promise<readonly Drawing[]>;
+  save(drawing: Drawing, source: string, previewPath: string, deviceId: string): Promise<Drawing>;
+  softDelete(ownerId: string, id: string, deviceId: string): Promise<Drawing>;
+  revisions(ownerId: string, id: string): Promise<readonly DrawingRevision[]>;
+}
+
 export interface Device {
   id: string;
   ownerId: string;
@@ -249,6 +277,8 @@ export interface ProjectRepository {
 export interface ExportedProjectFile {
   path: string;
   content: string;
+  encoding?: "utf8" | "base64";
+  mimeType?: string;
 }
 
 export interface NoteRepository {

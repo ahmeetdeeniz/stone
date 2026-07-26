@@ -27,6 +27,11 @@ export class SQLitePrivacyRepository {
         ownerId,
       );
       await this.database.runAsync("DELETE FROM documents WHERE owner_id = ?", ownerId);
+      await this.database.runAsync(
+        "DELETE FROM drawing_revisions WHERE drawing_id IN (SELECT id FROM drawings WHERE owner_id = ?)",
+        ownerId,
+      );
+      await this.database.runAsync("DELETE FROM drawings WHERE owner_id = ?", ownerId);
       await this.database.runAsync("DELETE FROM users WHERE id = ?", ownerId);
     });
   }

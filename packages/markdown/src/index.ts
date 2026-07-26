@@ -691,3 +691,4 @@ function escapeRegExp(value: string): string {
 }
 
 export * from "./project-documents.js";
+export * from "./drawing-blocks.js";

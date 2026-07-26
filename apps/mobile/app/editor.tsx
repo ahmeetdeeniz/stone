@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import * as Linking from "expo-linking";
 import type { Document } from "@stone/domain";
+import { extractDrawingBlocks, type ParsedStoneDrawingBlock } from "@stone/markdown";
 import type { EditorBridgeMessage } from "@stone/editor";
 import { ErrorState, LoadingState } from "../src/components/states";
 import { ResponsiveContent } from "../src/components/responsive";
@@ -28,7 +29,7 @@ export default function EditorScreen() {
   const router = useRouter();
   const { colors, mode } = useTheme();
   const { user } = useAuth();
-  const { noteUseCases, deviceId } = useAppServices();
+  const { noteUseCases, deviceId, drawings } = useAppServices();
   const webViewRef = useRef<EditorWebViewHandle>(null);
   const contentRef = useRef("");
   const selectionRef = useRef({ from: 0, to: 0 });
@@ -41,6 +42,7 @@ export default function EditorScreen() {
   const [status, setStatus] = useState<"saved" | "unsaved" | "saving" | "error">("saved");
   const [recoveredDraft, setRecoveredDraft] = useState<string | null>(null);
   const [findQuery, setFindQuery] = useState("");
+  const [drawingBlocks, setDrawingBlocks] = useState<readonly ParsedStoneDrawingBlock[]>([]);
 
   useEffect(() => {
     if (!id || !user) return;
@@ -60,6 +62,7 @@ export default function EditorScreen() {
         setContent(nextContent);
         setTitle(loaded.title);
         setNote(loaded);
+        setDrawingBlocks(extractDrawingBlocks(nextContent));
         if (useDraft && draft) setRecoveredDraft(draft.markdown);
       })
       .catch((caught: unknown) => {
@@ -104,6 +107,14 @@ export default function EditorScreen() {
       setError(caught instanceof Error ? caught.message : "Not kaydedilemedi.");
     }
   }, [deviceId, note, noteUseCases, user]);
+
+  useEffect(() => {
+    if (!note || !user) return;
+    void drawings.list(user.uid, note.id).then((available) => {
+      const availableIds = new Set(available.map((item) => item.id));
+      setDrawingBlocks(extractDrawingBlocks(contentRef.current, availableIds));
+    });
+  }, [content, drawings, note, user]);
   saveRef.current = saveCurrent;
 
   useEffect(() => {
@@ -297,6 +308,36 @@ export default function EditorScreen() {
               />
             </View>
           ) : null}
+          {drawingBlocks.length > 0 ? (
+            <View
+              style={[
+                styles.drawingBlocks,
+                { backgroundColor: colors.backgroundSecondary, borderBottomColor: colors.border },
+              ]}
+            >
+              {drawingBlocks.map((block) => (
+                <Pressable
+                  key={block.id}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${block.title} çizimini aç`}
+                  onPress={() =>
+                    router.push({ pathname: "/drawing/[id]", params: { id: block.id } })
+                  }
+                  style={[
+                    styles.drawingBlock,
+                    { borderColor: colors.border, backgroundColor: colors.surface },
+                  ]}
+                >
+                  <StoneText variant="label">{block.title}</StoneText>
+                  <StoneText variant="caption" style={{ color: colors.textSecondary }}>
+                    {block.sourceAvailable
+                      ? "Düzenlenebilir Stone çizimi"
+                      : "PNG önizleme — kaynak dosya bulunamadı"}
+                  </StoneText>
+                </Pressable>
+              ))}
+            </View>
+          ) : null}
           <EditorWebView
             ref={webViewRef}
             documentId={note.id}
@@ -395,4 +436,6 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     gap: spacing.xs,
   },
+  drawingBlocks: { borderBottomWidth: 1, padding: spacing.sm, gap: spacing.sm },
+  drawingBlock: { borderWidth: 1, borderRadius: 10, padding: spacing.sm, gap: spacing.xs },
 });

@@ -102,4 +102,14 @@ export const migrations: readonly Migration[] = [
       "ALTER TABLE settings ADD COLUMN revision INTEGER NOT NULL DEFAULT 1",
     ],
   },
+  {
+    version: 6,
+    statements: [
+      "CREATE TABLE IF NOT EXISTS drawings (id TEXT PRIMARY KEY NOT NULL, owner_id TEXT NOT NULL, document_id TEXT, title TEXT NOT NULL, source_path TEXT NOT NULL, preview_path TEXT NOT NULL, source_sha256 TEXT NOT NULL, preview_sha256 TEXT NOT NULL, source_size INTEGER NOT NULL, preview_size INTEGER NOT NULL, revision INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, deleted_at TEXT, updated_by_device_id TEXT NOT NULL)",
+      "CREATE TABLE IF NOT EXISTS drawing_revisions (id TEXT PRIMARY KEY NOT NULL, drawing_id TEXT NOT NULL, revision INTEGER NOT NULL, source_path TEXT NOT NULL, preview_path TEXT NOT NULL, created_at TEXT NOT NULL)",
+      "CREATE INDEX IF NOT EXISTS drawings_owner_updated_idx ON drawings (owner_id, deleted_at, updated_at DESC)",
+      "CREATE INDEX IF NOT EXISTS drawings_document_idx ON drawings (owner_id, document_id, deleted_at, updated_at DESC)",
+      "CREATE INDEX IF NOT EXISTS drawing_revisions_drawing_idx ON drawing_revisions (drawing_id, revision DESC)",
+    ],
+  },
 ];

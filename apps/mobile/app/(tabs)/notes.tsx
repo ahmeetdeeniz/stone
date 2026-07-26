@@ -136,6 +136,12 @@ export default function NotesScreen() {
               onPress={() => void importNote()}
               disabled={busy}
             />
+            <StoneButton
+              label="Yeni çizim"
+              variant="secondary"
+              onPress={() => router.push({ pathname: "/drawing/[id]", params: { id: "new" } })}
+              disabled={busy}
+            />
             <StoneButton label="Yeni not" onPress={() => void createNote()} disabled={busy} />
           </View>
         </View>

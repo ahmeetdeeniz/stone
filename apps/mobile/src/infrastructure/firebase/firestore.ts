@@ -11,10 +11,12 @@ import {
   type SyncRemote,
 } from "@stone/sync";
 import { getFirebaseConfig } from "./config";
+import { FirebaseDrawingStorage } from "./storage";
 
 const PAGE_LIMIT = 200;
 
 export class FirebaseSyncRemote implements SyncRemote {
+  private readonly drawingStorage = new FirebaseDrawingStorage();
   public constructor() {
     // Configuration is validated lazily so an unauthenticated shell can render
     // its visible auth error without constructing a native Firestore client.
@@ -23,6 +25,16 @@ export class FirebaseSyncRemote implements SyncRemote {
   public async push(event: OutboxEvent): Promise<RemoteWriteResult> {
     try {
       getFirebaseConfig();
+      let drawingStoragePayload: Awaited<ReturnType<FirebaseDrawingStorage["upload"]>> | null =
+        null;
+      if (event.entityType === "drawing") {
+        drawingStoragePayload = await this.drawingStorage.upload(
+          event.ownerId,
+          event.entityId,
+          String(event.payload.sourcePath),
+          String(event.payload.previewPath),
+        );
+      }
       const database = firestore();
       const entityReference = this.entityReference(
         database,
@@ -48,6 +60,14 @@ export class FirebaseSyncRemote implements SyncRemote {
         }
         const payload = {
           ...event.payload,
+          ...(drawingStoragePayload
+            ? {
+                sourcePath: drawingStoragePayload.sourceStoragePath,
+                previewPath: drawingStoragePayload.previewStoragePath,
+                sourceStoragePath: drawingStoragePayload.sourceStoragePath,
+                previewStoragePath: drawingStoragePayload.previewStoragePath,
+              }
+            : {}),
           ownerId: event.ownerId,
           revision: event.revision,
           idempotencyKey: event.idempotencyKey,
@@ -76,7 +96,14 @@ export class FirebaseSyncRemote implements SyncRemote {
       });
       return { kind: "acknowledged", serverUpdatedAt: acknowledgedAt };
     } catch (error) {
-      if (error instanceof SyncRevisionConflictError) throw error;
+      if (error instanceof SyncRevisionConflictError) {
+        if (error.details.remote.entityType === "drawing") {
+          throw new SyncRevisionConflictError({
+            remote: await this.hydrateDrawing(error.details.remote),
+          });
+        }
+        throw error;
+      }
       throw toTransportError(error);
     }
   }
@@ -93,7 +120,9 @@ export class FirebaseSyncRemote implements SyncRemote {
         .limit(safeLimit);
       if (cursor) query = query.startAfter(cursor);
       const snapshot = await query.get();
-      const changes = snapshot.docs.map((document) => toRemoteChangeFromEvent(document));
+      const changes = await Promise.all(
+        snapshot.docs.map((document) => this.hydrateDrawing(toRemoteChangeFromEvent(document))),
+      );
       const nextCursor = changes.at(-1)?.eventId ?? cursor;
       return {
         changes,
@@ -115,6 +144,7 @@ export class FirebaseSyncRemote implements SyncRemote {
         "versions",
         "devices",
         "settings",
+        "drawings",
         "syncEvents",
         "conflicts",
       ]) {
@@ -147,6 +177,27 @@ export class FirebaseSyncRemote implements SyncRemote {
       .collection(collectionFor(entityType))
       .doc(entityId);
   }
+
+  private async hydrateDrawing(change: RemoteChange): Promise<RemoteChange> {
+    if (change.entityType !== "drawing") return change;
+    const sourceStoragePath = stringValue(
+      change.payload.sourceStoragePath ?? change.payload.sourcePath,
+    );
+    const previewStoragePath = stringValue(
+      change.payload.previewStoragePath ?? change.payload.previewPath,
+    );
+    if (!sourceStoragePath || !previewStoragePath) return change;
+    const files = await this.drawingStorage.download(
+      change.ownerId,
+      change.entityId,
+      sourceStoragePath,
+      previewStoragePath,
+    );
+    return {
+      ...change,
+      payload: { ...change.payload, sourcePath: files.sourcePath, previewPath: files.previewPath },
+    };
+  }
 }
 
 function collectionFor(entityType: SyncEntityType): string {
@@ -161,6 +212,8 @@ function collectionFor(entityType: SyncEntityType): string {
       return "devices";
     case "settings":
       return "settings";
+    case "drawing":
+      return "drawings";
   }
 }
 
@@ -204,6 +257,10 @@ function toRemoteChangeFromEvent(
 function toRecord(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
   return value as Record<string, unknown>;
+}
+
+function stringValue(value: unknown): string {
+  return typeof value === "string" ? value : "";
 }
 
 function toTransportError(error: unknown): SyncTransportError {

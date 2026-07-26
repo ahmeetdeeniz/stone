@@ -181,6 +181,9 @@ export class SQLiteSyncStore implements SyncLocalStore {
         case "settings":
           await this.applySettings(change);
           break;
+        case "drawing":
+          await this.applyDrawing(change);
+          break;
         default:
           throw new SyncTransportError("Unsupported sync entity.", false);
       }
@@ -507,6 +510,37 @@ export class SQLiteSyncStore implements SyncLocalStore {
     );
   }
 
+  private async applyDrawing(change: RemoteChange): Promise<void> {
+    const p = change.payload;
+    await this.database.runAsync(
+      "INSERT INTO drawings (id, owner_id, document_id, title, source_path, preview_path, source_sha256, preview_sha256, source_size, preview_size, revision, created_at, updated_at, deleted_at, updated_by_device_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET document_id = excluded.document_id, title = excluded.title, source_path = excluded.source_path, preview_path = excluded.preview_path, source_sha256 = excluded.source_sha256, preview_sha256 = excluded.preview_sha256, source_size = excluded.source_size, preview_size = excluded.preview_size, revision = excluded.revision, updated_at = excluded.updated_at, deleted_at = excluded.deleted_at, updated_by_device_id = excluded.updated_by_device_id",
+      bindValue(p.id),
+      bindValue(p.ownerId),
+      bindValue(p.documentId),
+      bindValue(p.title),
+      bindValue(p.sourcePath),
+      bindValue(p.previewPath),
+      bindValue(p.sourceSha256),
+      bindValue(p.previewSha256),
+      bindValue(p.sourceSize),
+      bindValue(p.previewSize),
+      bindValue(p.revision),
+      bindValue(p.createdAt),
+      bindValue(p.updatedAt),
+      bindValue(p.deletedAt),
+      bindValue(p.updatedByDeviceId),
+    );
+    await this.database.runAsync(
+      "INSERT OR IGNORE INTO drawing_revisions (id, drawing_id, revision, source_path, preview_path, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+      `${String(p.id)}:${String(p.revision)}`,
+      bindValue(p.id),
+      bindValue(p.revision),
+      bindValue(p.sourcePath),
+      bindValue(p.previewPath),
+      bindValue(p.updatedAt),
+    );
+  }
+
   private async rebuildTaskIndex(payload: Record<string, unknown>): Promise<void> {
     const kind = asText(payload.kind);
     if (!["project", "version", "inbox", "release_checklist"].includes(kind)) return;
@@ -591,6 +625,8 @@ export class SQLiteSyncStore implements SyncLocalStore {
         return this.applyDevice(change);
       case "settings":
         return this.applySettings(change);
+      case "drawing":
+        return this.applyDrawing(change);
     }
   }
 }
@@ -652,6 +688,8 @@ function tableForEntity(entityType: SyncEntityType): string {
       return "devices";
     case "settings":
       return "settings";
+    case "drawing":
+      return "drawings";
   }
 }
 
@@ -739,6 +777,25 @@ function normalizeSqlPayload(
       editorFontSize: row.editor_font_size,
       trashRetentionDays: row.trash_retention_days,
       revision: row.revision,
+    };
+  }
+  if (entityType === "drawing") {
+    return {
+      id: row.id,
+      ownerId: row.owner_id,
+      documentId: row.document_id,
+      title: row.title,
+      sourcePath: row.source_path,
+      previewPath: row.preview_path,
+      sourceSha256: row.source_sha256,
+      previewSha256: row.preview_sha256,
+      sourceSize: row.source_size,
+      previewSize: row.preview_size,
+      revision: row.revision,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      deletedAt: row.deleted_at,
+      updatedByDeviceId: row.updated_by_device_id,
     };
   }
   return row;

@@ -28,6 +28,14 @@ assert(
   "react-native-webview must be a mobile workspace dependency.",
 );
 assert(
+  mobilePackage.dependencies?.["@shopify/react-native-skia"] === "2.2.12",
+  "@shopify/react-native-skia must be a mobile workspace dependency.",
+);
+assert(
+  mobilePackage.dependencies?.["@react-native-firebase/storage"] === "^23.4.0",
+  "@react-native-firebase/storage must be a mobile workspace dependency.",
+);
+assert(
   easConfig.build?.development?.developmentClient === true,
   "Development Client is not enabled.",
 );

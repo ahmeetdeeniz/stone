@@ -147,6 +147,36 @@ service cloud.firestore {
         && request.resource.data.lastEventId is string;
     }
 
+    function validDrawing(uid, drawingId) {
+      return signedIn(uid)
+        && request.resource.data.keys().hasOnly([
+          'id', 'ownerId', 'documentId', 'title', 'sourcePath', 'previewPath',
+          'sourceStoragePath', 'previewStoragePath', 'sourceSha256', 'previewSha256',
+          'sourceSize', 'previewSize', 'revision', 'createdAt', 'updatedAt', 'deletedAt',
+          'updatedByDeviceId', 'idempotencyKey', 'lastEventId'
+        ])
+        && request.resource.data.id == drawingId
+        && request.resource.data.ownerId == uid
+        && nullableString(request.resource.data.documentId)
+        && request.resource.data.title is string
+        && request.resource.data.title.size() <= 512
+        && request.resource.data.sourceStoragePath is string
+        && request.resource.data.previewStoragePath is string
+        && request.resource.data.sourceSha256 is string
+        && request.resource.data.previewSha256 is string
+        && request.resource.data.sourceSize is int
+        && request.resource.data.previewSize is int
+        && request.resource.data.sourceSize <= 10 * 1024 * 1024
+        && request.resource.data.previewSize <= 10 * 1024 * 1024
+        && request.resource.data.revision is int
+        && request.resource.data.createdAt is string
+        && request.resource.data.updatedAt is string
+        && nullableString(request.resource.data.deletedAt)
+        && request.resource.data.updatedByDeviceId is string
+        && request.resource.data.idempotencyKey is string
+        && request.resource.data.lastEventId is string;
+    }
+
     function validSyncEvent(uid) {
       return signedIn(uid)
         && request.resource.data.keys().hasOnly([
@@ -203,6 +233,13 @@ service cloud.firestore {
         allow read: if signedIn(uid);
         allow create: if validSettings(uid, settingsId) && ownerCreate(uid);
         allow update: if validSettings(uid, settingsId) && ownerUpdate(uid);
+        allow delete: if signedIn(uid) && resource.data.ownerId == uid;
+      }
+
+      match /drawings/{drawingId} {
+        allow read: if signedIn(uid);
+        allow create: if validDrawing(uid, drawingId) && ownerCreate(uid);
+        allow update: if validDrawing(uid, drawingId) && ownerUpdate(uid);
         allow delete: if signedIn(uid) && resource.data.ownerId == uid;
       }
 
