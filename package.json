@@ -6,7 +6,7 @@
   "scripts": {
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "lint": "eslint .",
+    "lint": "pnpm typecheck && eslint .",
     "typecheck": "pnpm --recursive --if-present typecheck",
     "test": "vitest run",
     "test:integration": "vitest run --config vitest.integration.config.ts",

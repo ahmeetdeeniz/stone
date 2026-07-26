@@ -10,17 +10,17 @@ import { useAppServices } from "../../src/providers/app-provider";
 export default function SettingsScreen() {
   const { preference, setPreference, colors } = useTheme();
   const { user, service } = useAuth();
-  const { settings } = useAppServices();
+  const { settingsUseCases } = useAppServices();
   const [busy, setBusy] = useState(false);
   const [settingsLoaded, setSettingsLoaded] = useState(false);
   useEffect(() => {
     if (!user) return;
     setSettingsLoaded(false);
-    void settings.get(user.uid).then((stored) => {
+    void settingsUseCases.load(user.uid).then((stored) => {
       setPreference(stored.theme);
       setSettingsLoaded(true);
     });
-  }, [setPreference, settings, user]);
+  }, [setPreference, settingsUseCases, user]);
   const signOut = async () => {
     if (!service) return;
     setBusy(true);
@@ -55,9 +55,7 @@ export default function SettingsScreen() {
                 onPress={() => {
                   setPreference(option);
                   if (user && settingsLoaded) {
-                    void settings
-                      .get(user.uid)
-                      .then((stored) => settings.save({ ...stored, theme: option }));
+                    void settingsUseCases.setTheme(user.uid, option);
                   }
                 }}
               />

@@ -1,4 +1,4 @@
-import type { SettingsRepository } from "@stone/domain";
+import { SettingsUseCases, type SettingsRepository } from "@stone/domain";
 import { initializeDatabase, type StoneDatabase } from "../infrastructure/storage/database";
 import { SQLiteSettingsRepository } from "../infrastructure/storage/repositories";
 import { SQLiteDeviceRepository, createDeviceIdentity } from "../infrastructure/storage/device";
@@ -6,13 +6,15 @@ import { SQLiteDeviceRepository, createDeviceIdentity } from "../infrastructure/
 export interface AppServices {
   database: StoneDatabase;
   settings: SettingsRepository;
+  settingsUseCases: SettingsUseCases;
   device: SQLiteDeviceRepository;
 }
 
 export async function createAppServices(): Promise<AppServices> {
   const database = await initializeDatabase();
   const settings = new SQLiteSettingsRepository(database);
+  const settingsUseCases = new SettingsUseCases(settings);
   const device = new SQLiteDeviceRepository(database);
-  await device.getOrCreate(createDeviceIdentity());
-  return { database, settings, device };
+  await device.getOrCreate(await createDeviceIdentity());
+  return { database, settings, settingsUseCases, device };
 }

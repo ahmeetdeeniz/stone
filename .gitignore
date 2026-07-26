@@ -12,6 +12,9 @@ coverage/
 *.keystore
 *.p8
 *.p12
+*.pem
+*.crt
+*.der
 *.mobileprovision
 GoogleService-Info.plist
 google-services.json

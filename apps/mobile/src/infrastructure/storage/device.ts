@@ -1,5 +1,6 @@
 import * as Crypto from "expo-crypto";
 import * as Device from "expo-device";
+import * as SecureStore from "expo-secure-store";
 import Constants from "expo-constants";
 import { Platform } from "react-native";
 import type { Device as DeviceEntity, DeviceRepository } from "@stone/domain";
@@ -40,10 +41,15 @@ export class SQLiteDeviceRepository implements DeviceRepository {
   }
 }
 
-export function createDeviceIdentity(): Omit<DeviceEntity, "lastSeenAt"> {
+const DEVICE_ID_KEY = "stone.device.id";
+
+export async function createDeviceIdentity(): Promise<Omit<DeviceEntity, "lastSeenAt">> {
   const platform: DeviceEntity["platform"] = Platform.OS === "ios" ? "ios" : "android";
+  const storedId = await SecureStore.getItemAsync(DEVICE_ID_KEY);
+  const id = storedId ?? Crypto.randomUUID();
+  if (!storedId) await SecureStore.setItemAsync(DEVICE_ID_KEY, id);
   return {
-    id: Crypto.randomUUID(),
+    id,
     ownerId: "pending-auth",
     platform,
     name: Device.deviceName ?? `${platform} device`,
