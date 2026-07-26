@@ -1,4 +1,4 @@
-import { useEffect, useState, type PropsWithChildren } from "react";
+import { createContext, useContext, useEffect, useState, type PropsWithChildren } from "react";
 import { ThemeProvider } from "../design/theme";
 import { LoadingState } from "../components/states";
 import { ErrorState } from "../components/states";
@@ -18,7 +18,9 @@ export function AppProvider({ children }: PropsWithChildren) {
   return (
     <ThemeProvider>
       {services ? (
-        <AuthProvider>{children}</AuthProvider>
+        <AppServicesContext.Provider value={services}>
+          <AuthProvider>{children}</AuthProvider>
+        </AppServicesContext.Provider>
       ) : error ? (
         <ErrorState message={error} />
       ) : (
@@ -26,4 +28,12 @@ export function AppProvider({ children }: PropsWithChildren) {
       )}
     </ThemeProvider>
   );
+}
+
+const AppServicesContext = createContext<AppServices | null>(null);
+
+export function useAppServices(): AppServices {
+  const value = useContext(AppServicesContext);
+  if (!value) throw new Error("useAppServices must be used inside AppProvider");
+  return value;
 }

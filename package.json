@@ -10,12 +10,12 @@
     "typecheck": "pnpm --recursive --if-present typecheck",
     "test": "vitest run",
     "test:integration": "vitest run --config vitest.integration.config.ts",
-    "expo": "pnpm --filter @stone/mobile expo",
-    "expo:doctor": "pnpm --filter @stone/mobile doctor",
-    "mobile": "pnpm --filter @stone/mobile export",
-    "mobile:export": "pnpm --filter @stone/mobile export",
-    "mobile:android": "pnpm --filter @stone/mobile android",
-    "mobile:ios": "pnpm --filter @stone/mobile ios"
+    "expo": "pnpm --filter @stone/mobile run start",
+    "expo:doctor": "pnpm --filter @stone/mobile run doctor",
+    "mobile": "pnpm --filter @stone/mobile run export",
+    "mobile:export": "pnpm --filter @stone/mobile run export",
+    "mobile:android": "pnpm --filter @stone/mobile run android",
+    "mobile:ios": "pnpm --filter @stone/mobile run ios"
   },
   "devDependencies": {
     "@eslint/js": "^9.26.0",

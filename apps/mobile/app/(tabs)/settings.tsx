@@ -1,15 +1,26 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Alert, StyleSheet, View } from "react-native";
 import { ResponsiveContent } from "../../src/components/responsive";
 import { Screen, StoneButton, StoneText } from "../../src/components/ui";
 import { spacing } from "../../src/design/tokens";
 import { useTheme } from "../../src/design/theme";
 import { useAuth } from "../../src/providers/auth-provider";
+import { useAppServices } from "../../src/providers/app-provider";
 
 export default function SettingsScreen() {
   const { preference, setPreference, colors } = useTheme();
   const { user, service } = useAuth();
+  const { settings } = useAppServices();
   const [busy, setBusy] = useState(false);
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
+  useEffect(() => {
+    if (!user) return;
+    setSettingsLoaded(false);
+    void settings.get(user.uid).then((stored) => {
+      setPreference(stored.theme);
+      setSettingsLoaded(true);
+    });
+  }, [setPreference, settings, user]);
   const signOut = async () => {
     if (!service) return;
     setBusy(true);
@@ -41,7 +52,14 @@ export default function SettingsScreen() {
                 key={option}
                 label={option === "system" ? "Sistem" : option === "light" ? "Açık" : "Koyu"}
                 variant={preference === option ? "primary" : "secondary"}
-                onPress={() => setPreference(option)}
+                onPress={() => {
+                  setPreference(option);
+                  if (user && settingsLoaded) {
+                    void settings
+                      .get(user.uid)
+                      .then((stored) => settings.save({ ...stored, theme: option }));
+                  }
+                }}
               />
             ))}
           </View>
