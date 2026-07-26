@@ -1,5 +1,6 @@
 import { defaultKeymap, history, historyKeymap, redo, undo } from "@codemirror/commands";
 import { keymap } from "@codemirror/view";
+import { extractTasks, toggleTask } from "@stone/markdown";
 import { EditorView } from "@codemirror/view";
 import {
   applyEditorCommand,
@@ -28,6 +29,34 @@ function initialize(markdownSource: string, readOnly: boolean): void {
     history(),
     keymap.of([...defaultKeymap, ...historyKeymap]),
     EditorView.domEventHandlers({
+      change(event, currentView) {
+        const target = event.target;
+        if (
+          !(target instanceof HTMLInputElement) ||
+          !target.classList.contains("stone-task-checkbox")
+        )
+          return false;
+        const from = Number(target.dataset.stoneTaskFrom);
+        const to = Number(target.dataset.stoneTaskTo);
+        const task = extractTasks(currentView.state.doc.toString()).find(
+          (item) => item.markerFrom === from && item.markerTo === to,
+        );
+        if (!task) return false;
+        currentView.dispatch({
+          changes: {
+            from: 0,
+            to: currentView.state.doc.length,
+            insert: toggleTask(currentView.state.doc.toString(), task, target.checked),
+          },
+          userEvent: "input",
+        });
+        post({
+          protocolVersion: 1,
+          type: "taskToggled",
+          payload: { from, to, checked: target.checked },
+        });
+        return true;
+      },
       click(event) {
         const target = event.target;
         if (!(target instanceof HTMLElement) || !target.matches("a[data-stone-url]")) return false;
@@ -75,6 +104,13 @@ function initialize(markdownSource: string, readOnly: boolean): void {
       },
       ".stone-live-link": { color: "var(--stone-accent)", textDecoration: "underline" },
       ".stone-live-code": { fontFamily: "monospace", backgroundColor: "var(--stone-surface)" },
+      ".stone-live-callout": { borderLeft: "3px solid var(--stone-accent)", paddingLeft: "12px" },
+      ".stone-live-table": { backgroundColor: "var(--stone-surface)" },
+      ".stone-live-rule": { color: "var(--stone-accent)" },
+      ".stone-task-checkbox": { accentColor: "var(--stone-accent)", marginRight: "8px" },
+      ".stone-live-heading-1": { fontSize: "1.8em", fontWeight: "700" },
+      ".stone-live-heading-2": { fontSize: "1.45em", fontWeight: "700" },
+      ".stone-live-heading-3": { fontSize: "1.2em", fontWeight: "700" },
     }),
     EditorView.theme({ ".cm-content": { paddingBottom: "45vh" } }),
   ]);

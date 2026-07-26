@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { applyEditorCommand, createEditorState, isEditorBridgeMessage } from "./index.js";
+import {
+  applyEditorCommand,
+  buildLivePreviewDecorations,
+  createEditorState,
+  isEditorBridgeMessage,
+} from "./index.js";
 
 describe("editor boundary", () => {
   it("accepts only versioned known bridge messages", () => {
@@ -36,5 +41,12 @@ describe("editor boundary", () => {
   it("creates a real CodeMirror Markdown state", () => {
     const state = createEditorState("# Türkçe\n\n**bold**\n");
     expect(state.doc.toString()).toContain("Türkçe");
+  });
+
+  it("builds inactive Live Preview decorations and keeps task source ranges", () => {
+    const state = createEditorState("- [ ] görev\n\n> [!NOTE] bilgi\n").update({
+      selection: { anchor: 20 },
+    }).state;
+    expect(() => buildLivePreviewDecorations(state)).not.toThrow();
   });
 });

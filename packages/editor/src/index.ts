@@ -293,6 +293,54 @@ class EmptyWidget extends WidgetType {
   }
 }
 
+class TextWidget extends WidgetType {
+  public constructor(private readonly text: string) {
+    super();
+  }
+
+  public override eq(other: TextWidget): boolean {
+    return this.text === other.text;
+  }
+
+  public override toDOM(): HTMLElement {
+    const element = document.createElement("span");
+    element.textContent = this.text;
+    return element;
+  }
+}
+
+class TaskCheckboxWidget extends WidgetType {
+  public constructor(
+    private readonly checked: boolean,
+    private readonly from: number,
+    private readonly to: number,
+  ) {
+    super();
+  }
+
+  public override eq(other: TaskCheckboxWidget): boolean {
+    return this.checked === other.checked && this.from === other.from && this.to === other.to;
+  }
+
+  public override toDOM(): HTMLElement {
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = this.checked;
+    checkbox.dataset.stoneTaskFrom = String(this.from);
+    checkbox.dataset.stoneTaskTo = String(this.to);
+    checkbox.setAttribute(
+      "aria-label",
+      this.checked ? "Görevi tamamlandı olarak işaretle" : "Görevi tamamla",
+    );
+    checkbox.className = "stone-task-checkbox";
+    return checkbox;
+  }
+
+  public override ignoreEvent(): boolean {
+    return false;
+  }
+}
+
 function addBlockDecorations(
   ranges: Array<{ from: number; to: number; decoration: Decoration }>,
   state: EditorState,
@@ -307,20 +355,62 @@ function addBlockDecorations(
       to: line.from + heading[0].length,
       decoration: Decoration.replace({ widget: new EmptyWidget() }),
     });
+    ranges.push({
+      from: block.from,
+      to: block.to,
+      decoration: Decoration.mark({
+        class: `stone-live-heading stone-live-heading-${block.level ?? 1}`,
+      }),
+    });
   }
   const list = text.match(/^(\s*)(?:[-+*]|\d+[.)])\s+/u);
   if (list && block.type === "list") {
+    const prefixTo = block.task?.markerFrom ?? line.from + list[0].length;
+    const prefixWidget = /^\s*\d/u.test(list[0])
+      ? `${list[0].trimStart().replace(/\s+$/u, "")} `
+      : "• ";
     ranges.push({
       from: line.from + list[1]!.length,
-      to: line.from + list[0].length,
-      decoration: Decoration.replace({ widget: new EmptyWidget() }),
+      to: prefixTo,
+      decoration: Decoration.replace({ widget: new TextWidget(prefixWidget) }),
     });
+    if (block.task) {
+      ranges.push({
+        from: block.task.markerFrom,
+        to: block.task.markerTo,
+        decoration: Decoration.replace({
+          widget: new TaskCheckboxWidget(
+            block.task.checked,
+            block.task.markerFrom,
+            block.task.markerTo,
+          ),
+        }),
+      });
+    }
   }
   if (block.type === "code")
     ranges.push({
       from: block.from,
       to: block.to,
       decoration: Decoration.mark({ class: "stone-live-code" }),
+    });
+  if (block.type === "callout")
+    ranges.push({
+      from: block.from,
+      to: block.to,
+      decoration: Decoration.mark({ class: "stone-live-callout" }),
+    });
+  if (block.type === "table")
+    ranges.push({
+      from: block.from,
+      to: block.to,
+      decoration: Decoration.mark({ class: "stone-live-table" }),
+    });
+  if (block.type === "horizontalRule")
+    ranges.push({
+      from: block.from,
+      to: block.to,
+      decoration: Decoration.mark({ class: "stone-live-rule" }),
     });
 }
 
