@@ -15,6 +15,9 @@
     "mobile": "pnpm --filter @stone/mobile run export",
     "mobile:export": "pnpm --filter @stone/mobile run export",
     "editor:bundle": "pnpm --filter @stone/editor run build:web",
+    "verify:native-dependencies": "node scripts/verify-native-dependencies.mjs",
+    "eas:android:development": "pnpm --dir apps/mobile exec eas build --platform android --profile development",
+    "eas:ios:simulator": "pnpm --dir apps/mobile exec eas build --platform ios --profile development-simulator",
     "mobile:android": "pnpm --filter @stone/mobile run android",
     "mobile:ios": "pnpm --filter @stone/mobile run ios"
   },
