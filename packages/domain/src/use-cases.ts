@@ -17,7 +17,7 @@ import type {
   UserSettings,
 } from "./entities.js";
 import { ValidationError } from "./errors.js";
-import { canTransitionProjectStatus } from "./project-logic.js";
+import { canTransitionProjectStatus, isValidIsoDate } from "./project-logic.js";
 
 export class SettingsUseCases {
   public constructor(private readonly repository: SettingsRepository) {}
@@ -123,6 +123,9 @@ export class ProjectUseCases {
   public create(input: ProjectCreateInput): Promise<Project> {
     if (!input.project.title.trim()) throw new ValidationError("Project title is required.");
     if (!input.project.slug.trim()) throw new ValidationError("Project slug is required.");
+    if (input.project.targetDate && !isValidIsoDate(input.project.targetDate)) {
+      throw new ValidationError("Project target date must be YYYY-MM-DD.");
+    }
     return this.repository.create({
       ...input,
       project: {
@@ -142,6 +145,9 @@ export class ProjectUseCases {
   }
 
   public update(ownerId: string, id: string, changes: ProjectUpdate, deviceId: string) {
+    if (changes.targetDate && !isValidIsoDate(changes.targetDate)) {
+      throw new ValidationError("Project target date must be YYYY-MM-DD.");
+    }
     if (changes.status) {
       const currentPromise = this.repository.getById(ownerId, id);
       return currentPromise.then((current) => {
@@ -157,10 +163,19 @@ export class ProjectUseCases {
 
   public createVersion(input: VersionCreateInput) {
     if (!input.version.version.trim()) throw new ValidationError("Version is required.");
+    if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/u.test(input.version.version.trim())) {
+      throw new ValidationError("Version contains unsupported path characters.");
+    }
+    if (input.version.targetDate && !isValidIsoDate(input.version.targetDate)) {
+      throw new ValidationError("Version target date must be YYYY-MM-DD.");
+    }
     return this.repository.createVersion(input);
   }
 
   public updateVersion(ownerId: string, id: string, changes: VersionUpdate, deviceId: string) {
+    if (changes.targetDate && !isValidIsoDate(changes.targetDate)) {
+      throw new ValidationError("Version target date must be YYYY-MM-DD.");
+    }
     return this.repository.updateVersion(ownerId, id, changes, deviceId);
   }
 
@@ -184,13 +199,13 @@ export class ProjectUseCases {
     return this.repository.blockers(ownerId, projectId);
   }
 
-  public addBlocker(ownerId: string, blocker: ProjectBlocker) {
+  public addBlocker(ownerId: string, blocker: ProjectBlocker, deviceId: string) {
     if (!blocker.text.trim()) throw new ValidationError("Blocker text is required.");
-    return this.repository.addBlocker(ownerId, { ...blocker, text: blocker.text.trim() });
+    return this.repository.addBlocker(ownerId, { ...blocker, text: blocker.text.trim() }, deviceId);
   }
 
-  public resolveBlocker(ownerId: string, id: string, resolvedAt: string) {
-    return this.repository.resolveBlocker(ownerId, id, resolvedAt);
+  public resolveBlocker(ownerId: string, id: string, resolvedAt: string, deviceId: string) {
+    return this.repository.resolveBlocker(ownerId, id, resolvedAt, deviceId);
   }
 
   public addInboxItem(ownerId: string, text: string, deviceId: string) {

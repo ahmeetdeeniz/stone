@@ -41,7 +41,7 @@ export interface StoneTaskMetadata {
   priority?: "low" | "medium" | "high" | "critical";
   due?: string;
   blocked?: boolean;
-  blocker?: string;
+  blocker?: string | null;
   canceled?: boolean;
   readonly [key: string]: FrontmatterValue | undefined;
 }
@@ -336,6 +336,33 @@ export function calculateTaskProgress(source: string): TaskProgress {
     total: tasks.length,
     ratio: tasks.length === 0 ? 0 : completed / tasks.length,
   };
+}
+
+export interface ProjectExportFile {
+  path: string;
+  content: string;
+}
+
+export function serializeProjectExport(files: readonly ProjectExportFile[]): string {
+  return normalizeMarkdown(
+    files
+      .map((file) => `<!-- stone-export-path: ${file.path} -->\n\n${file.content}`)
+      .join("\n\n---\n\n"),
+  );
+}
+
+export function parseProjectExport(source: string): readonly ProjectExportFile[] {
+  const normalized = normalizeMarkdown(source);
+  const marker = /<!--\s*stone-export-path:\s*([^>]+?)\s*-->\s*\n/gu;
+  const matches = [...normalized.matchAll(marker)];
+  return matches.map((match, index) => {
+    const path = match[1]?.trim();
+    if (!path) throw new MarkdownParseError("Project export path is missing.");
+    const contentFrom = (match.index ?? 0) + match[0].length;
+    const contentTo = matches[index + 1]?.index ?? normalized.length;
+    const content = normalized.slice(contentFrom, contentTo).replace(/\n{2,}---\n[\s\S]*$/u, "");
+    return { path, content: normalizeMarkdown(content) };
+  });
 }
 
 export function applyFormatting(source: string, range: TextRange, kind: FormattingKind): string {

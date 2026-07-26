@@ -5,7 +5,9 @@ import {
   canTransitionProjectStatus,
   daysUntil,
   isOverdue,
+  platformReleaseStatuses,
   projectStatuses,
+  type ProjectBlocker,
   type Project,
   type ProjectTask,
 } from "./index.js";
@@ -62,6 +64,19 @@ describe("project tracking domain logic", () => {
     }
   });
 
+  it("covers every documented platform release state", () => {
+    expect(platformReleaseStatuses).toEqual([
+      "not_planned",
+      "preparing",
+      "internal_testing",
+      "external_testing",
+      "review",
+      "live",
+      "paused",
+      "rejected",
+    ]);
+  });
+
   it("calculates date boundaries without local timezone drift", () => {
     expect(daysUntil("2026-08-01", "2026-07-26")).toBe(6);
     expect(isOverdue("2026-07-25", "2026-07-26")).toBe(true);
@@ -95,6 +110,18 @@ describe("project tracking domain logic", () => {
         "2026-07-26",
       ).health,
     ).toBe("paused");
+    expect(
+      calculateProjectHealth(
+        { ...baseProject, status: "live", tags: ["update_needed"], nextAction: "" },
+        {
+          openTasks: 0,
+          openCriticalBlockers: 0,
+          missingStoreChecklist: false,
+          lastUpdatedAt: baseProject.updatedAt,
+        },
+        "2026-07-26",
+      ),
+    ).toMatchObject({ health: "attention" });
   });
 
   it("orders Today items by documented urgency", () => {
@@ -106,12 +133,25 @@ describe("project tracking domain logic", () => {
         task({ id: "today", text: "Bugün", priority: "low", dueDate: "2026-07-26" }),
       ],
       "2026-07-26",
+      [
+        {
+          id: "blocker-1",
+          projectId: "prj_1",
+          taskId: null,
+          text: "Mağaza hesabı bekleniyor",
+          resolved: false,
+          createdAt: "2026-07-26T00:00:00.000Z",
+          resolvedAt: null,
+        } satisfies ProjectBlocker,
+      ],
     );
     expect(items.map((item) => item.text).slice(0, 3)).toEqual([
       "Kritik gecikmiş",
       "Bugün",
-      "Blocker çöz",
+      "Mağaza hesabı bekleniyor",
     ]);
     expect(items.some((item) => item.kind === "next_action")).toBe(true);
+    expect(items.some((item) => item.text === "Mağaza hesabı bekleniyor")).toBe(true);
+    expect(items.some((item) => item.text === "Hedef tarih: 2026-08-01")).toBe(true);
   });
 });

@@ -2,24 +2,13 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import type { ProjectTask, ProjectVersion, PlatformReleaseStatus } from "@stone/domain";
-import { projectStatuses, projectStatusLabels } from "@stone/domain";
+import { platformReleaseStatuses, projectStatuses, projectStatusLabels } from "@stone/domain";
 import { ErrorState, LoadingState } from "../../src/components/states";
 import { ResponsiveContent } from "../../src/components/responsive";
 import { Screen, StoneButton, StoneInput, StoneText, Surface } from "../../src/components/ui";
 import { spacing } from "../../src/design/tokens";
 import { useAuth } from "../../src/providers/auth-provider";
 import { useAppServices } from "../../src/providers/app-provider";
-
-const releaseStatuses: readonly PlatformReleaseStatus[] = [
-  "not_planned",
-  "preparing",
-  "internal_testing",
-  "external_testing",
-  "review",
-  "live",
-  "paused",
-  "rejected",
-];
 
 export default function VersionDetailScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
@@ -181,7 +170,7 @@ function PlatformStatus({
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.choices}
       >
-        {releaseStatuses.map((status) => (
+        {platformReleaseStatuses.map((status) => (
           <StoneButton
             key={status}
             label={status}

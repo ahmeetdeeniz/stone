@@ -1,9 +1,12 @@
 import type {
+  ProjectBlocker,
   Project,
   ProjectHealth,
+  ProjectPlatform,
   ProjectPriority,
   ProjectStatus,
   ProjectTask,
+  PlatformReleaseStatus,
   TodayItem,
 } from "./entities.js";
 
@@ -21,6 +24,23 @@ export const projectStatuses: readonly ProjectStatus[] = [
 ];
 
 export const projectPriorities: readonly ProjectPriority[] = ["low", "medium", "high", "critical"];
+export const projectPlatforms: readonly ProjectPlatform[] = [
+  "android",
+  "ios",
+  "windows",
+  "web",
+  "other",
+];
+export const platformReleaseStatuses: readonly PlatformReleaseStatus[] = [
+  "not_planned",
+  "preparing",
+  "internal_testing",
+  "external_testing",
+  "review",
+  "live",
+  "paused",
+  "rejected",
+];
 
 export const projectStatusLabels: Readonly<Record<ProjectStatus, string>> = {
   idea: "Fikir",
@@ -50,6 +70,10 @@ export function isoDate(value: string | Date): string {
   const date = typeof value === "string" ? new Date(value) : value;
   if (Number.isNaN(date.getTime())) throw new Error("Invalid date.");
   return date.toISOString().slice(0, 10);
+}
+
+export function isValidIsoDate(value: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/u.test(value) && isoDate(value) === value;
 }
 
 export function daysUntil(targetDate: string, today: string): number {
@@ -84,7 +108,10 @@ export interface ProjectHealthResult {
 }
 
 export function calculateProjectHealth(
-  project: Pick<Project, "status" | "priority" | "targetDate" | "nextAction" | "updatedAt">,
+  project: Pick<
+    Project,
+    "status" | "priority" | "tags" | "targetDate" | "nextAction" | "updatedAt"
+  >,
   signals: ProjectHealthSignals,
   today: string,
 ): ProjectHealthResult {
@@ -109,6 +136,9 @@ export function calculateProjectHealth(
   if (project.status === "live" && project.priority === "high" && !project.nextAction) {
     reasons.push("Yayındaki yüksek öncelikli proje için sonraki iş yok.");
   }
+  if (project.status === "live" && project.tags.includes("update_needed")) {
+    reasons.push("Yayındaki proje için güncelleme etiketi var.");
+  }
   if (isStale(signals.lastUpdatedAt, today) && signals.openTasks > 0) {
     reasons.push("Aktif projeye uzun süredir dokunulmadı.");
   }
@@ -130,6 +160,7 @@ export function buildTodayItems(
   projects: readonly Project[],
   tasks: readonly ProjectTask[],
   today: string,
+  blockers: readonly ProjectBlocker[] = [],
 ): readonly TodayItem[] {
   const byId = new Map(projects.map((project) => [project.id, project]));
   const items: TodayItem[] = [];
@@ -162,8 +193,47 @@ export function buildTodayItems(
       taskId: task.id,
     });
   }
+  for (const blocker of blockers) {
+    if (blocker.resolved) continue;
+    const project = byId.get(blocker.projectId);
+    if (!project || project.status === "archived" || project.status === "paused") continue;
+    items.push({
+      id: `blocker:${blocker.id}`,
+      kind: "task",
+      projectId: project.id,
+      projectTitle: project.title,
+      text: blocker.text,
+      dueDate: null,
+      priority: "critical",
+      blocked: true,
+      rank: 3,
+      taskId: blocker.taskId,
+    });
+  }
   for (const project of projects) {
     if (project.status === "archived" || project.status === "paused") continue;
+    if (project.targetDate) {
+      const targetDays = daysUntil(project.targetDate, today);
+      if (targetDays >= 0 && targetDays <= 14) {
+        items.push({
+          id: `target:${project.id}`,
+          kind: "project_signal",
+          projectId: project.id,
+          projectTitle: project.title,
+          text: `Hedef tarih: ${project.targetDate}`,
+          dueDate: project.targetDate,
+          priority: project.priority,
+          blocked: false,
+          rank:
+            targetDays === 0
+              ? 2
+              : project.priority === "high" || project.priority === "critical"
+                ? 4
+                : 5,
+          taskId: null,
+        });
+      }
+    }
     if (project.nextAction) {
       items.push({
         id: `next:${project.id}`,

@@ -164,7 +164,7 @@ export default function ProjectDetailScreen() {
       resolvedAt: null,
     };
     try {
-      await projectUseCases.addBlocker(user.uid, blocker);
+      await projectUseCases.addBlocker(user.uid, blocker, deviceId);
       setBlockerText("");
       await load();
     } catch (caught) {
@@ -387,7 +387,7 @@ export default function ProjectDetailScreen() {
                     variant="quiet"
                     onPress={() =>
                       void projectUseCases
-                        .resolveBlocker(user!.uid, blocker.id, new Date().toISOString())
+                        .resolveBlocker(user!.uid, blocker.id, new Date().toISOString(), deviceId)
                         .then(load)
                         .catch((caught: unknown) =>
                           Alert.alert(

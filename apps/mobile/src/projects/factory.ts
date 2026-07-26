@@ -1,5 +1,12 @@
 import * as Crypto from "expo-crypto";
-import type { Document, Project, ProjectVersion } from "@stone/domain";
+import type {
+  Document,
+  Project,
+  ProjectPlatform,
+  ProjectPriority,
+  ProjectStatus,
+  ProjectVersion,
+} from "@stone/domain";
 import {
   createProjectDocumentSet,
   createProjectMarkdown,
@@ -12,6 +19,15 @@ export interface NewProjectInput {
   title: string;
   template: ProjectTemplate;
   deviceId: string;
+  status?: ProjectStatus;
+  priority?: ProjectPriority;
+  tags?: readonly string[];
+  targetDate?: string | null;
+  platforms?: readonly ProjectPlatform[];
+  currentVersion?: string | null;
+  nextVersion?: string | null;
+  nextAction?: string | null;
+  repositoryUrl?: string | null;
 }
 
 export interface NewProjectWorkspace {
@@ -31,15 +47,15 @@ export function createNewProjectWorkspace(input: NewProjectInput): NewProjectWor
     canonicalDocumentId: projectDocumentId,
     title: input.title.trim(),
     slug,
-    status: "planning",
-    priority: "medium",
-    tags: [],
-    targetDate: null,
-    currentVersion: null,
-    nextVersion: null,
-    nextAction: "İlk net işi belirle",
-    repositoryUrl: null,
-    platforms: [],
+    status: input.status ?? "planning",
+    priority: input.priority ?? "medium",
+    tags: [...(input.tags ?? [])],
+    targetDate: input.targetDate ?? null,
+    currentVersion: input.currentVersion ?? null,
+    nextVersion: input.nextVersion ?? null,
+    nextAction: input.nextAction === undefined ? "İlk net işi belirle" : input.nextAction,
+    repositoryUrl: input.repositoryUrl ?? null,
+    platforms: [...(input.platforms ?? [])],
     health: "good",
     revision: 1,
     createdAt: now,
@@ -53,7 +69,20 @@ export function createNewProjectWorkspace(input: NewProjectInput): NewProjectWor
       ownerId: input.ownerId,
       kind: "project",
       title: project.title,
-      markdown: createProjectMarkdown({ id, title: project.title, template: input.template }),
+      markdown: createProjectMarkdown({
+        id,
+        title: project.title,
+        template: input.template,
+        status: project.status,
+        priority: project.priority,
+        tags: project.tags,
+        targetDate: project.targetDate,
+        currentVersion: project.currentVersion,
+        nextVersion: project.nextVersion,
+        platforms: project.platforms,
+        repositoryUrl: project.repositoryUrl,
+        nextAction: project.nextAction,
+      }),
       path: `Projects/${slug}/Project.md`,
       projectId: id,
       now,

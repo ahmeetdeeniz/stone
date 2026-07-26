@@ -5,7 +5,8 @@ import {
   type FrontmatterValue,
 } from "./index.js";
 
-export type ProjectTemplate = "general" | "mobile_app" | "game" | "website" | "programming_tooling";
+export type ProjectTemplate =
+  "blank" | "general" | "mobile_app" | "game" | "website" | "programming_tooling";
 
 export interface ProjectFrontmatter {
   schema: 1;
@@ -72,6 +73,7 @@ export interface ProjectDocumentSet {
 }
 
 const templateSections: Readonly<Record<ProjectTemplate, string>> = {
+  blank: "",
   general:
     "## Roadmap\n\n- [ ] MVP kapsamını netleştir\n- [ ] Teknik mimariyi seç\n- [ ] İlk çalışan sürümü hazırla\n",
   mobile_app:
@@ -84,6 +86,7 @@ const templateSections: Readonly<Record<ProjectTemplate, string>> = {
 };
 
 export const projectTemplateLabels: Readonly<Record<ProjectTemplate, string>> = {
+  blank: "Boş Proje",
   general: "Genel Proje",
   mobile_app: "Mobil Uygulama",
   game: "Oyun",
@@ -108,7 +111,10 @@ export function createProjectMarkdown(input: ProjectDocumentInput): string {
       nextAction: input.nextAction ?? null,
     },
   };
-  const body = `# ${input.title.trim()}\n\n## Özet\n\nProjenin kısa tanımı.\n\n## Hedef\n\nProjenin başarılı sayılması için gereken sonuç.\n\n## Sonraki İş\n\n- [ ] İlk net işi belirle\n\n## Blocker'lar\n\nHenüz blocker yok.\n\n${templateSections[input.template]}\n## Notlar\n`;
+  const body =
+    input.template === "blank"
+      ? `# ${input.title.trim()}\n`
+      : `# ${input.title.trim()}\n\n## Özet\n\nProjenin kısa tanımı.\n\n## Hedef\n\nProjenin başarılı sayılması için gereken sonuç.\n\n## Sonraki İş\n\n- [ ] İlk net işi belirle\n\n## Blocker'lar\n\nHenüz blocker yok.\n\n${templateSections[input.template]}\n## Notlar\n`;
   return serializeMarkdown({ frontmatter, body });
 }
 

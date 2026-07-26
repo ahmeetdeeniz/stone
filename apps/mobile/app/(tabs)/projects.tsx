@@ -1,8 +1,9 @@
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
 import { Alert, FlatList, Modal, Pressable, ScrollView, StyleSheet, View } from "react-native";
-import type { Project, ProjectStatus, ProjectTask } from "@stone/domain";
+import type { Project, ProjectPlatform, ProjectStatus, ProjectTask } from "@stone/domain";
 import {
+  projectPlatforms,
   projectPriorities,
   projectPriorityLabels,
   projectStatuses,
@@ -18,6 +19,7 @@ import { useAppServices } from "../../src/providers/app-provider";
 import { createNewProjectWorkspace } from "../../src/projects/factory";
 
 const templates: readonly { id: ProjectTemplate; label: string }[] = [
+  { id: "blank", label: "Boş Proje" },
   { id: "general", label: "Genel Proje" },
   { id: "mobile_app", label: "Mobil Uygulama" },
   { id: "game", label: "Oyun" },
@@ -38,6 +40,8 @@ export default function ProjectsScreen() {
   const [view, setView] = useState<"list" | "kanban">("list");
   const [statusFilter, setStatusFilter] = useState<ProjectStatus | undefined>();
   const [priorityFilter, setPriorityFilter] = useState<Project["priority"] | undefined>();
+  const [tagFilter, setTagFilter] = useState("");
+  const [platformFilter, setPlatformFilter] = useState<ProjectPlatform | undefined>();
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -45,6 +49,11 @@ export default function ProjectsScreen() {
   const [createOpen, setCreateOpen] = useState(false);
   const [title, setTitle] = useState("");
   const [template, setTemplate] = useState<ProjectTemplate>("general");
+  const [createStatus, setCreateStatus] = useState<ProjectStatus>("planning");
+  const [createPriority, setCreatePriority] = useState<Project["priority"]>("medium");
+  const [createTags, setCreateTags] = useState("");
+  const [createTargetDate, setCreateTargetDate] = useState("");
+  const [createPlatforms, setCreatePlatforms] = useState<readonly ProjectPlatform[]>([]);
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -54,6 +63,8 @@ export default function ProjectsScreen() {
       const projects = await projectUseCases.list(user.uid, {
         ...(statusFilter ? { status: statusFilter } : {}),
         ...(priorityFilter ? { priority: priorityFilter } : {}),
+        ...(tagFilter ? { tag: tagFilter } : {}),
+        ...(platformFilter ? { platform: platformFilter } : {}),
         ...(search ? { search } : {}),
       });
       setItems(
@@ -69,7 +80,7 @@ export default function ProjectsScreen() {
     } finally {
       setLoading(false);
     }
-  }, [priorityFilter, projectUseCases, search, statusFilter, user]);
+  }, [platformFilter, priorityFilter, projectUseCases, search, statusFilter, tagFilter, user]);
 
   useFocusEffect(useCallback(() => void load(), [load]));
 
@@ -77,7 +88,20 @@ export default function ProjectsScreen() {
     if (!user || !title.trim()) return;
     setBusy(true);
     try {
-      const workspace = createNewProjectWorkspace({ ownerId: user.uid, title, template, deviceId });
+      const workspace = createNewProjectWorkspace({
+        ownerId: user.uid,
+        title,
+        template,
+        deviceId,
+        status: createStatus,
+        priority: createPriority,
+        tags: createTags
+          .split(",")
+          .map((tag) => tag.trim())
+          .filter(Boolean),
+        targetDate: createTargetDate.trim() || null,
+        platforms: createPlatforms,
+      });
       const project = await projectUseCases.create(workspace);
       setCreateOpen(false);
       setTitle("");
@@ -145,6 +169,13 @@ export default function ProjectsScreen() {
           onChangeText={setSearch}
           placeholder="Başlık veya sonraki iş"
         />
+        <StoneInput
+          label="Etiket filtresi"
+          value={tagFilter}
+          onChangeText={setTagFilter}
+          placeholder="Örn. mobil"
+          autoCapitalize="none"
+        />
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -160,13 +191,20 @@ export default function ProjectsScreen() {
             variant="secondary"
             onPress={() => cyclePriorityFilter()}
           />
-          {statusFilter || priorityFilter ? (
+          <StoneButton
+            label={platformFilter ? `Platform: ${platformFilter}` : "Tüm platformlar"}
+            variant="secondary"
+            onPress={() => cyclePlatformFilter()}
+          />
+          {statusFilter || priorityFilter || tagFilter || platformFilter ? (
             <StoneButton
               label="Filtreleri temizle"
               variant="quiet"
               onPress={() => {
                 setStatusFilter(undefined);
                 setPriorityFilter(undefined);
+                setTagFilter("");
+                setPlatformFilter(undefined);
               }}
             />
           ) : null}
@@ -248,6 +286,57 @@ export default function ProjectsScreen() {
                   />
                 ))}
               </View>
+              <StoneText variant="label">Başlangıç durumu</StoneText>
+              <View style={styles.choices}>
+                {projectStatuses.map((option) => (
+                  <StoneButton
+                    key={option}
+                    label={projectStatusLabels[option]}
+                    variant={createStatus === option ? "primary" : "secondary"}
+                    onPress={() => setCreateStatus(option)}
+                  />
+                ))}
+              </View>
+              <StoneText variant="label">Öncelik</StoneText>
+              <View style={styles.choices}>
+                {projectPriorities.map((option) => (
+                  <StoneButton
+                    key={option}
+                    label={projectPriorityLabels[option]}
+                    variant={createPriority === option ? "primary" : "secondary"}
+                    onPress={() => setCreatePriority(option)}
+                  />
+                ))}
+              </View>
+              <StoneInput
+                label="Etiketler (virgülle ayırın)"
+                value={createTags}
+                onChangeText={setCreateTags}
+                placeholder="mobil, oyun"
+              />
+              <StoneInput
+                label="Hedef tarih (YYYY-MM-DD)"
+                value={createTargetDate}
+                onChangeText={setCreateTargetDate}
+                placeholder="2026-09-30"
+              />
+              <StoneText variant="label">Platformlar</StoneText>
+              <View style={styles.choices}>
+                {projectPlatforms.map((platform) => (
+                  <StoneButton
+                    key={platform}
+                    label={platform}
+                    variant={createPlatforms.includes(platform) ? "primary" : "secondary"}
+                    onPress={() =>
+                      setCreatePlatforms((current) =>
+                        current.includes(platform)
+                          ? current.filter((item) => item !== platform)
+                          : [...current, platform],
+                      )
+                    }
+                  />
+                ))}
+              </View>
               <StoneButton
                 label="Oluştur"
                 onPress={() => void createProject()}
@@ -271,6 +360,12 @@ export default function ProjectsScreen() {
     const current = priorityFilter ? projectPriorities.indexOf(priorityFilter) : -1;
     const next = current + 1;
     setPriorityFilter(next >= projectPriorities.length ? undefined : projectPriorities[next]);
+  }
+
+  function cyclePlatformFilter() {
+    const current = platformFilter ? projectPlatforms.indexOf(platformFilter) : -1;
+    const next = current + 1;
+    setPlatformFilter(next >= projectPlatforms.length ? undefined : projectPlatforms[next]);
   }
 }
 

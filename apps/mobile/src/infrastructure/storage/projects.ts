@@ -24,8 +24,10 @@ import {
   calculateTaskProgress,
   extractTasks,
   normalizeMarkdown,
+  serializeStoneTaskMetadata,
   toggleTask,
   updateProjectFrontmatter,
+  updateTaskMetadata,
   updateVersionFrontmatter,
 } from "@stone/markdown";
 import { StorageError } from "@stone/domain";
@@ -302,6 +304,8 @@ export class SQLiteProjectRepository implements ProjectRepository {
         );
         await this.insertDocument(input.document);
         await this.replaceTaskIndex(input.document, input.version.projectId, input.version.id);
+        const project = await this.requireProject(input.version.ownerId, input.version.projectId);
+        await this.touchProject(project, input.version.updatedByDeviceId);
       });
       return input.version;
     });
@@ -360,6 +364,8 @@ export class SQLiteProjectRepository implements ProjectRepository {
           id,
         );
         await this.replaceTaskIndex({ ...document, markdown });
+        const project = await this.requireProject(ownerId, current.projectId);
+        await this.touchProject(project, deviceId);
         updated = next;
       });
       if (!updated) throw new StorageError("Version update did not complete.");
@@ -412,10 +418,12 @@ export class SQLiteProjectRepository implements ProjectRepository {
         );
         if (!refreshed) throw new StorageError("Task index update did not complete.");
         result = toTask(refreshed);
-        if (indexed.version_id) await this.refreshVersionProgress(indexed.version_id, ownerId);
+        if (indexed.version_id) {
+          await this.refreshVersionProgress(indexed.version_id, ownerId, deviceId);
+        }
         if (indexed.project_id) {
           const project = await this.requireProject(ownerId, indexed.project_id);
-          await this.refreshHealth(project);
+          await this.refreshHealth(await this.touchProject(project, deviceId));
         }
       });
       if (!result) throw new StorageError("Task update did not complete.");
@@ -434,7 +442,11 @@ export class SQLiteProjectRepository implements ProjectRepository {
     });
   }
 
-  public async addBlocker(ownerId: string, blocker: ProjectBlocker): Promise<ProjectBlocker> {
+  public async addBlocker(
+    ownerId: string,
+    blocker: ProjectBlocker,
+    deviceId: string,
+  ): Promise<ProjectBlocker> {
     return withStorageError(async () => {
       const project = await this.requireProject(ownerId, blocker.projectId);
       await this.database.withTransactionAsync(async () => {
@@ -452,17 +464,27 @@ export class SQLiteProjectRepository implements ProjectRepository {
         const document = await this.requireDocument(project.ownerId, project.canonicalDocumentId);
         const updatedDocument = await this.updateDocument(
           document,
-          appendToSection(document.markdown, "## Blocker'lar", `\n- [ ] ${blocker.text}`),
+          appendToSection(
+            document.markdown,
+            "## Blocker'lar",
+            `\n- [ ] ${blocker.text}\n${serializeBlockerMetadata(blocker)}`,
+          ),
           document.title,
-          project.updatedByDeviceId,
+          deviceId,
         );
         await this.replaceTaskIndex(updatedDocument, project.id);
+        await this.refreshHealth(await this.touchProject(project, deviceId));
       });
       return blocker;
     });
   }
 
-  public async resolveBlocker(ownerId: string, id: string, resolvedAt: string): Promise<void> {
+  public async resolveBlocker(
+    ownerId: string,
+    id: string,
+    resolvedAt: string,
+    deviceId: string,
+  ): Promise<void> {
     return withStorageError(async () => {
       const row = await this.database.getFirstAsync<BlockerRow>(
         "SELECT id, owner_id, project_id, task_id, text, resolved, created_at, resolved_at FROM project_blockers WHERE owner_id = ? AND id = ?",
@@ -479,13 +501,31 @@ export class SQLiteProjectRepository implements ProjectRepository {
         );
         const project = await this.requireProject(ownerId, row.project_id);
         const document = await this.requireDocument(ownerId, project.canonicalDocumentId);
+        const task = extractTasks(document.markdown).find(
+          (candidate) => candidate.metadata?.id === row.id || candidate.text === row.text,
+        );
+        let markdown = task
+          ? toggleTask(document.markdown, task, true)
+          : replaceFirst(document.markdown, `- [ ] ${row.text}`, `- [x] ${row.text}`);
+        const refreshedTask = task
+          ? extractTasks(markdown).find(
+              (candidate) => candidate.metadata?.id === row.id || candidate.text === row.text,
+            )
+          : undefined;
+        if (refreshedTask) {
+          markdown = updateTaskMetadata(markdown, refreshedTask, {
+            blocked: false,
+            blocker: null,
+          });
+        }
         const updatedDocument = await this.updateDocument(
           document,
-          replaceFirst(document.markdown, `- [ ] ${row.text}`, `- [x] ${row.text}`),
+          markdown,
           document.title,
-          project.updatedByDeviceId,
+          deviceId,
         );
         await this.replaceTaskIndex(updatedDocument, project.id);
+        await this.refreshHealth(await this.touchProject(project, deviceId));
       });
     });
   }
@@ -550,19 +590,24 @@ export class SQLiteProjectRepository implements ProjectRepository {
       if (!documentRow) throw new StorageError("Decision log not found.");
       const document = toDocument(documentRow);
       const section = `\n## ${decision.date} — ${decision.title}\n\n### Karar\n\n${decision.decision}\n\n### Neden\n\n${decision.reason || "-"}\n\n### Alternatifler\n\n${decision.alternatives || "-"}\n\n### Sonuç\n\n${decision.outcome || "-"}\n`;
-      return this.updateDocument(
+      const updated = await this.updateDocument(
         document,
         `${normalizeMarkdown(document.markdown)}${section}`,
         document.title,
         deviceId,
       );
+      await this.refreshHealth(await this.touchProject(project, deviceId));
+      return updated;
     });
   }
 
   public async today(ownerId: string, now: string): Promise<readonly TodayItem[]> {
     const projects = await this.list(ownerId);
     const tasks = await this.tasks(ownerId);
-    return buildTodayItems(projects, tasks, now.slice(0, 10));
+    const blockers = (
+      await Promise.all(projects.map((project) => this.blockers(ownerId, project.id)))
+    ).flat();
+    return buildTodayItems(projects, tasks, now.slice(0, 10), blockers);
   }
 
   public async exportProject(
@@ -726,7 +771,11 @@ export class SQLiteProjectRepository implements ProjectRepository {
     return row?.id ?? null;
   }
 
-  private async refreshVersionProgress(versionId: string, ownerId: string): Promise<void> {
+  private async refreshVersionProgress(
+    versionId: string,
+    ownerId: string,
+    deviceId: string,
+  ): Promise<void> {
     const version = await this.requireVersion(ownerId, versionId);
     const progress = await this.database.getFirstAsync<{ completed: number; total: number }>(
       "SELECT COALESCE(SUM(completed), 0) AS completed, COUNT(*) AS total FROM tasks_index WHERE owner_id = ? AND version_id = ? AND canceled = 0",
@@ -734,9 +783,11 @@ export class SQLiteProjectRepository implements ProjectRepository {
       versionId,
     );
     await this.database.runAsync(
-      "UPDATE versions SET completed_tasks = ?, total_tasks = ? WHERE owner_id = ? AND id = ?",
+      "UPDATE versions SET completed_tasks = ?, total_tasks = ?, revision = revision + 1, updated_at = ?, updated_by_device_id = ? WHERE owner_id = ? AND id = ?",
       progress?.completed ?? 0,
       progress?.total ?? 0,
+      new Date().toISOString(),
+      deviceId,
       ownerId,
       version.id,
     );
@@ -745,6 +796,11 @@ export class SQLiteProjectRepository implements ProjectRepository {
   private async refreshHealth(project: Project): Promise<Project> {
     const taskCounts = await this.database.getFirstAsync<{ open_tasks: number; critical: number }>(
       "SELECT COALESCE(SUM(CASE WHEN completed = 0 AND canceled = 0 THEN 1 ELSE 0 END), 0) AS open_tasks, COALESCE(SUM(CASE WHEN completed = 0 AND canceled = 0 AND blocked = 1 AND priority = 'critical' THEN 1 ELSE 0 END), 0) AS critical FROM tasks_index WHERE owner_id = ? AND project_id = ?",
+      project.ownerId,
+      project.id,
+    );
+    const blockerCounts = await this.database.getFirstAsync<{ open_blockers: number }>(
+      "SELECT COUNT(*) AS open_blockers FROM project_blockers WHERE owner_id = ? AND project_id = ? AND resolved = 0",
       project.ownerId,
       project.id,
     );
@@ -757,7 +813,7 @@ export class SQLiteProjectRepository implements ProjectRepository {
       project,
       {
         openTasks: taskCounts?.open_tasks ?? 0,
-        openCriticalBlockers: taskCounts?.critical ?? 0,
+        openCriticalBlockers: (taskCounts?.critical ?? 0) + (blockerCounts?.open_blockers ?? 0),
         missingStoreChecklist:
           project.status === "store_process" &&
           (!checklist || calculateTaskProgress(checklist.markdown).total === 0),
@@ -774,6 +830,24 @@ export class SQLiteProjectRepository implements ProjectRepository {
       );
     }
     return { ...project, health: health.health };
+  }
+
+  private async touchProject(project: Project, deviceId: string): Promise<Project> {
+    const next: Project = {
+      ...project,
+      revision: project.revision + 1,
+      updatedAt: new Date().toISOString(),
+      updatedByDeviceId: deviceId,
+    };
+    await this.database.runAsync(
+      "UPDATE projects SET revision = ?, updated_at = ?, updated_by_device_id = ? WHERE owner_id = ? AND id = ?",
+      next.revision,
+      next.updatedAt,
+      next.updatedByDeviceId,
+      project.ownerId,
+      project.id,
+    );
+    return next;
   }
 
   private async requireProject(ownerId: string, id: string): Promise<Project> {
@@ -930,6 +1004,14 @@ function replaceFirst(markdown: string, search: string, replacement: string): st
   return index < 0
     ? markdown
     : `${markdown.slice(0, index)}${replacement}${markdown.slice(index + search.length)}`;
+}
+
+function serializeBlockerMetadata(blocker: ProjectBlocker): string {
+  return serializeStoneTaskMetadata({
+    id: blocker.id,
+    blocked: true,
+    blocker: blocker.text,
+  });
 }
 
 function documentPath(project: Project, document: Document): string {

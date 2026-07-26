@@ -238,8 +238,8 @@ export interface ProjectRepository {
     deviceId: string,
   ): Promise<ProjectTask>;
   blockers(ownerId: string, projectId: string): Promise<readonly ProjectBlocker[]>;
-  addBlocker(ownerId: string, blocker: ProjectBlocker): Promise<ProjectBlocker>;
-  resolveBlocker(ownerId: string, id: string, resolvedAt: string): Promise<void>;
+  addBlocker(ownerId: string, blocker: ProjectBlocker, deviceId: string): Promise<ProjectBlocker>;
+  resolveBlocker(ownerId: string, id: string, resolvedAt: string, deviceId: string): Promise<void>;
   addInboxItem(ownerId: string, text: string, deviceId: string): Promise<Document>;
   addDecision(ownerId: string, decision: ProjectDecision, deviceId: string): Promise<Document>;
   today(ownerId: string, now: string): Promise<readonly TodayItem[]>;
