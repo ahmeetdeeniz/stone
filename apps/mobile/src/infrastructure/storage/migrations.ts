@@ -24,4 +24,14 @@ export const migrations: readonly Migration[] = [
       "CREATE TABLE IF NOT EXISTS migrations (version INTEGER PRIMARY KEY NOT NULL, applied_at TEXT NOT NULL)",
     ],
   },
+  {
+    version: 2,
+    statements: [
+      "CREATE VIRTUAL TABLE IF NOT EXISTS documents_fts USING fts5(document_id UNINDEXED, owner_id UNINDEXED, title, markdown)",
+      "INSERT INTO documents_fts (document_id, owner_id, title, markdown) SELECT d.id, d.owner_id, d.title, d.markdown FROM documents d WHERE d.deleted_at IS NULL AND NOT EXISTS (SELECT 1 FROM documents_fts f WHERE f.document_id = d.id)",
+      "CREATE TABLE IF NOT EXISTS document_drafts (document_id TEXT PRIMARY KEY NOT NULL, owner_id TEXT NOT NULL, markdown TEXT NOT NULL, updated_at TEXT NOT NULL, selection_from INTEGER NOT NULL DEFAULT 0, selection_to INTEGER NOT NULL DEFAULT 0)",
+      "CREATE INDEX IF NOT EXISTS documents_owner_updated_idx ON documents (owner_id, deleted_at, updated_at DESC)",
+      "CREATE INDEX IF NOT EXISTS document_revisions_document_idx ON document_revisions (document_id, revision DESC)",
+    ],
+  },
 ];

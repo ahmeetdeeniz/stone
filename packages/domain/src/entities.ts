@@ -62,6 +62,57 @@ export interface SettingsRepository {
   save(settings: UserSettings): Promise<void>;
 }
 
+export interface NoteListOptions {
+  includeDeleted?: boolean;
+  pinnedOnly?: boolean;
+  search?: string;
+  limit?: number;
+}
+
+export interface DocumentRevision {
+  id: string;
+  documentId: string;
+  revision: number;
+  markdown: string;
+  createdAt: string;
+}
+
+export interface NoteDraft {
+  documentId: string;
+  ownerId: string;
+  markdown: string;
+  updatedAt: string;
+  selectionFrom: number;
+  selectionTo: number;
+}
+
+export interface NoteRepository {
+  create(document: Document): Promise<Document>;
+  getById(ownerId: string, id: string, includeDeleted?: boolean): Promise<Document | null>;
+  list(ownerId: string, options?: NoteListOptions): Promise<readonly Document[]>;
+  updateMarkdown(
+    ownerId: string,
+    id: string,
+    markdown: string,
+    deviceId: string,
+  ): Promise<Document>;
+  rename(ownerId: string, id: string, title: string, deviceId: string): Promise<Document>;
+  setPinned(ownerId: string, id: string, pinned: boolean, deviceId: string): Promise<Document>;
+  softDelete(ownerId: string, id: string, deviceId: string): Promise<Document>;
+  restore(ownerId: string, id: string, deviceId: string): Promise<Document>;
+  permanentlyDelete(ownerId: string, id: string): Promise<void>;
+  revisions(ownerId: string, id: string): Promise<readonly DocumentRevision[]>;
+  restoreRevision(
+    ownerId: string,
+    id: string,
+    revision: number,
+    deviceId: string,
+  ): Promise<Document>;
+  getDraft(ownerId: string, documentId: string): Promise<NoteDraft | null>;
+  saveDraft(draft: NoteDraft): Promise<void>;
+  clearDraft(ownerId: string, documentId: string): Promise<void>;
+}
+
 export interface DeviceRepository {
   getOrCreate(input: Omit<Device, "lastSeenAt">): Promise<Device>;
   bindOwner(id: string, ownerId: string): Promise<void>;
