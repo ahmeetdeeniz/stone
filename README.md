@@ -49,6 +49,18 @@ To use it locally:
 
 The desktop app stores local data in its Tauri application data directory, uses the Windows credential store for Firebase refresh tokens, and links only Markdown files selected by the user. Each self-hosted installation must use its own Firebase project and may configure its own mobile package and iOS bundle identifiers.
 
+### GitHub desktop setup
+
+The desktop GitHub integration uses GitHub OAuth Device Flow. Create your own GitHub OAuth App, enable Device Flow, and set only its public client ID in the local root `.env` file:
+
+```text
+VITE_GITHUB_CLIENT_ID=your-own-github-oauth-app-client-id
+```
+
+Do not add a GitHub client secret, access token, or personal credential to the repository. The app stores the resulting access token only in the operating system credential store. Each self-hosted user connects their own GitHub account, and repository access follows that account's GitHub permissions. Run `pnpm desktop:dev` from the repository root to test the flow locally.
+
+Stone performs repository listing, cloning, pull, status, and reviewed stage/commit/push through the user's local Git installation. Force push, reset, clean, branch deletion, rebase, merge, and automatic conflict resolution are intentionally unavailable.
+
 ## Dağıtım modeli
 
 - Stone, Google Play Store'da veya public App Store listesinde dağıtılmaz.

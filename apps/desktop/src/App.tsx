@@ -3,6 +3,7 @@ import { EditorView } from "@codemirror/view";
 import { createEditorState } from "@stone/editor";
 import { normalizeMarkdown } from "@stone/markdown";
 import { listen } from "@tauri-apps/api/event";
+import GithubPanel from "./GithubPanel";
 import {
   config,
   desktopApi,
@@ -489,12 +490,7 @@ function StoneShell({ session, onSignedOut }: { session: AuthSession; onSignedOu
             </section>
           </div>
         )}
-        {section === "projects" && (
-          <Placeholder
-            title="Projeler"
-            detail="Proje takip ekranları bu masaüstü temelinin sonraki ürün adımında açılacak."
-          />
-        )}
+        {section === "projects" && <GithubPanel />}
         {section === "today" && (
           <Placeholder
             title="Bugün"

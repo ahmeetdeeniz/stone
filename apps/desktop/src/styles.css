@@ -422,3 +422,163 @@ nav {
   border: 1px solid var(--line);
   border-radius: 14px;
 }
+.github-panel {
+  max-width: 1120px;
+  padding: 24px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+}
+.panel-heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 13px;
+  margin-bottom: 22px;
+}
+.panel-heading h2,
+.panel-heading p {
+  margin-bottom: 4px;
+}
+.github-toolbar,
+.section-heading,
+.restore-controls,
+.restore-root {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.github-toolbar {
+  justify-content: flex-end;
+  margin: -51px 0 24px;
+}
+.github-toolbar .secondary-button {
+  margin-left: auto;
+}
+.github-section {
+  padding-top: 18px;
+  margin-top: 18px;
+  border-top: 1px solid var(--line);
+}
+.section-heading {
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 15px;
+}
+.section-heading h3 {
+  margin: 0 0 4px;
+  font-size: 16px;
+}
+.section-heading p {
+  margin: 0;
+  font-size: 12px;
+}
+.repo-list,
+.restore-results {
+  display: grid;
+  gap: 7px;
+}
+.repo-row,
+.restore-result {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+}
+.repo-row > input {
+  width: 17px;
+  height: 17px;
+  accent-color: var(--accent);
+}
+.repo-main {
+  display: grid;
+  flex: 1;
+  gap: 3px;
+  min-width: 0;
+}
+.repo-main span,
+.repo-main small {
+  color: var(--muted);
+  font-size: 11px;
+}
+.repo-actions {
+  display: flex;
+  gap: 6px;
+}
+.restore-controls {
+  justify-content: space-between;
+  flex-wrap: wrap;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+.restore-root {
+  min-width: 280px;
+  flex: 1;
+}
+.restore-root span {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.device-card {
+  display: grid;
+  gap: 8px;
+  margin: 16px 0;
+  padding: 18px;
+  background: var(--surface-strong);
+  border-radius: 10px;
+}
+.device-card strong {
+  font-family: ui-monospace, monospace;
+  font-size: 24px;
+  letter-spacing: 0.12em;
+}
+.device-card span {
+  color: var(--muted);
+  font-size: 12px;
+}
+.restore-result {
+  flex-wrap: wrap;
+}
+.restore-result strong {
+  min-width: 220px;
+  flex: 1;
+}
+.result-cloned {
+  color: #26754d;
+}
+.result-failed {
+  color: #aa2e4c;
+}
+.result-cancelled {
+  color: #8b4a00;
+}
+.warning-text {
+  color: #8b4a00;
+  font-size: 11px;
+}
+.review-card pre {
+  max-height: 180px;
+  overflow: auto;
+  padding: 12px;
+  color: var(--muted);
+  background: var(--surface-strong);
+  border-radius: 8px;
+  font-size: 12px;
+  white-space: pre-wrap;
+}
+
+.review-files {
+  display: grid;
+  gap: 8px;
+}
+
+.review-file {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}

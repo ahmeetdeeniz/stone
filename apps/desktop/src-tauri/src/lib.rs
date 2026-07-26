@@ -9,11 +9,15 @@ use std::{
     collections::HashMap,
     fs,
     path::{Path, PathBuf},
+    process::Command,
     sync::Mutex,
     time::UNIX_EPOCH,
 };
 use tauri::{AppHandle, Emitter, Manager, State};
 use uuid::Uuid;
+
+mod git;
+mod github;
 
 const MAX_MARKDOWN_BYTES: u64 = 10 * 1024 * 1024;
 const KEYCHAIN_SERVICE: &str = "com.imtempra.stone";
@@ -25,6 +29,7 @@ struct Database {
 }
 struct Watchers(Mutex<HashMap<String, RecommendedWatcher>>);
 struct AuthState(Mutex<Option<AuthSession>>);
+struct RestoreCancellation(Mutex<std::collections::HashSet<String>>);
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -127,6 +132,48 @@ struct FirebaseError {
     message: String,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct GitHubLinkInput {
+    project_id: String,
+    repository: github::GitHubRepository,
+    local_path: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct GitHubLink {
+    project_id: String,
+    repository: github::GitHubRepository,
+    local_path: Option<String>,
+    updated_at: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct RestoreRepositoryInput {
+    full_name: String,
+    size_kb: u64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct RestoreItemResult {
+    full_name: String,
+    status: String,
+    path: Option<String>,
+    error: Option<String>,
+    warnings: Vec<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct RestoreSummary {
+    run_id: String,
+    cancelled: bool,
+    results: Vec<RestoreItemResult>,
+}
+
 pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
@@ -139,6 +186,9 @@ pub fn run() {
             app.manage(Mutex::new(database));
             app.manage(Watchers(Mutex::new(HashMap::new())));
             app.manage(AuthState(Mutex::new(None)));
+            app.manage(RestoreCancellation(Mutex::new(
+                std::collections::HashSet::new(),
+            )));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -160,7 +210,25 @@ pub fn run() {
             auth_restore,
             auth_password_reset,
             auth_sign_out,
-            sync_now
+            sync_now,
+            github_device_start,
+            github_device_poll,
+            github_status,
+            github_disconnect,
+            github_list_repositories,
+            github_link_repository,
+            github_list_links,
+            git_system_version,
+            git_status,
+            git_review,
+            git_pull,
+            git_stage_commit_push,
+            git_clone,
+            restore_disk_check,
+            restore_repositories,
+            cancel_restore,
+            open_external_path,
+            open_github_url
         ])
         .run(tauri::generate_context!())
         .expect("error while running Stone");
@@ -181,6 +249,14 @@ impl Database {
             connection.pragma_update(None, "user_version", 1_i64)?;
             connection.execute(
                 "INSERT OR IGNORE INTO migrations(version, applied_at) VALUES(1, ?1)",
+                [Utc::now().to_rfc3339()],
+            )?;
+        }
+        if current < 2 {
+            connection.execute_batch("CREATE TABLE IF NOT EXISTS github_links (project_id TEXT PRIMARY KEY, repository_id INTEGER NOT NULL, full_name TEXT NOT NULL, name TEXT NOT NULL, private INTEGER NOT NULL, html_url TEXT NOT NULL, clone_url TEXT NOT NULL, ssh_url TEXT NOT NULL, size_kb INTEGER NOT NULL, default_branch TEXT NOT NULL, visibility TEXT, local_path TEXT, updated_at TEXT NOT NULL); CREATE INDEX IF NOT EXISTS github_links_repository_id ON github_links(repository_id);")?;
+            connection.pragma_update(None, "user_version", 2_i64)?;
+            connection.execute(
+                "INSERT OR IGNORE INTO migrations(version, applied_at) VALUES(2, ?1)",
                 [Utc::now().to_rfc3339()],
             )?;
         }
@@ -962,4 +1038,321 @@ async fn sync_now(
         conflicts,
         offline: false,
     })
+}
+
+fn github_token() -> Result<String, String> {
+    github::token()?.ok_or_else(|| "GitHub hesabı bağlı değil.".to_owned())
+}
+
+#[tauri::command]
+async fn github_device_start(client_id: String) -> Result<github::GitHubDeviceStart, String> {
+    github::device_start(client_id).await
+}
+
+#[tauri::command]
+async fn github_device_poll(
+    client_id: String,
+    device_code: String,
+) -> Result<github::GitHubDevicePoll, String> {
+    github::device_poll(client_id, device_code).await
+}
+
+#[tauri::command]
+async fn github_status() -> Result<Option<github::GitHubAccount>, String> {
+    github::status().await
+}
+
+#[tauri::command]
+fn github_disconnect() -> Result<(), String> {
+    github::disconnect()
+}
+
+#[tauri::command]
+async fn github_list_repositories(page: u32) -> Result<github::GitHubRepositoryPage, String> {
+    github::repositories(page).await
+}
+
+fn validate_github_repository(repository: &github::GitHubRepository) -> Result<(), String> {
+    let mut parts = repository.full_name.split('/');
+    let owner = parts.next().unwrap_or_default();
+    let name = parts.next().unwrap_or_default();
+    if owner.is_empty()
+        || name.is_empty()
+        || parts.next().is_some()
+        || owner.contains('\\')
+        || owner.contains(':')
+        || name.contains('\\')
+        || name.contains(':')
+    {
+        return Err("GitHub repository adı güvenli değil.".to_owned());
+    }
+    let expected_html = format!("https://github.com/{}", repository.full_name);
+    let expected_clone = format!("https://github.com/{}.git", repository.full_name);
+    if repository.html_url != expected_html || repository.clone_url != expected_clone {
+        return Err("GitHub repository URL'i doğrulanamadı.".to_owned());
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn github_link_repository(
+    input: GitHubLinkInput,
+    state: State<'_, Mutex<Database>>,
+) -> Result<GitHubLink, String> {
+    validate_github_repository(&input.repository)?;
+    if input.project_id.trim().is_empty() {
+        return Err("Stone proje kimliği boş olamaz.".to_owned());
+    }
+    let timestamp = now();
+    let db = state.lock().map_err(|_| "Veritabanı kilidi alınamadı.")?;
+    db.connection
+        .execute("INSERT INTO github_links(project_id, repository_id, full_name, name, private, html_url, clone_url, ssh_url, size_kb, default_branch, visibility, local_path, updated_at) VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13) ON CONFLICT(project_id) DO UPDATE SET repository_id=excluded.repository_id, full_name=excluded.full_name, name=excluded.name, private=excluded.private, html_url=excluded.html_url, clone_url=excluded.clone_url, ssh_url=excluded.ssh_url, size_kb=excluded.size_kb, default_branch=excluded.default_branch, visibility=excluded.visibility, local_path=excluded.local_path, updated_at=excluded.updated_at", params![input.project_id, input.repository.id as i64, input.repository.full_name, input.repository.name, input.repository.private, input.repository.html_url, input.repository.clone_url, input.repository.ssh_url, input.repository.size_kb as i64, input.repository.default_branch, input.repository.visibility, input.local_path, timestamp])
+        .map_err(|error| error.to_string())?;
+    Ok(GitHubLink {
+        project_id: input.project_id,
+        repository: input.repository,
+        local_path: input.local_path,
+        updated_at: timestamp,
+    })
+}
+
+#[tauri::command]
+fn github_list_links(state: State<'_, Mutex<Database>>) -> Result<Vec<GitHubLink>, String> {
+    let db = state.lock().map_err(|_| "Veritabanı kilidi alınamadı.")?;
+    let mut statement = db.connection.prepare("SELECT project_id, repository_id, full_name, name, private, html_url, clone_url, ssh_url, size_kb, default_branch, visibility, local_path, updated_at FROM github_links ORDER BY updated_at DESC").map_err(|error| error.to_string())?;
+    let rows = statement
+        .query_map([], |row| {
+            let visibility: Option<String> = row.get(10)?;
+            Ok(GitHubLink {
+                project_id: row.get(0)?,
+                repository: github::GitHubRepository {
+                    id: row.get::<_, i64>(1)? as u64,
+                    name: row.get(3)?,
+                    full_name: row.get(2)?,
+                    private: row.get(4)?,
+                    html_url: row.get(5)?,
+                    clone_url: row.get(6)?,
+                    ssh_url: row.get(7)?,
+                    size_kb: row.get::<_, i64>(8)? as u64,
+                    default_branch: row.get(9)?,
+                    visibility,
+                    updated_at: row.get(12)?,
+                    permissions: None,
+                },
+                local_path: row.get(11)?,
+                updated_at: row.get(12)?,
+            })
+        })
+        .map_err(|error| error.to_string())?;
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn git_system_version() -> Result<String, String> {
+    git::system_version()
+}
+
+#[tauri::command]
+fn git_status(path: String) -> Result<git::GitStatus, String> {
+    git::status(path)
+}
+
+#[tauri::command]
+fn git_review(path: String) -> Result<git::GitReview, String> {
+    git::review(path)
+}
+
+#[tauri::command]
+fn git_pull(path: String) -> Result<git::GitOperationResult, String> {
+    let token = github_token()?;
+    git::pull(path, &token)
+}
+
+#[tauri::command]
+fn git_stage_commit_push(
+    path: String,
+    paths: Vec<String>,
+    message: String,
+) -> Result<git::GitOperationResult, String> {
+    let token = github_token()?;
+    git::stage_commit_push(path, paths, message, &token)
+}
+
+#[tauri::command]
+fn git_clone(
+    root: String,
+    full_name: String,
+    size_kb: u64,
+) -> Result<git::GitOperationResult, String> {
+    let token = github_token()?;
+    git::clone_repository(&root, &full_name, size_kb, &token, &|| false)
+}
+
+#[tauri::command]
+fn restore_disk_check(
+    root: String,
+    repositories: Vec<RestoreRepositoryInput>,
+) -> Result<u64, String> {
+    let required = repositories.into_iter().fold(0u64, |total, repository| {
+        total.saturating_add(
+            repository
+                .size_kb
+                .saturating_mul(1024)
+                .saturating_mul(2)
+                .max(50 * 1024 * 1024),
+        )
+    });
+    git::check_space(&root, required)
+}
+
+#[tauri::command]
+fn restore_repositories(
+    run_id: String,
+    root: String,
+    repositories: Vec<RestoreRepositoryInput>,
+    cancellation: State<'_, RestoreCancellation>,
+) -> Result<RestoreSummary, String> {
+    if run_id.trim().is_empty() || repositories.is_empty() {
+        return Err("Restore çalışması ve en az bir repository gerekli.".to_owned());
+    }
+    let token = github_token()?;
+    cancellation
+        .0
+        .lock()
+        .map_err(|_| "Restore kilidi alınamadı.")?
+        .remove(&run_id);
+    let required = repositories.iter().fold(0u64, |total, repository| {
+        total.saturating_add(
+            repository
+                .size_kb
+                .saturating_mul(1024)
+                .saturating_mul(2)
+                .max(50 * 1024 * 1024),
+        )
+    });
+    git::check_space(&root, required)?;
+    let mut results = Vec::new();
+    for repository in repositories {
+        let check_cancelled = || {
+            cancellation
+                .0
+                .lock()
+                .map(|values| values.contains(&run_id))
+                .unwrap_or(true)
+        };
+        if check_cancelled() {
+            results.push(RestoreItemResult {
+                full_name: repository.full_name,
+                status: "cancelled".to_owned(),
+                path: None,
+                error: None,
+                warnings: Vec::new(),
+            });
+            continue;
+        }
+        let path = PathBuf::from(&root).join(
+            repository
+                .full_name
+                .split('/')
+                .next_back()
+                .unwrap_or("repository"),
+        );
+        match git::clone_repository(
+            &root,
+            &repository.full_name,
+            repository.size_kb,
+            &token,
+            &check_cancelled,
+        ) {
+            Ok(result) => results.push(RestoreItemResult {
+                full_name: repository.full_name,
+                status: "cloned".to_owned(),
+                path: Some(path.to_string_lossy().into_owned()),
+                error: None,
+                warnings: result.warnings,
+            }),
+            Err(error) if check_cancelled() => results.push(RestoreItemResult {
+                full_name: repository.full_name,
+                status: "cancelled".to_owned(),
+                path: None,
+                error: None,
+                warnings: Vec::new(),
+            }),
+            Err(error) => results.push(RestoreItemResult {
+                full_name: repository.full_name,
+                status: "failed".to_owned(),
+                path: None,
+                error: Some(error),
+                warnings: Vec::new(),
+            }),
+        }
+    }
+    let cancelled = cancellation
+        .0
+        .lock()
+        .map(|values| values.contains(&run_id))
+        .unwrap_or(false);
+    cancellation
+        .0
+        .lock()
+        .map_err(|_| "Restore kilidi alınamadı.")?
+        .remove(&run_id);
+    Ok(RestoreSummary {
+        run_id,
+        cancelled,
+        results,
+    })
+}
+
+#[tauri::command]
+fn cancel_restore(
+    run_id: String,
+    cancellation: State<'_, RestoreCancellation>,
+) -> Result<(), String> {
+    cancellation
+        .0
+        .lock()
+        .map_err(|_| "Restore kilidi alınamadı.")?
+        .insert(run_id);
+    Ok(())
+}
+
+#[tauri::command]
+fn open_external_path(target: String, path: String) -> Result<(), String> {
+    let canonical =
+        fs::canonicalize(&path).map_err(|error| format!("Klasör/dosya açılamadı: {error}"))?;
+    let program = match target.as_str() {
+        "vscode" => "code",
+        "codex" => "codex",
+        _ => return Err("Bilinmeyen dış uygulama.".to_owned()),
+    };
+    Command::new(program)
+        .arg(canonical)
+        .spawn()
+        .map(|_| ())
+        .map_err(|error| format!("{program} başlatılamadı: {error}"))
+}
+
+#[tauri::command]
+fn open_github_url(url: String) -> Result<(), String> {
+    if !url.starts_with("https://github.com/") || url.contains(['\r', '\n', '"']) {
+        return Err("Yalnızca github.com HTTPS adresleri açılabilir.".to_owned());
+    }
+    #[cfg(windows)]
+    {
+        Command::new("explorer.exe")
+            .arg(url)
+            .spawn()
+            .map(|_| ())
+            .map_err(|error| error.to_string())
+    }
+    #[cfg(not(windows))]
+    {
+        Command::new("xdg-open")
+            .arg(url)
+            .spawn()
+            .map(|_| ())
+            .map_err(|error| error.to_string())
+    }
 }
