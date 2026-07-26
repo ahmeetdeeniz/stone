@@ -25,6 +25,7 @@ jobs:
       - run: pnpm verify:native-dependencies
       - run: pnpm verify:desktop
       - run: pnpm verify:github
+      - run: pnpm verify:public-boundary
       - run: pnpm desktop:build
       - run: pnpm verify:mcp
       - run: pnpm mcp:build
