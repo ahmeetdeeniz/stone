@@ -9,6 +9,10 @@ const rust = fs.readFileSync(path.join(root, "apps/desktop/src-tauri/src/lib.rs"
 const build = fs.readFileSync(path.join(root, "apps/desktop/src-tauri/build.rs"), "utf8");
 const viteConfig = fs.readFileSync(path.join(root, "apps/desktop/vite.config.ts"), "utf8");
 const envExample = fs.readFileSync(path.join(root, "apps/desktop/.env.example"), "utf8");
+const releaseWorkflow = fs.readFileSync(
+  path.join(root, ".github/workflows/desktop-release.yml"),
+  "utf8",
+);
 
 const requiredDependencies = [
   "@tauri-apps/api",
@@ -69,4 +73,30 @@ if (
 if (!tauri.bundle?.targets?.includes("nsis")) {
   throw new Error("Tauri bundle targets must include nsis.");
 }
+
+// Regression guard for the NSIS bundling invocation: `tauri build` treats its own first `--`
+// as the start of arguments forwarded to cargo, so `pnpm run <script> -- --bundles nsis`
+// makes `--bundles` land after that separator and get rejected by cargo.exe. The dedicated
+// script below bakes --bundles nsis directly into the command, so no extra `--` is ever
+// forwarded through pnpm at call sites.
+if (desktop.scripts?.["tauri:build:nsis"] !== "tauri build --bundles nsis") {
+  throw new Error(
+    'apps/desktop/package.json must define "tauri:build:nsis": "tauri build --bundles nsis".',
+  );
+}
+const workflowRunLines = releaseWorkflow
+  .split("\n")
+  .filter((line) => !line.trim().startsWith("#"))
+  .join("\n");
+if (!/run:\s*pnpm --filter @stone\/desktop run tauri:build:nsis\s*$/m.test(workflowRunLines)) {
+  throw new Error(
+    "desktop-release.yml must build the NSIS installer via `pnpm --filter @stone/desktop run tauri:build:nsis` with no extra arguments.",
+  );
+}
+if (/--\s+--bundles/.test(workflowRunLines)) {
+  throw new Error(
+    "desktop-release.yml must never forward --bundles after a `--` separator (it would be misrouted to cargo instead of the Tauri CLI).",
+  );
+}
+
 console.log("Desktop Tauri, dependency, storage, keychain, auth and linked-file wiring verified.");

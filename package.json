@@ -21,6 +21,7 @@
     "desktop:typecheck": "pnpm --filter @stone/desktop run typecheck",
     "desktop:test": "pnpm --filter @stone/desktop run test",
     "desktop:tauri:build": "pnpm --filter @stone/desktop run tauri:build",
+    "desktop:tauri:build:nsis": "pnpm --filter @stone/desktop run tauri:build:nsis",
     "verify:desktop": "node scripts/verify-desktop.mjs",
     "verify:github": "node scripts/verify-github-desktop.mjs",
     "verify:github:live": "node scripts/verify-github-live.mjs",

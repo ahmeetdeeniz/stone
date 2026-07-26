@@ -64,8 +64,13 @@ jobs:
       - run: pnpm verify:desktop
       - run: pnpm desktop:build
 
+      # Uses the dedicated tauri:build:nsis script (which already bakes in --bundles nsis)
+      # invoked with no extra arguments, rather than forwarding "-- --bundles nsis" through
+      # pnpm run: that pattern makes pnpm/Tauri's own "--" Cargo-argument separator land in
+      # front of --bundles, so Tauri forwards --bundles to cargo.exe instead of handling it
+      # itself, and cargo.exe rejects it ("unexpected argument '--bundles' found").
       - name: Build NSIS installer
-        run: pnpm --filter @stone/desktop run tauri:build -- --bundles nsis
+        run: pnpm --filter @stone/desktop run tauri:build:nsis
 
       - name: Compute installer checksums
         shell: pwsh

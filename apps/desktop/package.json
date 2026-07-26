@@ -10,7 +10,8 @@
     "typecheck": "tsc -b",
     "test": "vitest run src/desktop.test.ts",
     "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build"
+    "tauri:build": "tauri build",
+    "tauri:build:nsis": "tauri build --bundles nsis"
   },
   "dependencies": {
     "@codemirror/view": "^6.43.6",
