@@ -22,3 +22,10 @@ android/app/build/
 ios/build/
 ios/Pods/
 stone-codex-pack/
+
+# Private development documentation; keep these files local and out of the public repository.
+/AGENTS.md
+/PLAN.md
+/PROGRESS.md
+/docs/
+/goals/
