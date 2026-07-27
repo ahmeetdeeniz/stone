@@ -75,11 +75,25 @@ Stone performs repository listing, cloning, pull, status, and reviewed stage/com
 
 - installs the repository's pinned Node and pnpm versions and runs `pnpm install --frozen-lockfile`;
 - installs the stable Rust MSVC toolchain and restores pnpm/Cargo caches;
-- runs `pnpm format:check`, `pnpm typecheck`, `pnpm lint`, `pnpm test`, `pnpm verify:desktop`, and `pnpm desktop:build` before attempting the native build;
+- runs `pnpm format:check`, `pnpm typecheck`, `pnpm lint`, `pnpm test`, and `pnpm verify:desktop` before attempting the native build;
+- reports (configured/missing only, never the values) which desktop build-time Variables are set, then runs `pnpm desktop:build`;
 - builds only the NSIS bundle (`tauri build --bundles nsis`) and computes a SHA-256 checksum file next to the installer;
 - uploads the installer and checksum as a workflow artifact named `stone-desktop-windows-nsis`.
 
-No Firebase or GitHub OAuth credentials are configured in this workflow: the desktop app compiles with empty `VITE_*` values (see above), so no secrets are needed just to produce the installer, and none are embedded in the artifact. The workflow never commits generated installers back to the repository.
+No Firebase or GitHub OAuth **credentials** are configured in this workflow — no service-account JSON, client secret, access token, or signing credential is ever used. It compiles and produces a working installer with no configuration at all (see above). The workflow never commits generated installers back to the repository.
+
+#### Configuring a personal installer build (repository Variables)
+
+A public Firebase Web API key and GitHub OAuth App client ID are not secrets — they are client-side identifiers meant to ship inside the app itself — so they belong in **repository Variables**, not Secrets. If you maintain your own fork/release of Stone and want the GitHub Actions-built installer to come preconfigured (rather than shipping unconfigured and requiring end users to edit files by hand), set these under your repository's **Settings → Secrets and variables → Actions → Variables**:
+
+- `VITE_FIREBASE_API_KEY`
+- `VITE_FIREBASE_PROJECT_ID`
+- `VITE_FIREBASE_AUTH_DOMAIN`
+- `VITE_GITHUB_CLIENT_ID`
+
+`desktop-release.yml` maps these into one job-level `env:` block, so every step that builds the desktop frontend or the installer (`pnpm desktop:build` and `pnpm --filter @stone/desktop run tauri:build:nsis`, which runs the same frontend build via Tauri's `beforeBuildCommand`) sees identical values. **Vite embeds `VITE_*`-prefixed values directly into the built JavaScript bundle at build time** — that is the normal, intended place for a public client-side key to end up, the same as running a local build with `apps/desktop/.env.local` configured. This also means **changing a repository Variable only takes effect the next time the installer is built** — trigger a new `Desktop Windows Release` run (or push a new version tag) to bake in updated values; existing downloaded installers keep whatever was embedded when they were built.
+
+A "Report desktop build-time configuration status" step logs which of the four variables are configured or missing on each run — it never prints the values themselves. If a Variable is left unset (e.g. a public self-hoster's own fork with no Variables configured at all), the build still succeeds and produces a working installer that shows Stone's existing clear runtime configuration error instead of failing to compile. Repository-root `EXPO_PUBLIC_*` mobile variables are never read by this workflow.
 
 It runs on `workflow_dispatch` (manual trigger from the Actions tab) and on pushes of version tags matching `v*.*.*`. To download a build: open the repository's **Actions** tab on GitHub, select the **Desktop Windows Release** workflow, open the run you want, and download the `stone-desktop-windows-nsis` artifact from the run summary page.
 

@@ -3,6 +3,7 @@ import path from "node:path";
 
 const root = process.cwd();
 const readJson = (file) => JSON.parse(fs.readFileSync(path.join(root, file), "utf8"));
+const rootPackage = readJson("package.json");
 const desktop = readJson("apps/desktop/package.json");
 const tauri = readJson("apps/desktop/src-tauri/tauri.conf.json");
 const rust = fs.readFileSync(path.join(root, "apps/desktop/src-tauri/src/lib.rs"), "utf8");
@@ -11,6 +12,10 @@ const viteConfig = fs.readFileSync(path.join(root, "apps/desktop/vite.config.ts"
 const envExample = fs.readFileSync(path.join(root, "apps/desktop/.env.example"), "utf8");
 const releaseWorkflow = fs.readFileSync(
   path.join(root, ".github/workflows/desktop-release.yml"),
+  "utf8",
+);
+const envReportScript = fs.readFileSync(
+  path.join(root, "scripts/report-desktop-build-env.mjs"),
   "utf8",
 );
 
@@ -97,6 +102,61 @@ if (/--\s+--bundles/.test(workflowRunLines)) {
   throw new Error(
     "desktop-release.yml must never forward --bundles after a `--` separator (it would be misrouted to cargo instead of the Tauri CLI).",
   );
+}
+
+// Build-time desktop configuration: repository Variables must reach every step that builds
+// the frontend or the installer via one job-level `env:` block (not scattered per-step, and
+// never repository-root EXPO_PUBLIC_* mobile variables), and their values must never appear
+// anywhere in the workflow outside that single mapping.
+const desktopBuildVars = [
+  "VITE_FIREBASE_API_KEY",
+  "VITE_FIREBASE_PROJECT_ID",
+  "VITE_FIREBASE_AUTH_DOMAIN",
+  "VITE_GITHUB_CLIENT_ID",
+];
+if (/EXPO_PUBLIC_/.test(releaseWorkflow)) {
+  throw new Error(
+    "desktop-release.yml must never reference repository-root EXPO_PUBLIC_* mobile variables.",
+  );
+}
+for (const key of desktopBuildVars) {
+  if (!new RegExp(`^\\s{6}${key}: \\$\\{\\{ vars\\.${key} \\}\\}$`, "m").test(releaseWorkflow)) {
+    throw new Error(`desktop-release.yml is missing the job-level env mapping for ${key}.`);
+  }
+  const occurrences = releaseWorkflow.split(`vars.${key}`).length - 1;
+  if (occurrences !== 1) {
+    throw new Error(
+      `desktop-release.yml must reference vars.${key} exactly once (found ${occurrences}); ` +
+        "it must only ever appear in the job-level env mapping, never in a run/echo step.",
+    );
+  }
+}
+if (!/run:\s*pnpm run report:desktop-build-env\s*$/m.test(workflowRunLines)) {
+  throw new Error(
+    "desktop-release.yml must run `pnpm run report:desktop-build-env` before building the desktop frontend.",
+  );
+}
+if (
+  rootPackage.scripts?.["report:desktop-build-env"] !== "node scripts/report-desktop-build-env.mjs"
+) {
+  throw new Error(
+    'Root package.json must define "report:desktop-build-env": "node scripts/report-desktop-build-env.mjs".',
+  );
+}
+if (envReportScript.includes("console.log(process.env")) {
+  throw new Error(
+    "scripts/report-desktop-build-env.mjs must never print raw process.env values directly.",
+  );
+}
+for (const key of desktopBuildVars) {
+  if (
+    envReportScript.includes(`\${process.env.${key}}`) ||
+    envReportScript.includes(`\${process.env["${key}"]}`)
+  ) {
+    throw new Error(
+      `scripts/report-desktop-build-env.mjs must never interpolate the raw value of ${key}.`,
+    );
+  }
 }
 
 console.log("Desktop Tauri, dependency, storage, keychain, auth and linked-file wiring verified.");

@@ -8,6 +8,7 @@ export default defineConfig({
       "apps/desktop/src/**/*.test.ts",
       "services/mcp/src/**/*.test.ts",
       "firebase/**/*.test.ts",
+      "scripts/*.test.mjs",
     ],
     exclude: ["**/node_modules/**", "**/*.integration.test.ts"],
     passWithNoTests: false,

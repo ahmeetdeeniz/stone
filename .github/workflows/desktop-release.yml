@@ -19,6 +19,22 @@ concurrency:
 jobs:
   build-windows-installer:
     runs-on: windows-latest
+    # Job-level env (not step-level) so every step that builds the desktop frontend or the
+    # Tauri installer -- `pnpm desktop:build` and `pnpm --filter @stone/desktop run
+    # tauri:build:nsis` (which runs the same frontend build via Tauri's beforeBuildCommand) --
+    # sees identical values. These come from repository Variables (Settings > Secrets and
+    # variables > Actions > Variables), not Secrets: a Firebase Web API key and a GitHub OAuth
+    # App client ID are public, client-side identifiers by design, never a service-account
+    # credential, client secret, access token or signing credential. Vite bakes VITE_*-prefixed
+    # process.env values into the built bundle at build time (see apps/desktop/vite.config.ts),
+    # which is the normal, intended place these values end up. If these Variables are not
+    # configured (e.g. a public self-hoster's own fork), the build still succeeds and produces
+    # an installer that shows a clear runtime configuration error instead of failing to build.
+    env:
+      VITE_FIREBASE_API_KEY: ${{ vars.VITE_FIREBASE_API_KEY }}
+      VITE_FIREBASE_PROJECT_ID: ${{ vars.VITE_FIREBASE_PROJECT_ID }}
+      VITE_FIREBASE_AUTH_DOMAIN: ${{ vars.VITE_FIREBASE_AUTH_DOMAIN }}
+      VITE_GITHUB_CLIENT_ID: ${{ vars.VITE_GITHUB_CLIENT_ID }}
     steps:
       # Defense-in-depth alongside the repository's .gitattributes (the actual source of
       # truth for line endings): Git for Windows defaults to core.autocrlf=true, which would
@@ -55,13 +71,17 @@ jobs:
         with:
           workspaces: apps/desktop/src-tauri
 
-      # No Firebase or GitHub OAuth credentials are set here on purpose: the desktop app
-      # compiles with empty VITE_* values and shows a clear runtime configuration error
-      # instead of failing to build (see apps/desktop/src/desktop-api.ts).
       - run: pnpm format:check
       - run: pnpm lint
       - run: pnpm test
       - run: pnpm verify:desktop
+
+      # Reports only whether each variable is configured or missing -- never the values
+      # themselves -- so a run's log makes it obvious why an installer would show the runtime
+      # "not configured" error, without exposing anything.
+      - name: Report desktop build-time configuration status
+        run: pnpm run report:desktop-build-env
+
       - run: pnpm desktop:build
 
       # Uses the dedicated tauri:build:nsis script (which already bakes in --bundles nsis)
