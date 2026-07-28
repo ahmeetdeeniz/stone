@@ -1,180 +1,175 @@
 # Stone
 
-Stone; kişisel kullanım için tasarlanan, Markdown notlarını ve yazılım projelerini aynı yerde yöneten, cihazlar arasında eşitlenen sade bir çalışma alanıdır.
+**A calm, personal Markdown workspace for notes, projects, ink, and recovery across your own devices.**
 
-Stone'un deposu public ve self-host edilebilirdir. Maintainer'ın Firebase projesi veya kişisel build credential'ları ortak bir servis olarak sunulmaz; her kullanıcı kendi Firebase projesini ve kendi dağıtım hesaplarını bağlar.
+> **Public preview candidate.** Automated acceptance passes, but physical-device checks and
+> redistribution/license decisions remain open. See
+> [Public release readiness](PUBLIC-RELEASE-READINESS.md) before distributing source or binaries.
 
-Stone açık kaynaklı ve self-host edilebilir bir projedir. Kendi Firebase projenizi,
-uygulama kimliklerinizi ve dağıtım hesaplarınızı kullanarak yerel olarak çalıştırabilirsiniz.
+Stone keeps canonical text as portable Markdown while adding local project tracking, Today
+summaries, revision/conflict recovery, and editable `.stoneink` drawings. It is designed for one
+person—not teams, shared databases, or real-time collaboration—and uses infrastructure controlled
+by the self-hoster.
 
-## İlk sürümün özeti
+Stone does **not** provide a shared public backend. Every installation connects to its owner's
+Firebase project and, optionally, GitHub OAuth App and separately deployed MCP service.
 
-- Android ve iOS
-- React Native + Expo Development Build
-- TypeScript + Expo Router
-- Obsidian benzeri Live Preview Markdown editörü
-- Saf ve taşınabilir Markdown
-- Firebase Auth + Firestore
-- Cihazda SQLite tabanlı local-first veri
-- Notlar, projeler, sürümler, release checklist'leri
-- Kanban ve Bugün ekranı
-- Markdown içe/dışa aktarma
-- Açık/koyu tema
-- Bongita + Inter
-- Morumsu lacivert tasarım dili
+## Why Stone
 
-## Uygulanmış mobil sonrası yüzeyler
+- **Markdown stays Markdown.** Notes and project metadata remain exportable instead of becoming a
+  proprietary rich-text document.
+- **Local work comes first on mobile.** SQLite, durable drafts, an outbox, revisions, soft delete,
+  and explicit conflict handling protect edits when the network is unavailable.
+- **Projects live beside notes.** Portable frontmatter and task metadata drive project, version,
+  blocker, Kanban, and Today views.
+- **Ink remains editable.** Hybrid notes use a normal PNG reference plus an ignorable link to the
+  vector `.stoneink` source.
+- **You own the services.** Firebase, GitHub access, signing accounts, and MCP deployment belong to
+  the self-hoster.
 
-- Provider-neutral Stone MCP bağlantısı (ChatGPT Work, Claude, Claude Cowork ve uyumlu client'lar)
-- Windows/Tauri not editörü ve yerel Markdown klasörleri
-- GitHub repo listeleme, clone, pull, reviewed commit/push ve yeni bilgisayar restore
+## Product tour
 
-Desktop proje Markdown'ından salt-okunur durum/ilerleme/sürüm/blocker özetleri ve gerçek bir Bugün
-görünümü üretir; proje düzenleme/Kanban ile çizim/trash/revision/conflict akışlarında mobil ile tam
-parity sağlamaz.
-MCP için public deployment veya provider publication da repository tarafından otomatik olarak
-sağlanmaz; ikisi de aşağıdaki self-hosted kurulum sınırlarına tabidir.
+No screenshots are committed yet. The current asset-rights review is unresolved, and this
+environment did not complete the final privacy/accessibility capture pass. The exact owner capture
+list is in [the release checklist](public-docs/RELEASE-CHECKLIST.md#product-screenshots); mock images
+are not presented as product evidence.
 
-## Stone MCP
+## Current capabilities
 
-Stone MCP is a separately deployable, provider-neutral MCP service. The same authenticated tool contract is intended for ChatGPT Work, Claude, Claude Cowork and future standards-compatible MCP clients. It is not a maintainer-hosted backend: self-hosters connect their own Firebase project and supply their own server secrets.
+### Markdown workspace
 
-See [services/mcp/README.md](services/mcp/README.md) for local setup, Firebase Admin configuration, OAuth metadata, provider connection notes and deployment checks.
+- CodeMirror 6 Live Preview editing, search, formatting, tables, code, callouts, task lists, and
+  source-preserving frontmatter
+- Local note creation, rename, pin, full-text search, import/export, trash, drafts, and revisions
+- Turkish/Unicode content and valid `.md` / `.markdown` round trips
 
-## Windows desktop
+### Projects and Today
 
-Stone Windows desktop is a Tauri 2 development build. It is intended for direct installer or portable distribution, not a public app-store listing.
+- Markdown-backed projects, versions, release checklists, decisions, blockers, priorities, dates,
+  progress, Kanban, and Today ranking on mobile
+- Read-only project/version/blocker summaries and Today navigation on Windows
 
-To use it locally:
+### Ink, sync, and recovery
 
-1. Copy `apps/desktop/.env.example` to `apps/desktop/.env.local` and provide your own `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_PROJECT_ID`, and `VITE_FIREBASE_AUTH_DOMAIN`. Desktop env files live in `apps/desktop/` (not the monorepo root), so the mobile app's `EXPO_PUBLIC_*` variables never leak into the desktop bundle. `apps/desktop/.env.local` is ignored by Git; only `apps/desktop/.env.example` is committed as the public template.
-2. Keep the approved `apps/mobile/assets/fonts/Bongita-Regular.otf` asset in the repository; do not rename or replace it.
-3. Run `pnpm install`, then `pnpm desktop:dev`.
-4. Install the Visual C++ build tools and WebView2 when creating a Windows Tauri installer locally with `pnpm desktop:tauri:build`. A production NSIS installer can also be built without any local Windows toolchain via the `Desktop Windows Release` GitHub Actions workflow — see below.
+- Pressure-aware pen/highlighter strokes and vector shapes in `.stoneink`, with PNG previews
+- Firebase Auth, Firestore, and Storage sync using owner-scoped rules
+- Durable local-first mobile writes, revision history, soft delete, and explicit conflict handling
+- Versioned full-workspace export container; full-workspace restore UI is not implemented
 
-The desktop app stores local data in its Tauri application data directory, uses the Windows credential store for Firebase refresh tokens, waits for saved-session restoration before showing sign-in, and links only Markdown files selected by the user. Each self-hosted installation must use its own Firebase project and may configure its own mobile package and iOS bundle identifiers. The desktop app **compiles** without any Firebase configuration present (the values are simply empty at build time); signing in shows a clear "VITE_FIREBASE_API_KEY yapılandırılmamış" error at runtime instead of a confusing network failure if `apps/desktop/.env.local` was never configured.
+### Desktop, GitHub, and MCP
 
-### GitHub desktop setup
+- Windows/Tauri Markdown editing, linked local files, external-change detection, and credential
+  storage through Windows Credential Manager
+- GitHub Device Flow, repository listing/linking, clone, pull, status, reviewed commit/push, and
+  restore; destructive Git operations are intentionally excluded
+- Provider-neutral remote MCP service with OAuth, scoped tools, revisions, idempotency, and audit
+  records; deployment/provider publication is operator-owned
 
-The desktop GitHub integration uses GitHub OAuth Device Flow and never asks for or accepts a client secret, personal access token, or `gh` CLI login. Each self-hosted contributor creates and owns a single GitHub OAuth App:
+## Platform and parity
 
-1. On GitHub, go to Settings → Developer settings → OAuth Apps → New OAuth App.
-2. Give it any name and homepage URL; the callback URL is not used by Device Flow.
-3. Open the app's settings and enable "Device Flow".
-4. Copy the generated Client ID (not the client secret — Stone never uses it).
+| Surface       | Implemented                                                 | Automated evidence                                       | Manual status / limits                                                      |
+| ------------- | ----------------------------------------------------------- | -------------------------------------------------------- | --------------------------------------------------------------------------- |
+| Windows 10/11 | Editor, local files, sync, project summaries, Today, GitHub | Tests, web build, Rust checks, prior NSIS install/launch | Final visual/accessibility pass and live credential restart recheck pending |
+| Android       | Full mobile workspace, projects, sync, ink                  | Expo Doctor/export and unit/integration/rules tests      | Signed APK on a physical device pending                                     |
+| iOS           | Same React Native mobile implementation                     | Expo Doctor/iOS export                                   | Native private TestFlight and physical iPhone validation pending            |
+| Tablet/stylus | Responsive ink implementation                               | Schema, gesture, persistence, and large-fixture tests    | Physical Android tablet/iPad stylus validation pending                      |
+| MCP           | Provider-neutral server contract                            | Typecheck, tests, verifier, build                        | Hosting, credentials, and provider connection are operator tasks            |
 
-Set only that public client ID in `apps/desktop/.env.local` (never commit real values; `.env` and `.env.local` are ignored):
+“Implemented” does not mean production-certified. Windows lacks mobile project editing/Kanban,
+drawing, trash, revision, and conflict UI parity. macOS/Linux desktop apps are not supported.
 
-```text
-VITE_GITHUB_CLIENT_ID=your-own-github-oauth-app-client-id
+## Quick start
+
+Requirements: Node.js 22+, pnpm 11.17.0, Git, and platform toolchains only for native builds.
+
+```sh
+pnpm install --frozen-lockfile
+pnpm format:check
+pnpm lint
+pnpm typecheck
+pnpm test
+pnpm test:integration
 ```
 
-Do not add a GitHub client secret, access token, or personal credential to the repository. When you connect, Stone starts the real Device Flow, shows a verification URL and short code to enter at github.com, and polls until you authorize it. The resulting access token is stored only in the operating system credential store (Windows Credential Manager on desktop); disconnecting removes it. Each self-hosted user connects their own GitHub account, and repository access follows that account's GitHub permissions. Run `pnpm desktop:dev` from the repository root to test the flow locally.
+Unconfigured client builds are supported: desktop sign-in shows a clear configuration error, while
+mobile native Firebase use requires your own public client config and native Firebase files.
 
-Stone performs repository listing, cloning, pull, status, and reviewed stage/commit/push through the user's local Git installation. Force push, reset, clean, branch deletion, rebase, merge, and automatic conflict resolution are intentionally unavailable.
+- [Development and self-hosting setup](public-docs/SELF-HOSTING.md)
+- [Firebase, Firestore, Storage, rules, and deletion](public-docs/FIREBASE.md)
+- [Windows, Android, and private iOS builds](public-docs/BUILDS.md)
+- [GitHub Device Flow](public-docs/GITHUB.md)
+- [MCP setup](services/mcp/README.md)
+- [Backup, export, restore, updates, and troubleshooting](public-docs/OPERATIONS.md)
 
-### Production Windows installer (GitHub Actions)
+## Bring your own Firebase
 
-`.github/workflows/desktop-release.yml` builds the production Stone Windows installer (NSIS `setup.exe`) on a `windows-latest` GitHub-hosted runner. It:
+Stone uses Firebase Email/Password Auth, Firestore, and Storage. Copy the mobile
+[`.env.example`](.env.example), use public Web client identifiers from **your** Firebase project,
+and supply ignored native config files for Development Builds. Deploy this repository's rules and
+indexes before using real data.
 
-- installs the repository's pinned Node and pnpm versions and runs `pnpm install --frozen-lockfile`;
-- installs the stable Rust MSVC toolchain and restores pnpm/Cargo caches;
-- runs `pnpm format:check`, `pnpm typecheck`, `pnpm lint`, `pnpm test`, and `pnpm verify:desktop` before attempting the native build;
-- reports (configured/missing only, never the values) which desktop build-time Variables are set, then runs `pnpm desktop:build`;
-- builds only the NSIS bundle (`tauri build --bundles nsis`) and computes a SHA-256 checksum file next to the installer;
-- uploads the installer and checksum as a workflow artifact named `stone-desktop-windows-nsis`.
+Firebase Web API keys and app/client IDs are public identifiers embedded in client applications;
+they are not authorization. Never commit a service-account JSON, OAuth client secret, access or
+refresh token, signing key, provisioning profile, Apple credential, or EAS credential.
 
-No Firebase or GitHub OAuth **credentials** are configured in this workflow — no service-account JSON, client secret, access token, or signing credential is ever used. It compiles and produces a working installer with no configuration at all (see above). The workflow never commits generated installers back to the repository.
+## GitHub
 
-#### Configuring a personal installer build (repository Variables)
+Windows GitHub support uses an owner-created OAuth App with Device Flow enabled and only its public
+`VITE_GITHUB_CLIENT_ID`. Stone does not use a client secret or ask for a personal access token. It
+requests `repo` access (needed for private repositories and push), stores the resulting token in
+the OS credential store, and deletes it on disconnect. See [GitHub setup](public-docs/GITHUB.md).
 
-A public Firebase Web API key and GitHub OAuth App client ID are not secrets — they are client-side identifiers meant to ship inside the app itself — so they belong in **repository Variables**, not Secrets. If you maintain your own fork/release of Stone and want the GitHub Actions-built installer to come preconfigured (rather than shipping unconfigured and requiring end users to edit files by hand), set these under your repository's **Settings → Secrets and variables → Actions → Variables**:
+## Architecture
 
-- `VITE_FIREBASE_API_KEY`
-- `VITE_FIREBASE_PROJECT_ID`
-- `VITE_FIREBASE_AUTH_DOMAIN`
-- `VITE_GITHUB_CLIENT_ID`
+This pnpm workspace contains:
 
-`desktop-release.yml` maps these into one job-level `env:` block, so every step that builds the desktop frontend or the installer (`pnpm desktop:build` and `pnpm --filter @stone/desktop run tauri:build:nsis`, which runs the same frontend build via Tauri's `beforeBuildCommand`) sees identical values. **Vite embeds `VITE_*`-prefixed values directly into the built JavaScript bundle at build time** — that is the normal, intended place for a public client-side key to end up, the same as running a local build with `apps/desktop/.env.local` configured. This also means **changing a repository Variable only takes effect the next time the installer is built** — trigger a new `Desktop Windows Release` run (or push a new version tag) to bake in updated values; existing downloaded installers keep whatever was embedded when they were built.
+- `apps/mobile`: React Native, Expo Development Build, Expo Router, SQLite, and React Native
+  Firebase
+- `apps/desktop`: Tauri 2/Rust with a Vite/React editor surface, SQLite, local Git, and Windows
+  credential storage
+- `packages`: platform-independent TypeScript domain, Markdown, editor, sync, and ink contracts
+- `services/mcp`: separately deployed TypeScript MCP/OAuth service backed by the self-hoster's
+  Firebase project
 
-A "Report desktop build-time configuration status" step logs which of the four variables are configured or missing on each run — it never prints the values themselves. If a Variable is left unset (e.g. a public self-hoster's own fork with no Variables configured at all), the build still succeeds and produces a working installer that shows Stone's existing clear runtime configuration error instead of failing to compile. Repository-root `EXPO_PUBLIC_*` mobile variables are never read by this workflow.
+Mobile SQLite is the local source of truth. Firebase provides authenticated cross-device sync; it
+is not required to edit already-local mobile data. Desktop has a distinct implementation and does
+not claim complete mobile parity.
 
-It runs on `workflow_dispatch` (manual trigger from the Actions tab) and on pushes of version tags matching `v*.*.*`. To download a build: open the repository's **Actions** tab on GitHub, select the **Desktop Windows Release** workflow, open the run you want, and download the `stone-desktop-windows-nsis` artifact from the run summary page.
+## Privacy and security
 
-#### Live end-to-end verification against a disposable repository
+User content lives in local application storage and, when sync is configured, the owner's Firebase
+project. GitHub tokens and desktop Firebase refresh tokens use the Windows credential store; mobile
+device identity uses secure storage. Transport security and Firebase owner rules are enforced, but
+Stone does not currently provide end-to-end encryption or encrypted exports. Firebase operators
+can access data through their project administration surface.
 
-`pnpm verify:github` statically checks the GitHub integration's wiring (endpoints, safety boundaries, forbidden Git operations) and needs no credentials. It runs in CI.
+Read [SECURITY.md](SECURITY.md) before deployment or vulnerability reporting. Do not put secrets or
+private notes in public issues.
 
-`pnpm verify:github:live` is a separate, opt-in command that drives the same production GitHub/Git code against a real GitHub account and a disposable repository — Device Flow, keychain persistence, authenticated pagination, project linking, restore/clone, status/pull, and a reviewed stage/commit/push. It is intentionally **not** part of CI and never runs with real credentials automatically:
+## Preview limitations
 
-- It requires `VITE_GITHUB_CLIENT_ID` (from `apps/desktop/.env.local`) and an explicit `STONE_LIVE_E2E_REPO=<your-account>/<disposable-repo>` environment variable; without both it prints what is missing and exits successfully without making any network, keychain, or Git call.
-- Use a throwaway private repository you don't mind Stone pushing a small verification commit to (a `STONE_GOAL7_E2E.md` file with a timestamp) — never point it at a real project repository.
-- It prints a Device Flow verification URL and user code for you to authorize in a browser, then continues automatically; it never logs the resulting access token, device code, or keychain contents.
-- Restores happen in a unique temporary directory outside the Stone source tree, which is removed automatically when the run finishes.
+- Final visual/accessibility inspection, real Firebase/GitHub restart flows, signed Android
+  physical-device use, private TestFlight/iPhone use, and tablet stylus validation remain open.
+- The repository has no owner-approved root software license.
+- Redistribution rights for Bongita and the supplied `Icons/` PNGs are not evidenced in the
+  repository. Source and binary public distribution remain blocked until the owner resolves both
+  licensing items.
+- Mobile full-workspace restore UI, public iOS binaries, macOS/Linux desktop, and a maintainer-hosted
+  backend are not available.
+- MCP hosting and provider publication are not automatic.
 
-```text
-STONE_LIVE_E2E_REPO=your-account/your-disposable-repo pnpm verify:github:live
-```
+## Roadmap
 
-## Dağıtım modeli
+Possible post-preview directions include advanced tasks, calendar/time blocking, a focus timer,
+Android/iOS widgets, improved tablet layouts, and richer revision restore. They are not implemented
+commitments.
 
-- Stone, Google Play Store'da veya public App Store listesinde dağıtılmaz.
-- Android sürümü, kişisel olarak imzalanmış ve doğrudan kurulabilen bir APK'dır.
-- iOS sürümü, proje sahibinin Apple Developer hesabıyla private TestFlight kurulumu olarak dağıtılır.
-- Windows sürümü GitHub Actions tarafından üretilen NSIS installer ile doğrudan dağıtılabilir;
-  installer Windows'ta indirilmiş, kurulmuş ve başlatılmıştır.
-- Stone içindeki projelerin `Store Süreci`, release checklist'i ve Android/iOS release durumları bu dağıtım kararından bağımsız olarak kullanılmaya devam eder.
+## Contributing, support, and license
 
-## Paketi kullanma
+Read [CONTRIBUTING.md](CONTRIBUTING.md), [SUPPORT.md](SUPPORT.md), and
+[CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md). Security reports follow [SECURITY.md](SECURITY.md).
 
-### Tablet drawings
-
-Stone Ink drawings are stored as editable `.stoneink` vector sources plus PNG previews.
-Markdown notes use an ordinary image and an ignorable `stone-drawing` metadata comment, so
-the note remains portable outside Stone. The current tablet milestone requires Firebase
-Storage in your own Firebase project; no maintainer backend is used.
-
-Full workspace export uses a versioned `.stone-workspace.json` container so Markdown, manifest
-JSON, editable `.stoneink` sources and binary PNG previews retain their relative paths, encodings
-and MIME types. The parser contract is tested for round-trip and unsafe-path rejection; the
-mobile app does not yet expose a full-workspace restore UI.
-
-1. Boş bir GitHub reposu oluştur ve bu paketin içeriğini repo köküne kopyala.
-2. Onaylı `apps/mobile/assets/fonts/Bongita-Regular.otf` dosyasını koru; OTF uzantısını değiştirme.
-3. Kendi Firebase projenizi oluşturup Email/Password ve Firestore'u etkinleştir; `.env.example` dosyasını `.env` olarak kopyala, kendi `EXPO_PUBLIC_FIREBASE_*` değerlerini doldur ve kendi `google-services.json` ile `GoogleService-Info.plist` dosyalarını `apps/mobile/` altına koy.
-4. Kendi uygulama kimliklerini kullanacaksan `apps/mobile/app.json` içindeki `android.package` ve `ios.bundleIdentifier` değerlerini Firebase'de kaydettiğin benzersiz değerlerle değiştir. Resmi varsayılan kimlikler `com.imtempra.stone` değerleridir.
-5. Android için kişisel imzalı APK, iOS için proje sahibinin hesabıyla private TestFlight build'i üret.
-
-Kişisel `.env`, Firebase native config dosyaları, signing credential'ları, kullanıcı notları ve gerçek proje verileri Git'e eklenmemelidir. Bongita fontu repo içindeki `apps/mobile/assets/fonts/Bongita-Regular.otf` yolunda bulunmalıdır; indirilen veya sahte uzantılı bir font kullanılmaz.
-
-Goal 9B otomatik kabul kanıtı `GOAL-9B-ACCEPTANCE-REPORT.md`, fiziksel cihaz, gerçek credential ve
-görsel kontroller ise `GOAL-9B-MANUAL-ACCEPTANCE.md` içindedir. Manuel liste imzalanmadan Goal 9B
-tamamen kabul edilmiş sayılmaz.
-
-Repo, Bongita veya yerel `Icons/` PNG kaynakları için yeniden dağıtım lisansı ya da satın alma
-kanıtı içermez. Owner, binary'leri kişisel kullanım dışında paylaşmadan önce kaynak ve lisans
-koşullarını belgelemelidir.
-
-## Beklenen depo yapısı
-
-```text
-stone/
-├── apps/
-│   ├── mobile/
-│   └── desktop/
-├── packages/
-│   ├── domain/
-│   ├── markdown/
-│   ├── editor/
-│   └── sync/
-├── services/
-│   └── mcp/
-├── templates/
-└── README.md
-```
-
-## Önemli not
-
-Stone v1 bir Notion veya Obsidian klonu değildir. Ürün odağı:
-
-> Markdown'ı çok iyi düzenlemek, projeleri sade biçimde takip etmek ve aynı verilere bütün kişisel cihazlardan güvenle ulaşmak.
+**No open-source license has been approved or granted yet.** Copyright applies by default; cloning
+for review does not grant redistribution rights. The owner must choose a root software license and
+resolve bundled asset rights before making the repository public. See
+[the license decision note](public-docs/LICENSE-DECISION.md).

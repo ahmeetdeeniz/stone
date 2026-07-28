@@ -30,9 +30,12 @@ assert(
 );
 
 const readme = readFileSync(path.join(workspaceRoot, "README.md"), "utf8");
-const readmePrivateReferences = ["AGENTS.md", "PLAN.md", "PROGRESS.md", "docs/", "goals/"].filter(
+const readmePrivateReferences = ["AGENTS.md", "PLAN.md", "PROGRESS.md", "goals/"].filter(
   (reference) => readme.includes(reference),
 );
+if (/(?:^|[\s("'`])docs\//mu.test(readme)) {
+  readmePrivateReferences.push("docs/");
+}
 assert(
   readmePrivateReferences.length === 0,
   `Public README references private development paths: ${readmePrivateReferences.join(", ")}`,

@@ -28,6 +28,7 @@ ios/build/
 ios/Pods/
 stone-codex-pack/
 services/mcp/.env*
+!services/mcp/.env.example
 services/mcp/secrets/
 services/mcp/service-account*.json
 
