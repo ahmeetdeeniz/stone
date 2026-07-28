@@ -23,13 +23,15 @@ uygulama kimliklerinizi ve dağıtım hesaplarınızı kullanarak yerel olarak �
 - Bongita + Inter
 - Morumsu lacivert tasarım dili
 
-## Sonraki aşamalar
+## Uygulanmış mobil sonrası yüzeyler
 
-- Provider-neutral Stone MCP bağlantısı (ChatGPT Work, Claude, Claude Cowork ve uyumlu gelecek client'lar)
-- Windows uygulaması
-- Yerel proje klasörleri
-- GitHub repo listeleme, clone, pull, commit ve push
-- Yeni bilgisayarda bütün projeleri geri yükleme
+- Provider-neutral Stone MCP bağlantısı (ChatGPT Work, Claude, Claude Cowork ve uyumlu client'lar)
+- Windows/Tauri not editörü ve yerel Markdown klasörleri
+- GitHub repo listeleme, clone, pull, reviewed commit/push ve yeni bilgisayar restore
+
+Desktop henüz mobildeki proje/Bugün/çizim/trash/revision/conflict UI'larıyla tam parity sağlamaz.
+MCP için public deployment veya provider publication da repository tarafından otomatik olarak
+sağlanmaz; ikisi de aşağıdaki self-hosted kurulum sınırlarına tabidir.
 
 ## Stone MCP
 
@@ -129,6 +131,11 @@ Markdown notes use an ordinary image and an ignorable `stone-drawing` metadata c
 the note remains portable outside Stone. The current tablet milestone requires Firebase
 Storage in your own Firebase project; no maintainer backend is used.
 
+Full workspace export uses a versioned `.stone-workspace.json` container so Markdown, manifest
+JSON, editable `.stoneink` sources and binary PNG previews retain their relative paths, encodings
+and MIME types. The parser contract is tested for round-trip and unsafe-path rejection; the
+mobile app does not yet expose a full-workspace restore UI.
+
 1. Boş bir GitHub reposu oluştur ve bu paketin içeriğini repo köküne kopyala.
 2. Onaylı `apps/mobile/assets/fonts/Bongita-Regular.otf` dosyasını koru; OTF uzantısını değiştirme.
 3. Kendi Firebase projenizi oluşturup Email/Password ve Firestore'u etkinleştir; `.env.example` dosyasını `.env` olarak kopyala, kendi `EXPO_PUBLIC_FIREBASE_*` değerlerini doldur ve kendi `google-services.json` ile `GoogleService-Info.plist` dosyalarını `apps/mobile/` altına koy.
@@ -142,7 +149,8 @@ Kişisel `.env`, Firebase native config dosyaları, signing credential'ları, ku
 ```text
 stone/
 ├── apps/
-│   └── mobile/
+│   ├── mobile/
+│   └── desktop/
 ├── packages/
 │   ├── domain/
 │   ├── markdown/

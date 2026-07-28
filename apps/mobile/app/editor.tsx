@@ -346,7 +346,12 @@ export default function EditorScreen() {
             onMessage={handleMessage}
           />
           {error ? (
-            <Pressable onPress={() => setError(null)} style={styles.error}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Editör hata bildirimini kapat"
+              onPress={() => setError(null)}
+              style={styles.error}
+            >
               <StoneText variant="caption" style={{ color: "#C95B67" }}>
                 {error}
               </StoneText>
