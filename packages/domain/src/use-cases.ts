@@ -14,10 +14,65 @@ import type {
   VersionUpdate,
   SettingsRepository,
   ThemePreference,
+  Task,
+  TaskListOptions,
+  TaskRepository,
   UserSettings,
 } from "./entities.js";
 import { ValidationError } from "./errors.js";
 import { canTransitionProjectStatus, isValidIsoDate } from "./project-logic.js";
+import { validateTask } from "./task-logic.js";
+
+export class TaskUseCases {
+  public constructor(private readonly repository: TaskRepository) {}
+
+  public create(task: Task): Promise<Task> {
+    return this.repository.create(validateTask(task));
+  }
+
+  public get(ownerId: string, id: string, includeDeleted = false): Promise<Task | null> {
+    return this.repository.getById(ownerId, id, includeDeleted);
+  }
+
+  public list(ownerId: string, options?: TaskListOptions): Promise<readonly Task[]> {
+    return this.repository.list(ownerId, options);
+  }
+
+  public update(
+    ownerId: string,
+    task: Task,
+    expectedRevision: number,
+    deviceId: string,
+  ): Promise<Task> {
+    if (task.ownerId !== ownerId) throw new ValidationError("Task owner cannot be changed.");
+    return this.repository.save(ownerId, validateTask(task), expectedRevision, deviceId);
+  }
+
+  public complete(ownerId: string, id: string, completedAt: string, deviceId: string) {
+    if (!Number.isFinite(Date.parse(completedAt)))
+      throw new ValidationError("Completion timestamp is invalid.");
+    return this.repository.complete(ownerId, id, completedAt, deviceId);
+  }
+
+  public reopen(ownerId: string, id: string, deviceId: string): Promise<Task> {
+    return this.repository.reopen(ownerId, id, deviceId);
+  }
+
+  public delete(ownerId: string, id: string, deviceId: string): Promise<Task> {
+    return this.repository.softDelete(ownerId, id, deviceId);
+  }
+
+  public reorder(
+    ownerId: string,
+    parentTaskId: string | null,
+    orderedIds: readonly string[],
+    deviceId: string,
+  ): Promise<readonly Task[]> {
+    if (new Set(orderedIds).size !== orderedIds.length)
+      throw new ValidationError("Task order contains duplicates.");
+    return this.repository.reorder(ownerId, parentTaskId, orderedIds, deviceId);
+  }
+}
 
 export class SettingsUseCases {
   public constructor(private readonly repository: SettingsRepository) {}

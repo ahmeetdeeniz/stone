@@ -26,6 +26,84 @@ export type PlatformReleaseStatus =
   | "rejected";
 export type ProjectHealth = "good" | "attention" | "risk" | "paused";
 export type ThemePreference = "system" | "light" | "dark";
+export type TaskState = "open" | "completed" | "cancelled";
+export type TaskPriority = "none" | "low" | "medium" | "high";
+export type TaskRecurrenceFrequency = "daily" | "weekdays" | "weekly" | "monthly" | "custom";
+export type TaskRecurrenceUnit = "day" | "week" | "month";
+
+export interface TaskRecurrence {
+  frequency: TaskRecurrenceFrequency;
+  interval: number;
+  unit: TaskRecurrenceUnit;
+  preferredDayOfMonth: number | null;
+}
+
+export interface Task extends SyncFields {
+  schemaVersion: 1;
+  title: string;
+  description: string | null;
+  state: TaskState;
+  completedAt: string | null;
+  dueDate: string | null;
+  dueTime: string | null;
+  timezone: string;
+  priority: TaskPriority;
+  sortOrder: number;
+  tags: readonly string[];
+  projectId: string | null;
+  sourceDocumentId: string | null;
+  sourceBlockId: string | null;
+  parentTaskId: string | null;
+  estimatedMinutes: number | null;
+  recurrence: TaskRecurrence | null;
+  recurrenceSeriesId: string | null;
+  occurrenceDate: string | null;
+}
+
+export interface TaskOccurrence {
+  id: string;
+  ownerId: string;
+  taskId: string;
+  seriesId: string;
+  scheduledDate: string;
+  completedAt: string;
+  taskSnapshot: Task;
+}
+
+export interface TaskListOptions {
+  state?: TaskState;
+  projectId?: string;
+  parentTaskId?: string | null;
+  due?: "today" | "upcoming" | "overdue";
+  today?: string;
+  search?: string;
+  priority?: TaskPriority;
+  tags?: readonly string[];
+  includeDeleted?: boolean;
+  limit?: number;
+}
+
+export interface TaskRepository {
+  create(task: Task): Promise<Task>;
+  getById(ownerId: string, id: string, includeDeleted?: boolean): Promise<Task | null>;
+  list(ownerId: string, options?: TaskListOptions): Promise<readonly Task[]>;
+  save(ownerId: string, task: Task, expectedRevision: number, deviceId: string): Promise<Task>;
+  complete(
+    ownerId: string,
+    id: string,
+    completedAt: string,
+    deviceId: string,
+  ): Promise<{ task: Task; nextTask: Task | null }>;
+  reopen(ownerId: string, id: string, deviceId: string): Promise<Task>;
+  softDelete(ownerId: string, id: string, deviceId: string): Promise<Task>;
+  reorder(
+    ownerId: string,
+    parentTaskId: string | null,
+    orderedIds: readonly string[],
+    deviceId: string,
+  ): Promise<readonly Task[]>;
+  occurrences(ownerId: string, seriesId: string): Promise<readonly TaskOccurrence[]>;
+}
 
 export interface SyncFields {
   id: string;
