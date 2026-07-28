@@ -99,6 +99,58 @@ export function parseCalendarWorkspaceFile(
   });
 }
 
+export interface CalendarRestoreRepository {
+  getById(ownerId: string, id: string, includeDeleted?: boolean): Promise<CalendarItem | null>;
+  create(item: CalendarItem): Promise<CalendarItem>;
+}
+
+export interface CalendarRestoreRelationships {
+  taskIds: ReadonlySet<string>;
+  projectIds: ReadonlySet<string>;
+  documentIds: ReadonlySet<string>;
+}
+
+export interface CalendarRestoreSummary {
+  created: number;
+  duplicates: number;
+  detachedRelationships: number;
+}
+
+export async function restoreCalendarWorkspaceFile(
+  source: string,
+  ownerId: string,
+  repository: CalendarRestoreRepository,
+  relationships: CalendarRestoreRelationships,
+): Promise<CalendarRestoreSummary> {
+  const items = parseCalendarWorkspaceFile(source, ownerId);
+  let created = 0;
+  let duplicates = 0;
+  let detachedRelationships = 0;
+  for (const item of items) {
+    if (await repository.getById(ownerId, item.id, true)) {
+      duplicates += 1;
+      continue;
+    }
+    const next = {
+      ...item,
+      taskId: retainedRelationship(item.taskId, relationships.taskIds),
+      projectId: retainedRelationship(item.projectId, relationships.projectIds),
+      sourceDocumentId: retainedRelationship(item.sourceDocumentId, relationships.documentIds),
+    };
+    detachedRelationships +=
+      Number(next.taskId !== item.taskId) +
+      Number(next.projectId !== item.projectId) +
+      Number(next.sourceDocumentId !== item.sourceDocumentId);
+    await repository.create(next);
+    created += 1;
+  }
+  return { created, duplicates, detachedRelationships };
+}
+
+function retainedRelationship(value: string | null, existing: ReadonlySet<string>): string | null {
+  return value && existing.has(value) ? value : null;
+}
+
 function validateRelativePath(value: string): string {
   const path = value.replaceAll("\\", "/").trim();
   if (

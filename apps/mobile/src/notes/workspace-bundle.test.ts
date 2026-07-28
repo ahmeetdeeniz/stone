@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   parseCalendarWorkspaceFile,
   parseWorkspaceBundle,
+  restoreCalendarWorkspaceFile,
   serializeWorkspaceBundle,
 } from "./workspace-bundle";
 
@@ -67,6 +68,38 @@ describe("workspace export bundle", () => {
     ).toThrow(/foreign/u);
   });
 
+  it("restores calendar data idempotently and detaches missing relationships", async () => {
+    const item = calendarItem();
+    const stored = new Map<string, typeof item>();
+    const repository = {
+      getById: (_ownerId: string, id: string) => Promise.resolve(stored.get(id) ?? null),
+      create: (value: typeof item) => {
+        stored.set(value.id, value);
+        return Promise.resolve(value);
+      },
+    };
+    const source = JSON.stringify({ schema: 1, items: [item] });
+    await expect(
+      restoreCalendarWorkspaceFile(source, "owner-1", repository, {
+        taskIds: new Set(),
+        projectIds: new Set(),
+        documentIds: new Set(),
+      }),
+    ).resolves.toEqual({ created: 1, duplicates: 0, detachedRelationships: 3 });
+    expect(stored.get(item.id)).toMatchObject({
+      taskId: null,
+      projectId: null,
+      sourceDocumentId: null,
+    });
+    await expect(
+      restoreCalendarWorkspaceFile(source, "owner-1", repository, {
+        taskIds: new Set(),
+        projectIds: new Set(),
+        documentIds: new Set(),
+      }),
+    ).resolves.toEqual({ created: 0, duplicates: 1, detachedRelationships: 0 });
+  });
+
   it("writes schema v2 while continuing to import legacy v1 bundles", () => {
     const serialized = serializeWorkspaceBundle([
       { path: "tasks.json", content: '{"schema":1,"tasks":[],"occurrences":[]}' },
@@ -97,3 +130,37 @@ describe("workspace export bundle", () => {
     ).toThrow("schema is not supported");
   });
 });
+
+function calendarItem() {
+  return {
+    schemaVersion: 1 as const,
+    id: "event-restore",
+    ownerId: "owner-1",
+    revision: 1,
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+    deletedAt: null,
+    updatedByDeviceId: "device-1",
+    kind: "task_block" as const,
+    title: "Planning",
+    description: null,
+    allDay: false,
+    startDate: "2026-01-02",
+    endDate: "2026-01-02",
+    startAt: "2026-01-02T09:00:00.000Z",
+    endAt: "2026-01-02T10:00:00.000Z",
+    timezone: "Europe/Istanbul",
+    location: null,
+    category: "blue" as const,
+    projectId: "missing-project",
+    sourceDocumentId: "missing-note",
+    taskId: "missing-task",
+    planningNote: null,
+    recurrence: null,
+    recurrenceSeriesId: null,
+    recurrenceId: null,
+    overrides: [],
+    externalUid: null,
+    cancelledAt: null,
+  };
+}

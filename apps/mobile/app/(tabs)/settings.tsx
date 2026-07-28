@@ -7,7 +7,8 @@ import { spacing } from "../../src/design/tokens";
 import { useTheme } from "../../src/design/theme";
 import { useAuth } from "../../src/providers/auth-provider";
 import { useAppServices } from "../../src/providers/app-provider";
-import { shareWorkspaceExport } from "../../src/notes/workspace-files";
+import { pickWorkspaceCalendarFile, shareWorkspaceExport } from "../../src/notes/workspace-files";
+import { restoreCalendarWorkspaceFile } from "../../src/notes/workspace-bundle";
 import type { SyncState } from "../../src/infrastructure/storage/sync";
 
 export default function SettingsScreen() {
@@ -91,6 +92,35 @@ export default function SettingsScreen() {
     } catch (error) {
       Alert.alert(
         "Workspace dışa aktarılamadı",
+        error instanceof Error ? error.message : "Tekrar deneyin.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+  const restoreCalendar = async () => {
+    if (!user) return;
+    setBusy(true);
+    try {
+      const source = await pickWorkspaceCalendarFile();
+      if (source === null) return;
+      const [tasks, projects, documents] = await Promise.all([
+        services.taskUseCases.list(user.uid),
+        services.projectUseCases.list(user.uid),
+        services.noteUseCases.list(user.uid),
+      ]);
+      const summary = await restoreCalendarWorkspaceFile(source, user.uid, services.calendar, {
+        taskIds: new Set(tasks.map((task) => task.id)),
+        projectIds: new Set(projects.map((project) => project.id)),
+        documentIds: new Set(documents.map((document) => document.id)),
+      });
+      Alert.alert(
+        "Workspace takvimi geri yüklendi",
+        `${summary.created} kayıt eklendi, ${summary.duplicates} yinelenen kayıt atlandı, ${summary.detachedRelationships} eksik ilişki güvenle kaldırıldı.`,
+      );
+    } catch (error) {
+      Alert.alert(
+        "Workspace takvimi geri yüklenemedi",
         error instanceof Error ? error.message : "Tekrar deneyin.",
       );
     } finally {
@@ -185,6 +215,12 @@ export default function SettingsScreen() {
             label="Workspace'i dışa aktar"
             variant="quiet"
             onPress={() => void exportAll()}
+            disabled={busy || !user}
+          />
+          <StoneButton
+            label="Workspace takvimini geri yükle"
+            variant="quiet"
+            onPress={() => void restoreCalendar()}
             disabled={busy || !user}
           />
           <StoneButton
