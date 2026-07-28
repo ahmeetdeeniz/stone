@@ -20,6 +20,8 @@ import {
   type DesktopProjectSummary,
   type DesktopTodayItem,
 } from "./project-summary";
+import { transitionSaveState, type SaveState } from "./save-state";
+import { restoreDesktopSession } from "./session-restore";
 import {
   desktopApi,
   isTauri,
@@ -31,8 +33,6 @@ import {
 
 type Section = "notes" | "projects" | "today" | "settings";
 type Theme = "system" | "light" | "dark";
-type SaveState = "saved" | "unsaved" | "saving" | "error";
-
 function titleFromMarkdown(markdown: string): string {
   const heading = markdown.match(/^#\s+(.+)$/m)?.[1]?.trim();
   return heading || "Adsız not";
@@ -47,15 +47,17 @@ export default function App() {
     if (!isTauri) return;
     setAuthReady(false);
     setError(null);
-    try {
-      setSession(await desktopApi.authRestore());
-    } catch (caught) {
+    const result = await restoreDesktopSession(desktopApi.authRestore);
+    if (result.status === "authenticated") {
+      setSession(result.session);
+    } else if (result.status === "signed_out") {
+      setSession(null);
+    } else {
       setError(
-        `Kayıtlı oturum geri yüklenemedi: ${toMessage(caught)} Tekrar deneyebilir veya yeniden giriş yapabilirsiniz.`,
+        `Kayıtlı oturum geri yüklenemedi: ${result.message} Tekrar deneyebilir veya yeniden giriş yapabilirsiniz.`,
       );
-    } finally {
-      setAuthReady(true);
     }
+    setAuthReady(true);
   }, []);
 
   useEffect(() => {
@@ -239,7 +241,7 @@ function StoneShell({ session, onSignedOut }: { session: AuthSession; onSignedOu
       .then(async (item) => {
         setDocument(item);
         draft.current = item?.markdown ?? "";
-        setSaveState("saved");
+        setSaveState((current) => transitionSaveState(current, "document_loaded"));
         setExternalChange(false);
         if (item?.path) {
           const linked = await desktopApi.loadLinkedFile(item.path);
@@ -280,7 +282,7 @@ function StoneShell({ session, onSignedOut }: { session: AuthSession; onSignedOu
         EditorView.updateListener.of((update) => {
           if (update.docChanged) {
             draft.current = update.state.doc.toString();
-            setSaveState("unsaved");
+            setSaveState((current) => transitionSaveState(current, "edited"));
             setDocument((current) =>
               current
                 ? { ...current, markdown: draft.current, title: titleFromMarkdown(draft.current) }
@@ -347,7 +349,7 @@ function StoneShell({ session, onSignedOut }: { session: AuthSession; onSignedOu
   async function saveCurrent() {
     if (!document || busy) return;
     setBusy(true);
-    setSaveState("saving");
+    setSaveState((current) => transitionSaveState(current, "save_started"));
     setMessage(null);
     try {
       const content = normalizeMarkdown(draft.current);
@@ -365,10 +367,10 @@ function StoneShell({ session, onSignedOut }: { session: AuthSession; onSignedOu
       setDocument(saved);
       setDocuments((current) => current.map((item) => (item.id === saved.id ? saved : item)));
       setMessage("Kaydedildi");
-      setSaveState("saved");
+      setSaveState((current) => transitionSaveState(current, "save_succeeded"));
     } catch (caught) {
       setMessage(toMessage(caught));
-      setSaveState("error");
+      setSaveState((current) => transitionSaveState(current, "save_failed"));
       if (toMessage(caught).includes("ExternalEditConflict")) setExternalChange(true);
     } finally {
       setBusy(false);

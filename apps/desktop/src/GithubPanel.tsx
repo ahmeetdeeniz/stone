@@ -8,6 +8,7 @@ import {
   type GitReview,
   type RestoreItemResult,
 } from "./desktop-api";
+import { restoreGitHubConnection } from "./github-restore";
 
 const githubClientConfigured = config.githubClientId.length > 0;
 
@@ -38,17 +39,19 @@ export default function GithubPanel() {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    void desktopApi
-      .githubStatus()
-      .then((currentAccount) => {
+    void restoreGitHubConnection(desktopApi.githubStatus).then((result) => {
+      if (result.status === "connected") {
         setStoredConnectionFailed(false);
-        setAccount(currentAccount);
-        if (currentAccount) void loadPage(1);
-      })
-      .catch((error: unknown) => {
+        setAccount(result.account);
+        void loadPage(1);
+      } else if (result.status === "disconnected") {
+        setStoredConnectionFailed(false);
+        setAccount(null);
+      } else {
         setStoredConnectionFailed(true);
-        setNotice(`Kayıtlı GitHub bağlantısı doğrulanamadı: ${toMessage(error)}`);
-      });
+        setNotice(`Kayıtlı GitHub bağlantısı doğrulanamadı: ${result.message}`);
+      }
+    });
     void desktopApi
       .githubListLinks()
       .then(setLinks)

@@ -865,3 +865,48 @@ nav {
   align-items: center;
   gap: 8px;
 }
+
+@media (max-width: 1180px) {
+  .sidebar {
+    width: 190px;
+    padding-inline: 12px;
+  }
+
+  .content {
+    padding: 24px 20px;
+  }
+
+  .topbar {
+    align-items: flex-start;
+    gap: 14px;
+  }
+
+  .top-actions,
+  .toolbar-actions {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .notes-layout {
+    grid-template-columns: 220px minmax(0, 1fr);
+  }
+
+  .editor-toolbar {
+    align-items: flex-start;
+  }
+
+  .settings-panel,
+  .today-columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-height: 720px) {
+  .content {
+    padding-block: 18px;
+  }
+
+  .topbar {
+    margin-bottom: 16px;
+  }
+}

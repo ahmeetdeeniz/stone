@@ -34,6 +34,7 @@ export function buildProjectSummaries(
   for (const document of documents) {
     try {
       const version = parseVersionFrontmatter(document.markdown);
+      if (typeof version.projectId !== "string" || typeof version.version !== "string") continue;
       const values = versions.get(version.projectId) ?? [];
       values.push(version.version);
       versions.set(version.projectId, values);
@@ -46,23 +47,24 @@ export function buildProjectSummaries(
   for (const document of documents) {
     try {
       const project = parseProjectFrontmatter(document.markdown);
+      const projectId = typeof project.id === "string" ? project.id : document.id;
       const tasks = extractTasks(document.markdown).filter((task) => !task.canceled);
       projects.push({
-        id: project.id,
+        id: projectId,
         documentId: document.id,
         title: document.title,
-        status: project.status,
-        priority: project.priority,
-        currentVersion: project.currentVersion,
-        nextVersion: project.nextVersion,
-        targetDate: project.targetDate,
-        nextAction: project.nextAction,
+        status: typeof project.status === "string" ? project.status : "planning",
+        priority: typeof project.priority === "string" ? project.priority : "medium",
+        currentVersion: stringOrNull(project.currentVersion),
+        nextVersion: stringOrNull(project.nextVersion),
+        targetDate: stringOrNull(project.targetDate),
+        nextAction: stringOrNull(project.nextAction),
         completedTasks: tasks.filter((task) => task.checked).length,
         totalTasks: tasks.length,
         blockers: tasks
           .filter((task) => task.metadata?.blocked)
           .map((task) => task.metadata?.blocker || task.text),
-        versions: [...(versions.get(project.id) ?? [])].sort(),
+        versions: [...(versions.get(projectId) ?? [])].sort(),
         updatedAt: document.updatedAt,
       });
     } catch {
@@ -70,6 +72,10 @@ export function buildProjectSummaries(
     }
   }
   return projects.sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+}
+
+function stringOrNull(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value : null;
 }
 
 export function buildTodayItems(

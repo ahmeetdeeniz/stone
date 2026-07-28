@@ -49,4 +49,59 @@ describe("desktop project summaries", () => {
       ]),
     );
   });
+
+  it("degrades safely for partial, malformed and missing project metadata", () => {
+    const partial = `---
+stone:
+  type: project
+---
+
+# Partial
+`;
+    const malformed = `---
+stone: [not, a, project]
+---
+
+# Broken
+`;
+    const projects = buildProjectSummaries([
+      document("partial-id", "Partial", partial, "2026-07-28T10:00:00Z"),
+      document("malformed-id", "Malformed", malformed, "2026-07-28T11:00:00Z"),
+      document("note-id", "Normal note", "# Note\n", "2026-07-28T12:00:00Z"),
+    ]);
+    expect(projects).toEqual([
+      expect.objectContaining({
+        id: "partial-id",
+        status: "planning",
+        priority: "medium",
+        currentVersion: null,
+        nextAction: null,
+        totalTasks: 0,
+      }),
+    ]);
+    expect(buildProjectSummaries([])).toEqual([]);
+    expect(buildTodayItems(projects)).toEqual([]);
+  });
+
+  it("sorts multiple projects by real update time and ignores completed tasks in Today", () => {
+    const first = createProjectMarkdown({
+      id: "first",
+      title: "First",
+      template: "blank",
+      nextAction: "İlk işi yap",
+    });
+    const completed = createProjectMarkdown({
+      id: "completed",
+      title: "Completed",
+      template: "blank",
+      status: "live",
+    }).replace("# Completed\n", "# Completed\n\n- [x] Bitti\n");
+    const projects = buildProjectSummaries([
+      document("first-document", "First", first, "2026-07-28T10:00:00Z"),
+      document("completed-document", "Completed", completed, "2026-07-28T12:00:00Z"),
+    ]);
+    expect(projects.map((project) => project.title)).toEqual(["Completed", "First"]);
+    expect(projects[0]).toMatchObject({ completedTasks: 1, totalTasks: 1 });
+    expect(buildTodayItems(projects).map((item) => item.projectTitle)).toEqual(["First"]);
+  });
 });
