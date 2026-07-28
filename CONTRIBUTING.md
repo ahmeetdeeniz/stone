@@ -1,7 +1,7 @@
 # Contributing to Stone
 
-Stone is a personal, local-first Markdown workspace and a public-preview candidate. Before opening
-a pull request, read the README limitations and `PUBLIC-RELEASE-READINESS.md`.
+Stone is a personal, local-first Markdown workspace in public preview. Before opening a pull
+request, read the README limitations and public release checklist.
 
 ## Development
 
@@ -54,5 +54,6 @@ synthetic `.example.test` identities and unmistakable placeholders in tests.
 - Do not force-push shared branches, rewrite history, publish tags/releases, or change repository
   settings as part of an ordinary contribution.
 
-The repository does not yet have an owner-approved license; contributions cannot be accepted for a
-public project until the owner establishes software and contribution licensing terms.
+By contributing, you agree that your contribution is provided under Stone's MIT License and that
+you have the right to submit it. Do not contribute third-party assets without documented,
+compatible redistribution terms.

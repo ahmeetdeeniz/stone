@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -9,11 +9,10 @@ describe("desktop foundation", () => {
     expect(normalizeMarkdown("# Başlık\r\n\r\nmetin")).toBe("# Başlık\n\nmetin\n");
   });
 
-  it("ships the Bongita wordmark font and an anchored application shell", () => {
+  it("uses the redistribution-safe Inter wordmark and an anchored application shell", () => {
     const desktopRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-    expect(existsSync(resolve(desktopRoot, "public/fonts/Bongita-Regular.otf"))).toBe(true);
     const styles = readFileSync(resolve(desktopRoot, "src/styles.css"), "utf8");
-    expect(styles).toContain('font-family: "Bongita"');
+    expect(styles).toContain("font-family: Inter, ui-sans-serif, system-ui, sans-serif");
     expect(styles).toContain("height: 100dvh");
     expect(styles).toContain("overflow: hidden");
   });

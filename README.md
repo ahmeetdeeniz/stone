@@ -2,9 +2,9 @@
 
 **A calm, personal Markdown workspace for notes, projects, ink, and recovery across your own devices.**
 
-> **Public preview candidate.** Automated acceptance passes, but physical-device checks and
-> redistribution/license decisions remain open. See
-> [Public release readiness](PUBLIC-RELEASE-READINESS.md) before distributing source or binaries.
+> **Public preview.** Automated source and clean-clone gates pass. Physical Android/iPhone/tablet,
+> final accessibility, and live credential-restart checks remain pending; binary distribution
+> requires its own candidate-specific validation.
 
 Stone keeps canonical text as portable Markdown while adding local project tracking, Today
 summaries, revision/conflict recovery, and editable `.stoneink` drawings. It is designed for one
@@ -29,10 +29,10 @@ Firebase project and, optionally, GitHub OAuth App and separately deployed MCP s
 
 ## Product tour
 
-No screenshots are committed yet. The current asset-rights review is unresolved, and this
-environment did not complete the final privacy/accessibility capture pass. The exact owner capture
-list is in [the release checklist](public-docs/RELEASE-CHECKLIST.md#product-screenshots); mock images
-are not presented as product evidence.
+No screenshots are committed yet because this environment did not complete the final
+privacy/accessibility capture pass. The exact owner capture list is in
+[the release checklist](public-docs/RELEASE-CHECKLIST.md#product-screenshots); mock images are not
+presented as product evidence.
 
 ## Current capabilities
 
@@ -150,10 +150,6 @@ private notes in public issues.
 
 - Final visual/accessibility inspection, real Firebase/GitHub restart flows, signed Android
   physical-device use, private TestFlight/iPhone use, and tablet stylus validation remain open.
-- The repository has no owner-approved root software license.
-- Redistribution rights for Bongita and the supplied `Icons/` PNGs are not evidenced in the
-  repository. Source and binary public distribution remain blocked until the owner resolves both
-  licensing items.
 - Mobile full-workspace restore UI, public iOS binaries, macOS/Linux desktop, and a maintainer-hosted
   backend are not available.
 - MCP hosting and provider publication are not automatic.
@@ -169,7 +165,6 @@ commitments.
 Read [CONTRIBUTING.md](CONTRIBUTING.md), [SUPPORT.md](SUPPORT.md), and
 [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md). Security reports follow [SECURITY.md](SECURITY.md).
 
-**No open-source license has been approved or granted yet.** Copyright applies by default; cloning
-for review does not grant redistribution rights. The owner must choose a root software license and
-resolve bundled asset rights before making the repository public. See
-[the license decision note](public-docs/LICENSE-DECISION.md).
+Stone source code is available under the [MIT License](LICENSE), copyright (c) 2026 ahmeetdeeniz.
+Third-party dependencies and assets remain under their own licenses; see
+[third-party notices](THIRD_PARTY_NOTICES.md).

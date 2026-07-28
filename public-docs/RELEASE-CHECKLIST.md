@@ -2,13 +2,13 @@
 
 ## Source release
 
-- [ ] Owner approves and adds a root software license.
-- [ ] Bongita source/binary redistribution permission is documented or the locked design decision
-      is explicitly revised and the asset is safely removed/replaced.
-- [ ] Supplied icon provenance and redistribution permission are documented or icons are removed.
+- [x] Root MIT License and package identifiers are present and verified.
+- [x] Unlicensed brand font and raw supplied icon files are absent from the public tree and rewritten
+      public history.
 - [ ] Private GitHub vulnerability reporting is enabled and tested.
 - [ ] Current-tree and full-history secret scans are reviewed; any real credential is rotated.
 - [ ] `pnpm verify:public-boundary` and `pnpm verify:clean-workspace` pass.
+- [ ] `pnpm verify:license` and `pnpm verify:public-assets` pass after generated builds.
 - [ ] README links and every credential-free setup command pass from a clean clone.
 - [ ] Repository description, topics, default branch, issue settings, and social preview are set.
 - [ ] No repository visibility, tag, release, or binary action occurs before owner approval.

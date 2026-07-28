@@ -1,0 +1,26 @@
+{
+  "allowedFiles": [
+    "README.md",
+    "CHANGELOG.md",
+    "CODE_OF_CONDUCT.md",
+    "CONTRIBUTING.md",
+    "SECURITY.md",
+    "SUPPORT.md",
+    "THIRD_PARTY_NOTICES.md"
+  ],
+  "allowedPrefixes": [
+    ".github/",
+    "packages/markdown/fixtures/",
+    "public-docs/",
+    "services/mcp/",
+    "templates/"
+  ],
+  "deniedNames": [
+    "AGENTS.md",
+    "PLAN.md",
+    "PROGRESS.md",
+    "RELEASE-REPORT.md",
+    "PUBLIC-RELEASE-READINESS.md"
+  ],
+  "deniedPatterns": ["^GOAL-", "^OWNER-", "ACCEPTANCE-REPORT\\.md$", "MANUAL-ACCEPTANCE\\.md$"]
+}

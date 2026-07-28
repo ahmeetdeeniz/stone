@@ -2,6 +2,7 @@
   "name": "stone",
   "private": true,
   "version": "0.1.0",
+  "license": "MIT",
   "packageManager": "pnpm@11.17.0",
   "scripts": {
     "format": "prettier --write .",
@@ -28,6 +29,8 @@
     "verify:github:live": "node scripts/verify-github-live.mjs",
     "verify:public-boundary": "node scripts/verify-public-boundary.mjs",
     "verify:public-docs": "node scripts/verify-public-docs.mjs",
+    "verify:public-assets": "node scripts/verify-public-assets.mjs",
+    "verify:license": "node scripts/verify-license.mjs",
     "verify:clean-workspace": "node scripts/verify-clean-workspace.mjs",
     "editor:bundle": "pnpm --filter @stone/editor run build:web",
     "verify:native-dependencies": "node scripts/verify-native-dependencies.mjs",

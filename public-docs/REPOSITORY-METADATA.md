@@ -12,9 +12,8 @@ No remote setting has been changed.
 - **Issues:** enable after templates and private vulnerability reporting are confirmed.
 - **Discussions:** defer for the first preview; issues already cover the support capacity.
 - **Security:** enable GitHub Private Vulnerability Reporting before visibility changes.
-- **Social preview:** 1280×640 image using cleared brand assets; simple Stone name, “Self-hosted
-  Markdown workspace”, and “Public preview”. Do not use unresolved font/icon assets until rights
-  are proven.
+- **Social preview:** 1280×640 image using Inter/system typography only; simple Stone name,
+  “Self-hosted Markdown workspace”, and “Public preview”. Do not reintroduce removed raw assets.
 - **Release strategy:** first publish reviewed source only; add the Windows NSIS artifact/checksum
   only after exact-candidate smoke checks. Do not publish Android until signed physical-device
   validation. Keep iOS private TestFlight only. Treat MCP as separately deployed source/service.

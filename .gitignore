@@ -7,6 +7,8 @@ target/
 /apps/desktop/src-tauri/gen/
 coverage/
 *.tsbuildinfo
+*.otf
+/Icons/
 .env
 .env.*
 !.env.example
@@ -38,3 +40,9 @@ services/mcp/service-account*.json
 /PROGRESS.md
 /docs/
 /goals/
+
+# Private owner/audit reports must stay outside the public repository.
+/GOAL-*.md
+/RELEASE-REPORT.md
+/PUBLIC-RELEASE-READINESS.md
+/OWNER-*.md

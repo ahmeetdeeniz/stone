@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { EditorView, highlightActiveLine } from "@codemirror/view";
 import { createEditorState } from "@stone/editor";
 import { normalizeMarkdown } from "@stone/markdown";
@@ -10,10 +10,6 @@ import {
   type ProjectStatus,
 } from "@stone/domain";
 import GithubPanel from "./GithubPanel";
-import noteIcon from "../../../Icons/note-pencil.png";
-import projectIcon from "../../../Icons/projector-screen-chart.png";
-import todayIcon from "../../../Icons/calendar-dot.png";
-import settingsIcon from "../../../Icons/gear.png";
 import {
   buildProjectSummaries,
   buildTodayItems,
@@ -450,31 +446,23 @@ function StoneShell({ session, onSignedOut }: { session: AuthSession; onSignedOu
           <span className="brand-wordmark">Stone</span>
         </div>
         <nav aria-label="Ana menü">
-          <NavButton
-            active={section === "notes"}
-            onClick={() => setSection("notes")}
-            icon={<img src={noteIcon} alt="" />}
-          >
+          <NavButton active={section === "notes"} onClick={() => setSection("notes")} icon="✎">
             Notlar
           </NavButton>
           <NavButton
             active={section === "projects"}
             onClick={() => setSection("projects")}
-            icon={<img src={projectIcon} alt="" />}
+            icon="▦"
           >
             Projeler
           </NavButton>
-          <NavButton
-            active={section === "today"}
-            onClick={() => setSection("today")}
-            icon={<img src={todayIcon} alt="" />}
-          >
+          <NavButton active={section === "today"} onClick={() => setSection("today")} icon="◷">
             Bugün
           </NavButton>
           <NavButton
             active={section === "settings"}
             onClick={() => setSection("settings")}
-            icon={<img src={settingsIcon} alt="" />}
+            icon="⚙"
           >
             Ayarlar
           </NavButton>
@@ -648,7 +636,7 @@ function NavButton({
 }: {
   active: boolean;
   onClick: () => void;
-  icon: ReactNode;
+  icon: string;
   children: string;
 }) {
   return (

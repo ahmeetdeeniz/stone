@@ -53,7 +53,7 @@ export const spacing = {
 } as const;
 export const radii = { sm: 8, md: 12, lg: 16, xl: 22, pill: 999 } as const;
 export const typography = {
-  display: { fontSize: 30, lineHeight: 36, fontFamily: "Bongita" },
+  display: { fontSize: 30, lineHeight: 36, fontFamily: "Inter_700Bold" },
   title1: { fontSize: 24, lineHeight: 30, fontFamily: "Inter_700Bold" },
   title2: { fontSize: 20, lineHeight: 26, fontFamily: "Inter_700Bold" },
   title3: { fontSize: 17, lineHeight: 23, fontFamily: "Inter_600SemiBold" },

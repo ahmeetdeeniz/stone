@@ -4,6 +4,9 @@ import { spawnSync } from "node:child_process";
 
 const workspaceRoot = path.resolve(import.meta.dirname, "..");
 const trackedFiles = runGit(["ls-files", "-z"]).split("\0").filter(Boolean);
+const markdownPolicy = JSON.parse(
+  readFileSync(path.join(workspaceRoot, ".public-markdown-policy.json"), "utf8"),
+);
 
 const privatePrefixes = ["docs/", "goals/"];
 const privateFiles = new Set(["AGENTS.md", "PLAN.md", "PROGRESS.md"]);
@@ -27,6 +30,26 @@ const violations = trackedFiles.filter((file) => {
 assert(
   violations.length === 0,
   `Private or credential-bearing files are tracked:\n${violations.join("\n")}`,
+);
+
+const deniedMarkdownPatterns = markdownPolicy.deniedPatterns.map(
+  (pattern) => new RegExp(pattern, "u"),
+);
+const markdownViolations = trackedFiles.filter((file) => {
+  const normalized = file.replaceAll("\\", "/");
+  if (!normalized.endsWith(".md")) return false;
+  const basename = path.posix.basename(normalized);
+  const explicitlyDenied =
+    markdownPolicy.deniedNames.includes(basename) ||
+    deniedMarkdownPatterns.some((pattern) => pattern.test(basename));
+  const explicitlyAllowed =
+    markdownPolicy.allowedFiles.includes(normalized) ||
+    markdownPolicy.allowedPrefixes.some((prefix) => normalized.startsWith(prefix));
+  return explicitlyDenied || !explicitlyAllowed;
+});
+assert(
+  markdownViolations.length === 0,
+  `Tracked Markdown is outside the explicit public allow/deny policy:\n${markdownViolations.join("\n")}`,
 );
 
 const readme = readFileSync(path.join(workspaceRoot, "README.md"), "utf8");

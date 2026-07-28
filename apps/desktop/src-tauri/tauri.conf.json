@@ -27,7 +27,6 @@
   "bundle": {
     "active": true,
     "targets": ["nsis", "msi"],
-    "icon": ["icons/icon.ico", "icons/icon.png"],
     "publisher": "Stone contributors",
     "windows": { "nsis": { "installMode": "currentUser" } }
   }
