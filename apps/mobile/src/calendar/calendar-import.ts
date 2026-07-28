@@ -1,5 +1,9 @@
 import { importCalendarIcs, type CalendarItem } from "@stone/domain";
-import type { SQLiteCalendarRepository } from "../infrastructure/storage/calendar";
+
+export interface CalendarImportRepository {
+  getById(ownerId: string, id: string, includeDeleted?: boolean): Promise<CalendarItem | null>;
+  create(item: CalendarItem): Promise<CalendarItem>;
+}
 
 export interface CalendarImportReview {
   items: readonly CalendarItem[];
@@ -16,7 +20,7 @@ export async function reviewCalendarIcsImport(
     now: string;
     timezone: string;
   },
-  repository: SQLiteCalendarRepository,
+  repository: CalendarImportRepository,
 ): Promise<CalendarImportReview> {
   const parsed = importCalendarIcs(source, context);
   const items: CalendarItem[] = [];
@@ -36,7 +40,7 @@ export async function reviewCalendarIcsImport(
 
 export async function commitCalendarIcsImport(
   review: CalendarImportReview,
-  repository: SQLiteCalendarRepository,
+  repository: CalendarImportRepository,
   confirmed: boolean,
 ): Promise<readonly CalendarItem[]> {
   if (review.requiresConfirmation && !confirmed)

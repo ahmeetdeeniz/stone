@@ -9,6 +9,11 @@ import { Screen, StoneButton, StoneInput, StoneText, Surface } from "../../src/c
 import { colors, spacing } from "../../src/design/tokens";
 import { useAppServices } from "../../src/providers/app-provider";
 import { useAuth } from "../../src/providers/auth-provider";
+import {
+  commitCalendarIcsImport,
+  reviewCalendarIcsImport,
+} from "../../src/calendar/calendar-import";
+import { pickCalendarIcs, shareCalendarIcs } from "../../src/calendar/calendar-files";
 
 export default function CalendarScreen() {
   const router = useRouter();
@@ -92,6 +97,48 @@ export default function CalendarScreen() {
     date.setUTCDate(date.getUTCDate() + days);
     setSelectedDate(date.toISOString().slice(0, 10));
   };
+  const importIcs = async () => {
+    if (!user) return;
+    try {
+      const source = await pickCalendarIcs();
+      if (source === null) return;
+      const review = await reviewCalendarIcsImport(
+        source,
+        {
+          ownerId: user.uid,
+          deviceId,
+          now: new Date().toISOString(),
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+        },
+        calendar,
+      );
+      const commit = async (confirmed: boolean) => {
+        const imported = await commitCalendarIcsImport(review, calendar, confirmed);
+        Alert.alert(
+          "Takvim içe aktarıldı",
+          `${imported.length} yeni kayıt eklendi; ${review.duplicates} yinelenen kayıt atlandı.`,
+        );
+        await load();
+      };
+      if (!review.requiresConfirmation) {
+        await commit(false);
+        return;
+      }
+      Alert.alert(
+        "Büyük takvim içe aktarımı",
+        `${review.newItems} yeni kayıt ve ${review.duplicates} yinelenen kayıt bulundu. Devam edilsin mi?`,
+        [
+          { text: "Vazgeç", style: "cancel" },
+          { text: "İçe aktar", onPress: () => void commit(true) },
+        ],
+      );
+    } catch (caught) {
+      Alert.alert(
+        "Takvim içe aktarılamadı",
+        caught instanceof Error ? caught.message : "Tekrar deneyin.",
+      );
+    }
+  };
   const week = Array.from({ length: 7 }, (_, offset) => {
     const date = new Date(`${selectedDate}T00:00:00Z`);
     date.setUTCDate(date.getUTCDate() - ((date.getUTCDay() + 6) % 7) + offset);
@@ -106,6 +153,26 @@ export default function CalendarScreen() {
           <StoneText variant="bodySmall">
             Çevrimdışı çalışır. İşletim sistemi hatırlatması sunulmaz.
           </StoneText>
+          <View style={styles.fileActions}>
+            <StoneButton
+              label=".ics içe aktar"
+              variant="secondary"
+              onPress={() => void importIcs()}
+            />
+            <StoneButton
+              label=".ics dışa aktar"
+              variant="secondary"
+              onPress={() =>
+                user &&
+                void shareCalendarIcs(user.uid, calendar).catch((caught: unknown) =>
+                  Alert.alert(
+                    "Takvim dışa aktarılamadı",
+                    caught instanceof Error ? caught.message : "Tekrar deneyin.",
+                  ),
+                )
+              }
+            />
+          </View>
           <View style={styles.navigation}>
             <StoneButton label="Önceki gün" onPress={() => move(-1)} variant="secondary" />
             <Pressable
@@ -216,6 +283,7 @@ function agendaKindLabel(kind: AgendaItem["kind"]): string {
 
 const styles = StyleSheet.create({
   page: { paddingHorizontal: spacing.lg, paddingTop: spacing.xl, paddingBottom: spacing.giant },
+  fileActions: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm, marginTop: spacing.md },
   navigation: {
     flexDirection: "row",
     alignItems: "center",

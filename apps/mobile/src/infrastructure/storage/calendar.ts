@@ -60,6 +60,14 @@ export class SQLiteCalendarRepository implements CalendarRepository {
     return rows.map(parse).filter((item) => matchesCalendarList(item, options));
   }
 
+  public async listForExport(ownerId: string): Promise<readonly CalendarItem[]> {
+    const rows = await this.database.getAllAsync<CalendarRow>(
+      "SELECT payload FROM calendar_items WHERE owner_id = ? AND deleted_at IS NULL ORDER BY start_date, start_at, id LIMIT 10000",
+      ownerId,
+    );
+    return rows.map(parse);
+  }
+
   public async save(
     ownerId: string,
     source: CalendarItem,

@@ -93,6 +93,9 @@ export const desktopApi = {
   listTasks: () => call<DesktopTask[]>("list_tasks"),
   listCalendarItems: (startDate: string, endDate: string) =>
     call<CalendarItem[]>("list_calendar_items", { startDate, endDate }),
+  listCalendarItemsForExport: () => call<CalendarItem[]>("list_calendar_items_for_export"),
+  pickCalendarFile: () => call<string | null>("pick_calendar_file"),
+  saveCalendarFile: (content: string) => call<boolean>("save_calendar_file", { content }),
   saveCalendarItem: (item: CalendarItem) => call<CalendarItem>("save_calendar_item", { item }),
   deleteCalendarItem: (id: string) => call<CalendarItem>("delete_calendar_item", { id }),
   saveTask: (task: DesktopTask) => call<DesktopTask>("save_task", { task }),

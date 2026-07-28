@@ -233,6 +233,9 @@ pub fn run() {
             list_documents,
             list_tasks,
             list_calendar_items,
+            list_calendar_items_for_export,
+            pick_calendar_file,
+            save_calendar_file,
             save_calendar_item,
             delete_calendar_item,
             save_task,
@@ -479,6 +482,65 @@ fn list_calendar_items(
         serde_json::from_str(&payload).map_err(|error| error.to_string())
     })
     .collect()
+}
+
+#[tauri::command]
+fn list_calendar_items_for_export(
+    state: State<'_, Mutex<Database>>,
+) -> Result<Vec<serde_json::Value>, String> {
+    let database = state.lock().map_err(|_| "Database lock failed.")?;
+    let mut statement = database
+        .connection
+        .prepare(
+            "SELECT payload FROM calendar_items WHERE deleted_at IS NULL ORDER BY start_date, id LIMIT 10000",
+        )
+        .map_err(|error| error.to_string())?;
+    let rows = statement
+        .query_map([], |row| row.get::<_, String>(0))
+        .map_err(|error| error.to_string())?;
+    rows.map(|row| {
+        let payload = row.map_err(|error| error.to_string())?;
+        serde_json::from_str(&payload).map_err(|error| error.to_string())
+    })
+    .collect()
+}
+
+#[tauri::command]
+async fn pick_calendar_file() -> Result<Option<String>, String> {
+    let Some(path) = rfd::AsyncFileDialog::new()
+        .add_filter("iCalendar", &["ics"])
+        .pick_file()
+        .await
+        .map(|file| file.path().to_path_buf())
+    else {
+        return Ok(None);
+    };
+    let metadata = fs::metadata(&path).map_err(|error| error.to_string())?;
+    if metadata.len() > 2_000_000 {
+        return Err("Calendar file is too large.".into());
+    }
+    fs::read_to_string(path)
+        .map(Some)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+async fn save_calendar_file(content: String) -> Result<bool, String> {
+    if content.len() > 5_000_000 {
+        return Err("Calendar export is too large.".into());
+    }
+    let Some(path) = rfd::AsyncFileDialog::new()
+        .add_filter("iCalendar", &["ics"])
+        .set_file_name("stone-calendar.ics")
+        .save_file()
+        .await
+        .map(|file| file.path().to_path_buf())
+    else {
+        return Ok(false);
+    };
+    fs::write(path, content.as_bytes())
+        .map(|_| true)
+        .map_err(|error| error.to_string())
 }
 
 #[tauri::command]

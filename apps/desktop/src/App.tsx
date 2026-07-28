@@ -8,7 +8,9 @@ import {
   deleteCalendarRecurrence,
   editCalendarRecurrence,
   expandCalendarOccurrences,
+  exportCalendarIcs,
   filterCalendarItems,
+  importCalendarIcs,
   instantToZonedWallTime,
   projectPriorityLabels,
   projectStatusLabels,
@@ -1422,6 +1424,45 @@ function CalendarWorkspace({
       onMessage(toMessage(caught));
     }
   }
+  async function importIcs() {
+    try {
+      const source = await desktopApi.pickCalendarFile();
+      if (source === null) return;
+      const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+      const parsed = importCalendarIcs(source, {
+        ownerId: "",
+        deviceId: "",
+        now: new Date().toISOString(),
+        timezone,
+      });
+      const existing = await desktopApi.listCalendarItemsForExport();
+      const existingIds = new Set(existing.map((item) => item.id));
+      const fresh = parsed.filter((item) => !existingIds.has(item.id));
+      if (
+        parsed.length >= 100 &&
+        !window.confirm(
+          `${fresh.length} yeni kayıt ve ${parsed.length - fresh.length} yinelenen kayıt bulundu. İçe aktarılsın mı?`,
+        )
+      )
+        return;
+      for (const item of fresh) await desktopApi.saveCalendarItem(item);
+      onChange(await desktopApi.listCalendarItems(rangeStart, rangeEnd));
+      onMessage(
+        `${fresh.length} takvim kaydı içe aktarıldı; ${parsed.length - fresh.length} yinelenen kayıt atlandı.`,
+      );
+    } catch (caught) {
+      onMessage(toMessage(caught));
+    }
+  }
+  async function exportIcs() {
+    try {
+      const exported = exportCalendarIcs(await desktopApi.listCalendarItemsForExport());
+      const saved = await desktopApi.saveCalendarFile(exported);
+      if (saved) onMessage("Takvim .ics dosyası dışa aktarıldı.");
+    } catch (caught) {
+      onMessage(toMessage(caught));
+    }
+  }
   function shift(days: number) {
     const value = new Date(`${date}T00:00:00Z`);
     value.setUTCDate(value.getUTCDate() + days);
@@ -1453,6 +1494,8 @@ function CalendarWorkspace({
           onChange={(event) => setDate(event.target.value)}
         />
         <button onClick={() => shiftPeriod(1)}>Sonraki</button>
+        <button onClick={() => void importIcs()}>.ics içe aktar</button>
+        <button onClick={() => void exportIcs()}>.ics dışa aktar</button>
       </div>
       <div className="calendar-grid">
         <div className="calendar-create">
