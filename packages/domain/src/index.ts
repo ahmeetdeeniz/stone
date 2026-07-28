@@ -7,4 +7,5 @@ export * from "./task-logic.js";
 export * from "./task-recurrence.js";
 export * from "./calendar.js";
 export * from "./calendar-recurrence.js";
+export * from "./calendar-agenda.js";
 export * from "./ics.js";

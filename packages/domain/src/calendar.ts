@@ -62,7 +62,10 @@ export function validateCalendarItem(item: CalendarItem): CalendarItem {
 
 export function matchesCalendarList(item: CalendarItem, options: CalendarListOptions): boolean {
   if (!options.includeDeleted && item.deletedAt) return false;
-  if (item.endDate < options.startDate || item.startDate > options.endDate) return false;
+  if (item.recurrence) {
+    if (item.startDate > options.endDate) return false;
+    if (item.recurrence.untilDate && item.recurrence.untilDate < options.startDate) return false;
+  } else if (item.endDate < options.startDate || item.startDate > options.endDate) return false;
   if (options.projectId && item.projectId !== options.projectId) return false;
   if (options.kind && item.kind !== options.kind) return false;
   if (options.category && item.category !== options.category) return false;

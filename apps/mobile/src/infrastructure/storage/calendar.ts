@@ -50,9 +50,10 @@ export class SQLiteCalendarRepository implements CalendarRepository {
   ): Promise<readonly CalendarItem[]> {
     const limit = Math.max(1, Math.min(options.limit ?? 1_000, 5_000));
     const rows = await this.database.getAllAsync<CalendarRow>(
-      "SELECT payload FROM calendar_items WHERE owner_id = ? AND end_date >= ? AND start_date <= ? ORDER BY start_date, start_at, id LIMIT ?",
+      "SELECT payload FROM calendar_items WHERE owner_id = ? AND ((end_date >= ? AND start_date <= ?) OR (start_date <= ? AND json_extract(payload, '$.recurrence') IS NOT NULL)) ORDER BY start_date, start_at, id LIMIT ?",
       ownerId,
       options.startDate,
+      options.endDate,
       options.endDate,
       limit,
     );

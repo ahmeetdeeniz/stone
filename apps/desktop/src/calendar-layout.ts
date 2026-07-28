@@ -79,7 +79,13 @@ export function layoutTimedItems(
       columns,
     });
   }
-  return positioned.map(({ start: _start, end: _end, ...value }) => value);
+  return positioned.map((value) => ({
+    item: value.item,
+    top: value.top,
+    height: value.height,
+    column: value.column,
+    columns: value.columns,
+  }));
 }
 
 function wallMinutes(

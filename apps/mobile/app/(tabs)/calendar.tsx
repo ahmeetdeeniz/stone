@@ -2,20 +2,20 @@ import * as Crypto from "expo-crypto";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, View } from "react-native";
-import { zonedWallTimeToInstant, type CalendarItem } from "@stone/domain";
+import { buildAgendaItems, zonedWallTimeToInstant, type AgendaItem } from "@stone/domain";
 import { EmptyState, ErrorState, LoadingState } from "../../src/components/states";
 import { ResponsiveContent } from "../../src/components/responsive";
 import { Screen, StoneButton, StoneInput, StoneText, Surface } from "../../src/components/ui";
-import { spacing } from "../../src/design/tokens";
+import { colors, spacing } from "../../src/design/tokens";
 import { useAppServices } from "../../src/providers/app-provider";
 import { useAuth } from "../../src/providers/auth-provider";
 
 export default function CalendarScreen() {
   const router = useRouter();
   const { user } = useAuth();
-  const { calendar, deviceId } = useAppServices();
+  const { calendar, deviceId, taskUseCases, projectUseCases } = useAppServices();
   const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const [items, setItems] = useState<readonly CalendarItem[]>([]);
+  const [agendaItems, setAgendaItems] = useState<readonly AgendaItem[]>([]);
   const [title, setTitle] = useState("");
   const [startTime, setStartTime] = useState("09:00");
   const [endTime, setEndTime] = useState("10:00");
@@ -27,13 +27,18 @@ export default function CalendarScreen() {
     try {
       setLoading(true);
       setError(null);
-      setItems(await calendar.list(user.uid, { startDate: selectedDate, endDate: selectedDate }));
+      const [nextItems, tasks, projects] = await Promise.all([
+        calendar.list(user.uid, { startDate: selectedDate, endDate: selectedDate }),
+        taskUseCases.list(user.uid),
+        projectUseCases.list(user.uid),
+      ]);
+      setAgendaItems(buildAgendaItems(nextItems, tasks, projects, selectedDate, selectedDate));
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Takvim yüklenemedi.");
     } finally {
       setLoading(false);
     }
-  }, [calendar, selectedDate, user]);
+  }, [calendar, projectUseCases, selectedDate, taskUseCases, user]);
   useFocusEffect(useCallback(() => void load(), [load]));
 
   const create = async () => {
@@ -87,6 +92,11 @@ export default function CalendarScreen() {
     date.setUTCDate(date.getUTCDate() + days);
     setSelectedDate(date.toISOString().slice(0, 10));
   };
+  const week = Array.from({ length: 7 }, (_, offset) => {
+    const date = new Date(`${selectedDate}T00:00:00Z`);
+    date.setUTCDate(date.getUTCDate() - ((date.getUTCDay() + 6) % 7) + offset);
+    return date.toISOString().slice(0, 10);
+  });
 
   return (
     <Screen padded={false}>
@@ -106,6 +116,20 @@ export default function CalendarScreen() {
               <StoneText variant="title3">{selectedDate}</StoneText>
             </Pressable>
             <StoneButton label="Sonraki gün" onPress={() => move(1)} variant="secondary" />
+          </View>
+          <View style={styles.week} accessibilityRole="tablist">
+            {week.map((weekDate) => (
+              <Pressable
+                key={weekDate}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: weekDate === selectedDate }}
+                accessibilityLabel={`${weekDate}${weekDate === selectedDate ? ", seçili" : ""}`}
+                style={[styles.weekDay, weekDate === selectedDate && styles.weekDaySelected]}
+                onPress={() => setSelectedDate(weekDate)}
+              >
+                <StoneText variant="caption">{weekDate.slice(8)}</StoneText>
+              </Pressable>
+            ))}
           </View>
           <Surface>
             <StoneText variant="title3">Hızlı etkinlik</StoneText>
@@ -144,34 +168,32 @@ export default function CalendarScreen() {
             <LoadingState label="Ajanda yükleniyor" />
           ) : error ? (
             <ErrorState message={error} onRetry={() => void load()} />
-          ) : items.length === 0 ? (
+          ) : agendaItems.length === 0 ? (
             <EmptyState
               title="Bu gün boş"
               description="Etkinlik veya planlanmış çalışma bloğu bulunmuyor."
             />
           ) : (
-            items.map((item) => (
+            agendaItems.map((item) => (
               <Pressable
                 key={item.id}
-                accessibilityRole="button"
-                accessibilityLabel={`${item.title} etkinliğini düzenle`}
+                accessibilityRole={item.calendarItemId ? "button" : undefined}
+                accessibilityLabel={`${agendaKindLabel(item.kind)} ${item.title}`}
+                disabled={!item.calendarItemId}
                 onPress={() =>
-                  router.push({ pathname: "/calendar/[id]" as never, params: { id: item.id } })
+                  item.calendarItemId &&
+                  router.push({
+                    pathname: "/calendar/[id]" as never,
+                    params: { id: item.calendarItemId },
+                  })
                 }
               >
                 <Surface>
-                  <StoneText variant="caption">
-                    {item.kind === "task_block"
-                      ? "Zaman bloğu"
-                      : item.allDay
-                        ? "Tüm gün etkinliği"
-                        : "Etkinlik"}
-                  </StoneText>
+                  <StoneText variant="caption">{agendaKindLabel(item.kind)}</StoneText>
                   <StoneText variant="title3">{item.title}</StoneText>
                   <StoneText variant="bodySmall">
-                    {item.allDay
-                      ? `${item.startDate} – ${item.endDate}`
-                      : `${item.startAt?.slice(11, 16)} – ${item.endAt?.slice(11, 16)} · ${item.timezone}`}
+                    {item.sortTime ?? "Tüm gün"}
+                    {item.completed ? " · Tamamlandı" : ""}
                   </StoneText>
                 </Surface>
               </Pressable>
@@ -183,6 +205,15 @@ export default function CalendarScreen() {
   );
 }
 
+function agendaKindLabel(kind: AgendaItem["kind"]): string {
+  return {
+    event: "Etkinlik",
+    task_block: "Zaman bloğu",
+    task_due: "Görev son tarihi",
+    project_milestone: "Proje hedef tarihi",
+  }[kind];
+}
+
 const styles = StyleSheet.create({
   page: { paddingHorizontal: spacing.lg, paddingTop: spacing.xl, paddingBottom: spacing.giant },
   navigation: {
@@ -192,6 +223,15 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     marginVertical: spacing.lg,
   },
+  week: { flexDirection: "row", gap: spacing.xs, marginBottom: spacing.lg },
+  weekDay: {
+    flex: 1,
+    minHeight: 44,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 8,
+  },
+  weekDaySelected: { borderWidth: 2, borderColor: colors.brand.purple600 },
   times: { flexDirection: "row", gap: spacing.md },
   time: { flex: 1 },
 });

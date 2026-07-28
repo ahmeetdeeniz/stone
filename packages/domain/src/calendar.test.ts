@@ -7,6 +7,7 @@ import {
   exportCalendarIcs,
   importCalendarIcs,
   instantToZonedWallTime,
+  matchesCalendarList,
   validateCalendarItem,
   zonedWallTimeToInstant,
 } from "./index.js";
@@ -254,5 +255,25 @@ describe("ICS subset", () => {
       { ownerId: "owner-1", deviceId: "device-1", now: fixedNow, timezone: "UTC" },
     );
     expect(parsed[0]?.title).toBe("<script>alert(1)</script>");
+  });
+
+  it("keeps a recurring series eligible for a later bounded range query", () => {
+    const recurring = event({
+      startDate: "2026-01-01",
+      endDate: "2026-01-01",
+      recurrence: {
+        frequency: "weekly",
+        interval: 1,
+        unit: "week",
+        preferredDayOfMonth: null,
+        untilDate: null,
+      },
+    });
+    expect(
+      matchesCalendarList(recurring, {
+        startDate: "2026-07-01",
+        endDate: "2026-07-31",
+      }),
+    ).toBe(true);
   });
 });

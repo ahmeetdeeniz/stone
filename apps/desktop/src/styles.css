@@ -1218,3 +1218,16 @@ nav {
   padding: 2px 5px;
   font-size: 10px;
 }
+.calendar-filters {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-block: 12px;
+}
+.calendar-filters label:first-child {
+  grid-column: 1 / -1;
+}
+.calendar-edit-panel textarea {
+  min-height: 72px;
+  resize: vertical;
+}

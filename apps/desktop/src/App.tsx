@@ -4,13 +4,16 @@ import { createEditorState } from "@stone/editor";
 import { normalizeMarkdown } from "@stone/markdown";
 import { listen } from "@tauri-apps/api/event";
 import {
+  buildAgendaItems,
   expandCalendarOccurrences,
+  filterCalendarItems,
   instantToZonedWallTime,
   projectPriorityLabels,
   projectStatusLabels,
   zonedWallTimeToInstant,
   type ProjectPriority,
   type ProjectStatus,
+  type AgendaItem,
   type CalendarItem,
 } from "@stone/domain";
 import GithubPanel from "./GithubPanel";
@@ -659,6 +662,7 @@ function StoneShell({ session, onSignedOut }: { session: AuthSession; onSignedOu
           <CalendarWorkspace
             items={calendarItems}
             tasks={tasks}
+            projects={projects}
             onChange={setCalendarItems}
             onMessage={setMessage}
           />
@@ -1099,11 +1103,13 @@ function ProjectOverview({
 function CalendarWorkspace({
   items,
   tasks,
+  projects,
   onChange,
   onMessage,
 }: {
   items: readonly CalendarItem[];
   tasks: readonly DesktopTask[];
+  projects: readonly DesktopProjectSummary[];
   onChange: (items: CalendarItem[]) => void;
   onMessage: (message: string) => void;
 }) {
@@ -1117,6 +1123,11 @@ function CalendarWorkspace({
   const [editTitle, setEditTitle] = useState("");
   const [editDescription, setEditDescription] = useState("");
   const [editPlanningNote, setEditPlanningNote] = useState("");
+  const [search, setSearch] = useState("");
+  const [projectFilter, setProjectFilter] = useState("");
+  const [kindFilter, setKindFilter] = useState<"" | CalendarItem["kind"]>("");
+  const [categoryFilter, setCategoryFilter] = useState<"" | CalendarItem["category"]>("");
+  const [completionFilter, setCompletionFilter] = useState<"" | "open" | "completed">("");
   const today = new Date().toISOString().slice(0, 10);
   const days =
     view === "month" ? monthGrid(date, today) : view === "week" ? weekDates(date) : [date];
@@ -1124,19 +1135,50 @@ function CalendarWorkspace({
   const rangeStart = typeof firstDay === "string" ? firstDay : (firstDay?.date ?? date);
   const lastDay = days.at(-1);
   const rangeEnd = typeof lastDay === "string" ? lastDay : (lastDay?.date ?? date);
-  const visible = items
-    .flatMap((item) =>
-      item.deletedAt
-        ? []
-        : expandCalendarOccurrences(item, rangeStart, rangeEnd).map(
-            (occurrence) => occurrence.item,
-          ),
-    )
-    .sort(
-      (left, right) =>
-        left.startDate.localeCompare(right.startDate) ||
-        (left.startAt ?? "").localeCompare(right.startAt ?? ""),
-    );
+  const expanded = items.flatMap((item) =>
+    item.deletedAt
+      ? []
+      : expandCalendarOccurrences(item, rangeStart, rangeEnd).map((occurrence) => occurrence.item),
+  );
+  const visible = [
+    ...filterCalendarItems(
+      expanded,
+      {
+        startDate: rangeStart,
+        endDate: rangeEnd,
+        ...(projectFilter ? { projectId: projectFilter } : {}),
+        ...(kindFilter ? { kind: kindFilter } : {}),
+        ...(categoryFilter ? { category: categoryFilter } : {}),
+        ...(completionFilter ? { taskState: completionFilter } : {}),
+        ...(search ? { search } : {}),
+      },
+      new Map(tasks.map((task) => [task.id, task.state])),
+    ),
+  ].sort(
+    (left, right) =>
+      left.startDate.localeCompare(right.startDate) ||
+      (left.startAt ?? "").localeCompare(right.startAt ?? ""),
+  );
+  const visibleIds = new Set(visible.map((item) => item.id));
+  const agendaItems = buildAgendaItems(
+    items,
+    tasks,
+    projects.map((project) => ({
+      id: project.id,
+      title: project.title,
+      targetDate: project.targetDate,
+      canonicalDocumentId: project.documentId,
+      deletedAt: null,
+    })),
+    rangeStart,
+    rangeEnd,
+  ).filter((item) => {
+    if (item.calendarItemId && !visibleIds.has(item.calendarItemId)) return false;
+    if (projectFilter && item.projectId !== projectFilter) return false;
+    if (kindFilter && item.kind !== kindFilter) return false;
+    if (completionFilter && item.completed !== (completionFilter === "completed")) return false;
+    return !search || item.title.toLocaleLowerCase().includes(search.toLocaleLowerCase());
+  });
   const selectedItem = items.find((item) => item.id === selectedItemId) ?? null;
   useEffect(() => {
     setEditTitle(selectedItem?.title ?? "");
@@ -1396,6 +1438,72 @@ function CalendarWorkspace({
             Takvime ekle
           </button>
           <p className="hint">Hatırlatıcı ve odak zamanlayıcısı bu sürümde yoktur.</p>
+          <div className="calendar-filters" aria-label="Takvim filtreleri">
+            <label>
+              Ara
+              <input
+                type="search"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+              />
+            </label>
+            <label>
+              Proje
+              <select
+                value={projectFilter}
+                onChange={(event) => setProjectFilter(event.target.value)}
+              >
+                <option value="">Tüm projeler</option>
+                {projects.map((project) => (
+                  <option key={project.id} value={project.id}>
+                    {project.title}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Tür
+              <select
+                value={kindFilter}
+                onChange={(event) => setKindFilter(event.target.value as "" | CalendarItem["kind"])}
+              >
+                <option value="">Tüm türler</option>
+                <option value="event">Etkinlik</option>
+                <option value="task_block">Zaman bloğu</option>
+              </select>
+            </label>
+            <label>
+              Kategori
+              <select
+                value={categoryFilter}
+                onChange={(event) =>
+                  setCategoryFilter(event.target.value as "" | CalendarItem["category"])
+                }
+              >
+                <option value="">Tüm kategoriler</option>
+                {(["neutral", "purple", "blue", "green", "amber", "red"] as const).map(
+                  (category) => (
+                    <option key={category} value={category}>
+                      {category}
+                    </option>
+                  ),
+                )}
+              </select>
+            </label>
+            <label>
+              Görev durumu
+              <select
+                value={completionFilter}
+                onChange={(event) =>
+                  setCompletionFilter(event.target.value as "" | "open" | "completed")
+                }
+              >
+                <option value="">Tüm durumlar</option>
+                <option value="open">Açık</option>
+                <option value="completed">Tamamlandı</option>
+              </select>
+            </label>
+          </div>
           {selectedItem ? (
             <div className="calendar-edit-panel">
               <h3>Seçili kaydı düzenle</h3>
@@ -1459,7 +1567,7 @@ function CalendarWorkspace({
             onOpen={setSelectedItemId}
           />
         ) : (
-          <AgendaCalendar items={visible} onOpen={setSelectedItemId} />
+          <AgendaCalendar items={agendaItems} onOpen={setSelectedItemId} />
         )}
       </div>
     </section>
@@ -1631,12 +1739,11 @@ function AgendaCalendar({
   items,
   onOpen,
 }: {
-  items: readonly CalendarItem[];
+  items: readonly AgendaItem[];
   onOpen: (itemId: string) => void;
 }) {
-  const groups = new Map<string, CalendarItem[]>();
-  for (const item of items)
-    groups.set(item.startDate, [...(groups.get(item.startDate) ?? []), item]);
+  const groups = new Map<string, AgendaItem[]>();
+  for (const item of items) groups.set(item.date, [...(groups.get(item.date) ?? []), item]);
   return (
     <div className="agenda-list" role="list" aria-label="Ajanda">
       {items.length === 0 ? (
@@ -1646,16 +1753,40 @@ function AgendaCalendar({
         <section key={date} aria-labelledby={`agenda-${date}`}>
           <h3 id={`agenda-${date}`}>{date}</h3>
           {values.map((item) => (
-            <CalendarEvent
-              key={`${item.id}:${item.recurrenceId ?? item.startDate}`}
-              item={item}
-              onOpen={onOpen}
-            />
+            <article
+              key={item.id}
+              role="listitem"
+              tabIndex={item.calendarItemId ? 0 : undefined}
+              className="calendar-event"
+              aria-label={`${agendaKindLabel(item.kind)}: ${item.title}, ${item.date}`}
+              onClick={() => item.calendarItemId && onOpen(item.calendarItemId)}
+              onKeyDown={(event) => {
+                if (!item.calendarItemId || (event.key !== "Enter" && event.key !== " ")) return;
+                event.preventDefault();
+                onOpen(item.calendarItemId);
+              }}
+            >
+              <span>{agendaKindLabel(item.kind)}</span>
+              <strong>{item.title}</strong>
+              <small>
+                {item.sortTime ?? "Tüm gün"}
+                {item.completed ? " · Tamamlandı" : ""}
+              </small>
+            </article>
           ))}
         </section>
       ))}
     </div>
   );
+}
+
+function agendaKindLabel(kind: AgendaItem["kind"]): string {
+  return {
+    event: "Etkinlik",
+    task_block: "Zaman bloğu",
+    task_due: "Görev son tarihi",
+    project_milestone: "Proje hedef tarihi",
+  }[kind];
 }
 
 function CalendarEvent({
