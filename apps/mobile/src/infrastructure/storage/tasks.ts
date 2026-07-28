@@ -127,9 +127,9 @@ export class SQLiteTaskRepository implements TaskRepository {
       await updateTask(this.database, completed);
       await this.updateMarkdownSource(current, completed, deviceId);
       await queueTask(this.database, completed, current.revision);
-      if (current.recurrence) {
+      const scheduledDate = current.occurrenceDate ?? current.dueDate;
+      if (current.recurrence && scheduledDate) {
         const seriesId = current.recurrenceSeriesId ?? current.id;
-        const scheduledDate = current.occurrenceDate ?? current.dueDate!;
         await this.database.runAsync(
           "INSERT OR IGNORE INTO task_occurrences (id, owner_id, task_id, series_id, scheduled_date, completed_at, task_snapshot) VALUES (?, ?, ?, ?, ?, ?, ?)",
           occurrenceId(seriesId, scheduledDate),

@@ -45,6 +45,8 @@ pub struct DesktopDocument {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct DesktopTask {
+    #[serde(default = "task_schema_version")]
+    pub schema_version: i64,
     pub id: String,
     pub title: String,
     pub description: Option<String>,
@@ -60,10 +62,22 @@ pub struct DesktopTask {
     pub parent_task_id: Option<String>,
     pub estimated_minutes: Option<i64>,
     pub recurrence: Option<serde_json::Value>,
+    #[serde(default)]
+    pub source_document_id: Option<String>,
+    #[serde(default)]
+    pub source_block_id: Option<String>,
+    #[serde(default)]
+    pub recurrence_series_id: Option<String>,
+    #[serde(default)]
+    pub occurrence_date: Option<String>,
     pub revision: i64,
     pub created_at: String,
     pub updated_at: String,
     pub deleted_at: Option<String>,
+}
+
+fn task_schema_version() -> i64 {
+    1
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
@@ -330,15 +344,7 @@ fn validate_task(task: &DesktopTask) -> Result<(), String> {
 }
 
 fn task_sync_payload(task: &DesktopTask) -> serde_json::Value {
-    let mut value = serde_json::to_value(task).unwrap_or_else(|_| serde_json::json!({}));
-    if let Some(fields) = value.as_object_mut() {
-        fields.insert("schemaVersion".to_owned(), serde_json::json!(1));
-        fields.insert("sourceDocumentId".to_owned(), serde_json::Value::Null);
-        fields.insert("sourceBlockId".to_owned(), serde_json::Value::Null);
-        fields.insert("recurrenceSeriesId".to_owned(), serde_json::Value::Null);
-        fields.insert("occurrenceDate".to_owned(), serde_json::Value::Null);
-    }
-    value
+    serde_json::to_value(task).unwrap_or_else(|_| serde_json::json!({}))
 }
 fn validate_markdown_path(path: &Path) -> Result<(), String> {
     let extension = path

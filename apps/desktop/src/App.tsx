@@ -745,6 +745,7 @@ function TaskPlanner({
     if (!title.trim()) return;
     const timestamp = new Date().toISOString();
     await save({
+      schemaVersion: 1,
       id: crypto.randomUUID(),
       title: title.trim(),
       description: null,
@@ -760,6 +761,10 @@ function TaskPlanner({
       parentTaskId: null,
       estimatedMinutes: null,
       recurrence: null,
+      sourceDocumentId: null,
+      sourceBlockId: null,
+      recurrenceSeriesId: null,
+      occurrenceDate: null,
       revision: 0,
       createdAt: timestamp,
       updatedAt: timestamp,

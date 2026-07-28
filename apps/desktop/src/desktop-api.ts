@@ -10,6 +10,7 @@ export interface DesktopDocument {
 }
 
 export interface DesktopTask {
+  schemaVersion: number;
   id: string;
   title: string;
   description: string | null;
@@ -25,6 +26,10 @@ export interface DesktopTask {
   parentTaskId: string | null;
   estimatedMinutes: number | null;
   recurrence: Record<string, unknown> | null;
+  sourceDocumentId: string | null;
+  sourceBlockId: string | null;
+  recurrenceSeriesId: string | null;
+  occurrenceDate: string | null;
   revision: number;
   createdAt: string;
   updatedAt: string;
