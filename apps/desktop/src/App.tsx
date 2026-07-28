@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { EditorView } from "@codemirror/view";
+import { EditorView, highlightActiveLine } from "@codemirror/view";
 import { createEditorState } from "@stone/editor";
 import { normalizeMarkdown } from "@stone/markdown";
 import { listen } from "@tauri-apps/api/event";
@@ -15,6 +15,7 @@ import {
 
 type Section = "notes" | "projects" | "today" | "settings";
 type Theme = "system" | "light" | "dark";
+type SaveState = "saved" | "unsaved" | "saving" | "error";
 
 function titleFromMarkdown(markdown: string): string {
   const heading = markdown.match(/^#\s+(.+)$/m)?.[1]?.trim();
@@ -157,6 +158,7 @@ function StoneShell({ session, onSignedOut }: { session: AuthSession; onSignedOu
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
+  const [saveState, setSaveState] = useState<SaveState>("saved");
   const editorHost = useRef<HTMLDivElement>(null);
   const editor = useRef<EditorView | null>(null);
   const draft = useRef("");
@@ -185,6 +187,7 @@ function StoneShell({ session, onSignedOut }: { session: AuthSession; onSignedOu
       .then(async (item) => {
         setDocument(item);
         draft.current = item?.markdown ?? "";
+        setSaveState("saved");
         setExternalChange(false);
         if (item?.path) {
           const linked = await desktopApi.loadLinkedFile(item.path);
@@ -201,9 +204,31 @@ function StoneShell({ session, onSignedOut }: { session: AuthSession; onSignedOu
     editor.current?.destroy();
     const view = new EditorView({
       state: createEditorState(document.markdown, false, [
+        highlightActiveLine(),
+        EditorView.theme({
+          "&.cm-focused": {
+            outline: "2px solid var(--focus-ring)",
+            outlineOffset: "-2px",
+          },
+          ".cm-content": {
+            caretColor: "var(--caret)",
+            maxWidth: "780px",
+            margin: "0 auto",
+            paddingBottom: "42vh",
+          },
+          ".cm-cursor, .cm-dropCursor": {
+            borderLeftColor: "var(--caret)",
+            borderLeftWidth: "2px",
+          },
+          ".cm-activeLine": { backgroundColor: "var(--active-line)" },
+          "&.cm-focused .cm-selectionBackground, ::selection": {
+            backgroundColor: "var(--selection) !important",
+          },
+        }),
         EditorView.updateListener.of((update) => {
           if (update.docChanged) {
             draft.current = update.state.doc.toString();
+            setSaveState("unsaved");
             setDocument((current) =>
               current
                 ? { ...current, markdown: draft.current, title: titleFromMarkdown(draft.current) }
@@ -270,6 +295,7 @@ function StoneShell({ session, onSignedOut }: { session: AuthSession; onSignedOu
   async function saveCurrent() {
     if (!document || busy) return;
     setBusy(true);
+    setSaveState("saving");
     setMessage(null);
     try {
       const content = normalizeMarkdown(draft.current);
@@ -287,8 +313,10 @@ function StoneShell({ session, onSignedOut }: { session: AuthSession; onSignedOu
       setDocument(saved);
       setDocuments((current) => current.map((item) => (item.id === saved.id ? saved : item)));
       setMessage("Kaydedildi");
+      setSaveState("saved");
     } catch (caught) {
       setMessage(toMessage(caught));
+      setSaveState("error");
       if (toMessage(caught).includes("ExternalEditConflict")) setExternalChange(true);
     } finally {
       setBusy(false);
@@ -360,7 +388,7 @@ function StoneShell({ session, onSignedOut }: { session: AuthSession; onSignedOu
       <aside className="sidebar">
         <div className="sidebar-brand">
           <span className="brand-mark small">S</span>
-          <span>Stone</span>
+          <span className="brand-wordmark">Stone</span>
         </div>
         <nav aria-label="Ana menü">
           <NavButton active={section === "notes"} onClick={() => setSection("notes")} icon="▤">
@@ -444,6 +472,15 @@ function StoneShell({ session, onSignedOut }: { session: AuthSession; onSignedOu
                   <div className="editor-toolbar">
                     <div>
                       <strong>{document.title}</strong>
+                      <span className={`save-state save-state-${saveState}`} aria-live="polite">
+                        {saveState === "unsaved"
+                          ? "Kaydedilmedi"
+                          : saveState === "saving"
+                            ? "Kaydediliyor…"
+                            : saveState === "error"
+                              ? "Kaydetme başarısız"
+                              : "Kaydedildi"}
+                      </span>
                       {document.path && <span className="path-label">{document.path}</span>}
                     </div>
                     <div className="toolbar-actions">
@@ -490,7 +527,26 @@ function StoneShell({ session, onSignedOut }: { session: AuthSession; onSignedOu
             </section>
           </div>
         )}
-        {section === "projects" && <GithubPanel />}
+        {section === "projects" && (
+          <section className="projects-workspace">
+            <div className="project-intro">
+              <p className="eyebrow">PROJE MERKEZİ</p>
+              <h2>Aktif proje durumunu tek yerde izle</h2>
+              <p className="muted">
+                Proje durumları, sürümler ve blocker’lar mobil çalışma alanından eşitlenir. GitHub
+                bağlantıları ve restore araçları aşağıda yönetilir.
+              </p>
+              <div className="project-view-tabs" aria-label="Proje görünümleri">
+                <span className="active">Genel bakış</span>
+                <span>Liste</span>
+                <span>Kanban</span>
+                <span>Sürümler</span>
+                <span>Blocker’lar</span>
+              </div>
+            </div>
+            <GithubPanel />
+          </section>
+        )}
         {section === "today" && (
           <Placeholder
             title="Bugün"
@@ -548,7 +604,7 @@ function EmptyState({ title, detail }: { title: string; detail: string }) {
   return (
     <div className="empty-state">
       <div className="empty-icon">·</div>
-      <h2>{title}</h2>
+      <h2 className="brand-heading">{title}</h2>
       <p>{detail}</p>
     </div>
   );
@@ -565,7 +621,7 @@ function Placeholder({ title, detail }: { title: string; detail: string }) {
 function FullState({ label }: { label: string }) {
   return (
     <main className="full-state">
-      <div className="brand-mark">S</div>
+      <div className="brand-wordmark full-wordmark">Stone</div>
       <p>{label}</p>
     </main>
   );

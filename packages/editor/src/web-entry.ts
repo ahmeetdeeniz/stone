@@ -1,6 +1,6 @@
 import { defaultKeymap, history, historyKeymap, redo, undo } from "@codemirror/commands";
 import { findNext, SearchQuery, setSearchQuery } from "@codemirror/search";
-import { keymap } from "@codemirror/view";
+import { highlightActiveLine, keymap } from "@codemirror/view";
 import { extractTasks, toggleTask } from "@stone/markdown";
 import { EditorView } from "@codemirror/view";
 import {
@@ -28,6 +28,7 @@ function initialize(markdownSource: string, readOnly: boolean): void {
   view?.destroy();
   const state = createEditorState(markdownSource, readOnly, [
     history(),
+    highlightActiveLine(),
     keymap.of([...defaultKeymap, ...historyKeymap]),
     EditorView.domEventHandlers({
       change(event, currentView) {
@@ -95,6 +96,20 @@ function initialize(markdownSource: string, readOnly: boolean): void {
       },
       ".cm-scroller": { fontFamily: "Inter, sans-serif", lineHeight: "1.65", padding: "20px" },
       ".cm-content": { caretColor: "var(--stone-accent)", maxWidth: "760px", margin: "0 auto" },
+      ".cm-cursor, .cm-dropCursor": {
+        borderLeftColor: "var(--stone-accent)",
+        borderLeftWidth: "2px",
+      },
+      ".cm-activeLine": {
+        backgroundColor: "color-mix(in srgb, var(--stone-accent) 9%, transparent)",
+      },
+      "&.cm-focused": {
+        outline: "2px solid color-mix(in srgb, var(--stone-accent) 70%, transparent)",
+        outlineOffset: "-2px",
+      },
+      "&.cm-focused .cm-selectionBackground, ::selection": {
+        backgroundColor: "color-mix(in srgb, var(--stone-accent) 35%, transparent) !important",
+      },
       ".cm-gutters": { display: "none" },
       ".stone-live-strong": { fontWeight: "700" },
       ".stone-live-emphasis": { fontStyle: "italic" },

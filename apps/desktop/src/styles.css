@@ -1,3 +1,9 @@
+@font-face {
+  font-family: "Bongita";
+  src: url("/fonts/Bongita-Regular.otf") format("opentype");
+  font-display: swap;
+}
+
 :root {
   color-scheme: light;
   font-family: Inter, ui-sans-serif, system-ui, sans-serif;
@@ -15,6 +21,10 @@
   --line: #3d3954;
   --accent: #9d8bff;
   --accent-strong: #c2b8ff;
+  --active-line: #aaa3ff14;
+  --selection: #8075f066;
+  --caret: #c2b8ff;
+  --focus-ring: #aaa3ff;
 }
 :root[data-theme="light"],
 :root {
@@ -26,6 +36,10 @@
   --line: #e4e1ef;
   --accent: #6557c9;
   --accent-strong: #4437a3;
+  --active-line: #8075f00d;
+  --selection: #8075f04d;
+  --caret: #5d4cd6;
+  --focus-ring: #8075f0;
 }
 @media (prefers-color-scheme: dark) {
   :root[data-theme="system"] {
@@ -38,6 +52,10 @@
     --line: #3d3954;
     --accent: #9d8bff;
     --accent-strong: #c2b8ff;
+    --active-line: #aaa3ff14;
+    --selection: #8075f066;
+    --caret: #c2b8ff;
+    --focus-ring: #aaa3ff;
   }
 }
 * {
@@ -45,7 +63,10 @@
 }
 body {
   margin: 0;
+  height: 100vh;
+  height: 100dvh;
   min-width: 960px;
+  overflow: hidden;
   background: var(--bg);
   color: var(--text);
 }
@@ -85,7 +106,7 @@ button:disabled {
   border-radius: 14px;
   background: var(--accent);
   color: white;
-  font-family: Georgia, serif;
+  font-family: "Bongita", Georgia, serif;
   font-size: 30px;
   font-weight: 700;
 }
@@ -196,7 +217,9 @@ select:focus {
 }
 .app-shell {
   display: flex;
-  min-height: 100vh;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
 }
 .sidebar {
   width: 238px;
@@ -206,6 +229,7 @@ select:focus {
   padding: 25px 16px;
   background: var(--surface);
   border-right: 1px solid var(--line);
+  overflow: hidden;
 }
 .sidebar-brand {
   display: flex;
@@ -214,6 +238,19 @@ select:focus {
   padding: 0 9px;
   font-size: 18px;
   font-weight: 800;
+}
+.brand-wordmark,
+.brand-heading {
+  font-family: "Bongita", Georgia, serif;
+  font-weight: 400;
+  letter-spacing: 0.01em;
+}
+.brand-wordmark {
+  font-size: 23px;
+}
+.full-wordmark {
+  color: var(--accent);
+  font-size: clamp(52px, 8vw, 82px);
 }
 nav {
   display: grid;
@@ -258,9 +295,12 @@ nav {
   background: #3fa879;
 }
 .content {
+  display: grid;
   flex: 1;
+  grid-template-rows: auto minmax(0, 1fr);
   min-width: 0;
   padding: 34px 40px;
+  overflow: hidden;
 }
 .topbar {
   display: flex;
@@ -290,7 +330,8 @@ nav {
 .notes-layout {
   display: grid;
   grid-template-columns: 285px minmax(540px, 1fr);
-  min-height: calc(100vh - 145px);
+  min-height: 0;
+  height: 100%;
   overflow: hidden;
   background: var(--surface);
   border: 1px solid var(--line);
@@ -298,6 +339,9 @@ nav {
 }
 .document-list {
   border-right: 1px solid var(--line);
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 .list-actions {
   display: flex;
@@ -340,6 +384,8 @@ nav {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  min-height: 0;
+  overflow: hidden;
 }
 .editor-toolbar {
   display: flex;
@@ -357,21 +403,76 @@ nav {
 }
 .editor-host {
   flex: 1;
-  min-height: 500px;
+  min-height: 0;
+  overflow: hidden;
 }
 .cm-editor {
-  min-height: 100%;
+  height: 100%;
   padding: 24px;
   color: var(--text);
   background: var(--surface);
   font-size: 16px;
 }
 .cm-focused {
-  outline: none;
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
 }
 .cm-scroller {
-  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-  line-height: 1.65;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  line-height: 1.7;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.cm-cursor,
+.cm-dropCursor {
+  border-left-color: var(--caret) !important;
+  border-left-width: 2px !important;
+}
+.save-state {
+  color: var(--muted);
+  font-size: 11px;
+}
+.save-state-unsaved,
+.save-state-saving {
+  color: #9a6200;
+}
+.save-state-error {
+  color: #aa2e4c;
+}
+.projects-workspace {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.project-intro {
+  max-width: 1120px;
+  margin-bottom: 16px;
+  padding: 24px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+}
+.project-intro h2 {
+  margin-bottom: 8px;
+  font-size: 22px;
+}
+.project-view-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 20px;
+}
+.project-view-tabs span {
+  padding: 8px 12px;
+  color: var(--muted);
+  background: var(--surface-strong);
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+}
+.project-view-tabs .active {
+  color: white;
+  background: var(--accent);
 }
 .conflict-banner {
   padding: 10px 17px;
