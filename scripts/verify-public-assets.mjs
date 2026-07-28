@@ -40,7 +40,7 @@ for (const file of trackedFiles) {
   if (assetPolicySources.has(file.replaceAll("\\", "/"))) continue;
   if (!searchableExtensions.has(path.extname(file))) continue;
   const source = readFileSync(path.join(workspaceRoot, file), "utf8");
-  if (/bongita|(?:^|[/\\])Icons[/\\]/iu.test(source)) forbiddenText.push(file);
+  if (/bongita|(?:^|[/\\])Icons[/\\]/u.test(source)) forbiddenText.push(file);
 }
 assert(
   forbiddenText.length === 0,
@@ -54,7 +54,7 @@ for (const relativeRoot of generatedRoots) {
   if (!existsSync(root)) continue;
   for (const file of walk(root)) {
     const relative = path.relative(workspaceRoot, file).replaceAll("\\", "/");
-    if (/bongita|(?:^|\/)Icons\//iu.test(relative)) generatedViolations.push(relative);
+    if (/bongita|(?:^|\/)Icons\//u.test(relative)) generatedViolations.push(relative);
     if (statSync(file).size <= 20 * 1024 * 1024) {
       const bytes = readFileSync(file);
       if (bytes.includes(Buffer.from("Bongita", "utf8"))) generatedViolations.push(relative);

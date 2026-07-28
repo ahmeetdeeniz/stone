@@ -28,6 +28,7 @@
     "active": true,
     "targets": ["nsis", "msi"],
     "publisher": "Stone contributors",
+    "icon": ["icons/icon.ico", "icons/icon.png"],
     "windows": { "nsis": { "installMode": "currentUser" } }
   }
 }
