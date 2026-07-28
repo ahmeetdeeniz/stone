@@ -178,6 +178,9 @@ export class SQLiteSyncStore implements SyncLocalStore {
         case "task":
           await this.applyTask(change);
           break;
+        case "calendar":
+          await this.applyCalendar(change);
+          break;
         case "device":
           await this.applyDevice(change);
           break;
@@ -520,6 +523,32 @@ export class SQLiteSyncStore implements SyncLocalStore {
     );
   }
 
+  private async applyCalendar(change: RemoteChange): Promise<void> {
+    const payload = change.payload;
+    await this.database.runAsync(
+      "INSERT INTO calendar_items (id, owner_id, schema_version, kind, title, start_date, end_date, start_at, end_at, timezone, project_id, source_document_id, task_id, category, recurrence_series_id, revision, updated_at, deleted_at, payload) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET owner_id=excluded.owner_id, schema_version=excluded.schema_version, kind=excluded.kind, title=excluded.title, start_date=excluded.start_date, end_date=excluded.end_date, start_at=excluded.start_at, end_at=excluded.end_at, timezone=excluded.timezone, project_id=excluded.project_id, source_document_id=excluded.source_document_id, task_id=excluded.task_id, category=excluded.category, recurrence_series_id=excluded.recurrence_series_id, revision=excluded.revision, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, payload=excluded.payload",
+      asText(payload.id),
+      asText(payload.ownerId),
+      Number(payload.schemaVersion),
+      asText(payload.kind),
+      asText(payload.title),
+      asText(payload.startDate),
+      asText(payload.endDate),
+      nullableText(payload.startAt),
+      nullableText(payload.endAt),
+      asText(payload.timezone),
+      nullableText(payload.projectId),
+      nullableText(payload.sourceDocumentId),
+      nullableText(payload.taskId),
+      asText(payload.category),
+      nullableText(payload.recurrenceSeriesId),
+      Number(payload.revision),
+      asText(payload.updatedAt),
+      nullableText(payload.deletedAt),
+      JSON.stringify(payload),
+    );
+  }
+
   private async applyDevice(change: RemoteChange): Promise<void> {
     const p = change.payload;
     await this.database.runAsync(
@@ -660,6 +689,8 @@ export class SQLiteSyncStore implements SyncLocalStore {
         return this.applyVersion(change);
       case "task":
         return this.applyTask(change);
+      case "calendar":
+        return this.applyCalendar(change);
       case "device":
         return this.applyDevice(change);
       case "settings":
@@ -725,6 +756,8 @@ function tableForEntity(entityType: SyncEntityType): string {
       return "versions";
     case "task":
       return "tasks";
+    case "calendar":
+      return "calendar_items";
     case "device":
       return "devices";
     case "settings":
@@ -829,6 +862,12 @@ function normalizeSqlPayload(
       updatedByDeviceId: row.updated_by_device_id,
     };
   }
+  if (entityType === "calendar") {
+    const payload = typeof row.payload === "string" ? JSON.parse(row.payload) : row.payload;
+    if (!payload || typeof payload !== "object" || Array.isArray(payload))
+      throw new Error("Invalid calendar sync payload.");
+    return payload as Record<string, unknown>;
+  }
   if (entityType === "device") {
     return {
       id: row.id,
@@ -895,4 +934,8 @@ function asText(value: unknown): string {
     : typeof value === "number" || typeof value === "boolean"
       ? String(value)
       : "";
+}
+
+function nullableText(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
 }

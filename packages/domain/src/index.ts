@@ -5,3 +5,6 @@ export * from "./use-cases.js";
 export * from "./project-logic.js";
 export * from "./task-logic.js";
 export * from "./task-recurrence.js";
+export * from "./calendar.js";
+export * from "./calendar-recurrence.js";
+export * from "./ics.js";

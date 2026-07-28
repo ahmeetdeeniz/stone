@@ -154,6 +154,52 @@ service cloud.firestore {
         && request.resource.data.lastEventId is string;
     }
 
+    function validCalendar(uid, calendarId) {
+      return signedIn(uid)
+        && request.resource.data.keys().hasOnly([
+          'id', 'ownerId', 'schemaVersion', 'kind', 'title', 'description', 'allDay',
+          'startDate', 'endDate', 'startAt', 'endAt', 'timezone', 'location', 'category',
+          'projectId', 'sourceDocumentId', 'taskId', 'planningNote', 'recurrence',
+          'recurrenceSeriesId', 'recurrenceId', 'overrides', 'externalUid', 'cancelledAt',
+          'revision', 'createdAt', 'updatedAt', 'deletedAt', 'updatedByDeviceId',
+          'idempotencyKey', 'lastEventId'
+        ])
+        && request.resource.data.id == calendarId
+        && request.resource.data.ownerId == uid
+        && request.resource.data.schemaVersion == 1
+        && request.resource.data.kind in ['event', 'task_block']
+        && request.resource.data.title is string
+        && request.resource.data.title.size() > 0
+        && request.resource.data.title.size() <= 512
+        && nullableString(request.resource.data.description)
+        && request.resource.data.allDay is bool
+        && request.resource.data.startDate is string
+        && request.resource.data.endDate is string
+        && nullableString(request.resource.data.startAt)
+        && nullableString(request.resource.data.endAt)
+        && request.resource.data.timezone is string
+        && nullableString(request.resource.data.location)
+        && request.resource.data.category in ['neutral', 'purple', 'blue', 'green', 'amber', 'red']
+        && nullableString(request.resource.data.projectId)
+        && nullableString(request.resource.data.sourceDocumentId)
+        && nullableString(request.resource.data.taskId)
+        && nullableString(request.resource.data.planningNote)
+        && (request.resource.data.recurrence == null || request.resource.data.recurrence is map)
+        && nullableString(request.resource.data.recurrenceSeriesId)
+        && nullableString(request.resource.data.recurrenceId)
+        && request.resource.data.overrides is list
+        && request.resource.data.overrides.size() <= 1000
+        && nullableString(request.resource.data.externalUid)
+        && nullableString(request.resource.data.cancelledAt)
+        && request.resource.data.revision is int
+        && request.resource.data.createdAt is string
+        && request.resource.data.updatedAt is string
+        && nullableString(request.resource.data.deletedAt)
+        && request.resource.data.updatedByDeviceId is string
+        && request.resource.data.idempotencyKey is string
+        && request.resource.data.lastEventId is string;
+    }
+
     function validDevice(uid, deviceId) {
       return signedIn(uid)
         && request.resource.data.keys().hasOnly([
@@ -268,6 +314,13 @@ service cloud.firestore {
         allow read: if signedIn(uid);
         allow create: if validTask(uid, taskId) && ownerCreate(uid);
         allow update: if validTask(uid, taskId) && ownerUpdate(uid);
+        allow delete: if signedIn(uid) && resource.data.ownerId == uid;
+      }
+
+      match /calendar/{calendarId} {
+        allow read: if signedIn(uid);
+        allow create: if validCalendar(uid, calendarId) && ownerCreate(uid);
+        allow update: if validCalendar(uid, calendarId) && ownerUpdate(uid);
         allow delete: if signedIn(uid) && resource.data.ownerId == uid;
       }
 

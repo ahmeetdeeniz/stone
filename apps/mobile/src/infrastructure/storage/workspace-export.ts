@@ -1,4 +1,4 @@
-import type { ExportedProjectFile } from "@stone/domain";
+import { exportCalendarIcs, validateCalendarItem, type CalendarItem, type ExportedProjectFile } from "@stone/domain";
 import { File } from "expo-file-system";
 import { normalizeMarkdown, sanitizeFileName } from "@stone/markdown";
 import type { StoneDatabase } from "./database";
@@ -83,10 +83,28 @@ export async function exportWorkspace(
     content: JSON.stringify({ schema: 1, tasks, occurrences }, null, 2),
     mimeType: "application/json",
   };
+  const calendarRows = await database.getAllAsync<{ payload: string }>(
+    "SELECT payload FROM calendar_items WHERE owner_id = ? ORDER BY start_date, id",
+    ownerId,
+  );
+  const calendar = calendarRows.map((row) =>
+    validateCalendarItem(JSON.parse(row.payload) as CalendarItem),
+  );
+  const calendarExport: ExportedProjectFile = {
+    path: "calendar.json",
+    content: JSON.stringify({ schema: 1, items: calendar }, null, 2),
+    mimeType: "application/json",
+  };
   return [
     ...documents,
     ...assets,
     taskExport,
+    calendarExport,
+    {
+      path: "calendar.ics",
+      content: exportCalendarIcs(calendar),
+      mimeType: "text/calendar",
+    },
     {
       path: "manifest.json",
       content: JSON.stringify(
@@ -98,6 +116,7 @@ export async function exportWorkspace(
             preview: `assets/drawings/${drawing.id}.png`,
           })),
           tasks: "tasks.json",
+          calendar: "calendar.json",
         },
         null,
         2,

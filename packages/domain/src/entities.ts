@@ -30,6 +30,9 @@ export type TaskState = "open" | "completed" | "cancelled";
 export type TaskPriority = "none" | "low" | "medium" | "high";
 export type TaskRecurrenceFrequency = "daily" | "weekdays" | "weekly" | "monthly" | "custom";
 export type TaskRecurrenceUnit = "day" | "week" | "month";
+export type CalendarItemKind = "event" | "task_block";
+export type CalendarCategory = "neutral" | "purple" | "blue" | "green" | "amber" | "red";
+export type CalendarRecurrenceEditScope = "occurrence" | "future" | "series";
 
 export interface TaskRecurrence {
   frequency: TaskRecurrenceFrequency;
@@ -68,6 +71,80 @@ export interface TaskOccurrence {
   scheduledDate: string;
   completedAt: string;
   taskSnapshot: Task;
+}
+
+export interface CalendarRecurrence {
+  frequency: TaskRecurrenceFrequency;
+  interval: number;
+  unit: TaskRecurrenceUnit;
+  preferredDayOfMonth: number | null;
+  untilDate: string | null;
+}
+
+export interface CalendarOccurrenceOverride {
+  occurrenceDate: string;
+  cancelled: boolean;
+  title: string | null;
+  startAt: string | null;
+  endAt: string | null;
+}
+
+export interface CalendarItem extends SyncFields {
+  schemaVersion: 1;
+  kind: CalendarItemKind;
+  title: string;
+  description: string | null;
+  allDay: boolean;
+  startDate: string;
+  endDate: string;
+  startAt: string | null;
+  endAt: string | null;
+  timezone: string;
+  location: string | null;
+  category: CalendarCategory;
+  projectId: string | null;
+  sourceDocumentId: string | null;
+  taskId: string | null;
+  planningNote: string | null;
+  recurrence: CalendarRecurrence | null;
+  recurrenceSeriesId: string | null;
+  recurrenceId: string | null;
+  overrides: readonly CalendarOccurrenceOverride[];
+  externalUid: string | null;
+  cancelledAt: string | null;
+}
+
+export interface CalendarOccurrence {
+  id: string;
+  itemId: string;
+  seriesId: string | null;
+  occurrenceDate: string;
+  item: CalendarItem;
+}
+
+export interface CalendarListOptions {
+  startDate: string;
+  endDate: string;
+  projectId?: string;
+  kind?: CalendarItemKind;
+  category?: CalendarCategory;
+  taskCompleted?: boolean;
+  search?: string;
+  includeDeleted?: boolean;
+  limit?: number;
+}
+
+export interface CalendarRepository {
+  create(item: CalendarItem): Promise<CalendarItem>;
+  getById(ownerId: string, id: string, includeDeleted?: boolean): Promise<CalendarItem | null>;
+  list(ownerId: string, options: CalendarListOptions): Promise<readonly CalendarItem[]>;
+  save(
+    ownerId: string,
+    item: CalendarItem,
+    expectedRevision: number,
+    deviceId: string,
+  ): Promise<CalendarItem>;
+  softDelete(ownerId: string, id: string, deviceId: string): Promise<CalendarItem>;
 }
 
 export interface TaskListOptions {

@@ -11,6 +11,7 @@ export class SQLitePrivacyRepository {
         "tasks_index",
         "task_occurrences",
         "tasks",
+        "calendar_items",
         "project_blockers",
         "projects",
         "versions",

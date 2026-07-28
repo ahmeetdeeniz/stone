@@ -125,4 +125,14 @@ export const migrations: readonly Migration[] = [
       "CREATE INDEX IF NOT EXISTS task_occurrences_series_idx ON task_occurrences (owner_id, series_id, scheduled_date DESC)",
     ],
   },
+  {
+    version: 8,
+    statements: [
+      "CREATE TABLE IF NOT EXISTS calendar_items (id TEXT PRIMARY KEY NOT NULL, owner_id TEXT NOT NULL, schema_version INTEGER NOT NULL DEFAULT 1, kind TEXT NOT NULL, title TEXT NOT NULL, start_date TEXT NOT NULL, end_date TEXT NOT NULL, start_at TEXT, end_at TEXT, timezone TEXT NOT NULL, project_id TEXT, source_document_id TEXT, task_id TEXT, category TEXT NOT NULL, recurrence_series_id TEXT, revision INTEGER NOT NULL, updated_at TEXT NOT NULL, deleted_at TEXT, payload TEXT NOT NULL)",
+      "CREATE INDEX IF NOT EXISTS calendar_owner_range_idx ON calendar_items (owner_id, deleted_at, start_date, end_date)",
+      "CREATE INDEX IF NOT EXISTS calendar_owner_project_range_idx ON calendar_items (owner_id, project_id, deleted_at, start_date)",
+      "CREATE INDEX IF NOT EXISTS calendar_owner_task_range_idx ON calendar_items (owner_id, task_id, deleted_at, start_date)",
+      "CREATE INDEX IF NOT EXISTS calendar_owner_series_idx ON calendar_items (owner_id, recurrence_series_id, deleted_at)",
+    ],
+  },
 ];

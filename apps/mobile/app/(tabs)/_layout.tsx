@@ -6,6 +6,7 @@ const tabs = {
   notes: "Notlar",
   projects: "Projeler",
   today: "Bugün",
+  calendar: "Takvim",
   settings: "Ayarlar",
 } as const;
 
@@ -45,6 +46,15 @@ export default function TabsLayout() {
           title: tabs.today,
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="calendar-outline" color={color} size={size} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="calendar"
+        options={{
+          title: tabs.calendar,
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="calendar-number-outline" color={color} size={size} />
           ),
         }}
       />
