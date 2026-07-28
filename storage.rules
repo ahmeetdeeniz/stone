@@ -16,6 +16,17 @@ service firebase.storage {
           || (fileName == 'preview.png' && request.resource.contentType == 'image/png'));
       allow delete: if owner();
     }
+    // Read-only compatibility for drawing metadata written before immutable revision paths.
+    // New clients never write this location; account cleanup may delete it.
+    match /users/{uid}/drawings/{drawingId}/{fileName} {
+      function owner() {
+        return request.auth != null && request.auth.uid == uid;
+      }
+
+      allow read, delete: if owner()
+        && fileName in ['source.stoneink', 'preview.png'];
+      allow create, update: if false;
+    }
     match /{allPaths=**} {
       allow read, write: if false;
     }
