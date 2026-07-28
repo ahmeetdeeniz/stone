@@ -121,7 +121,8 @@ STONE_LIVE_E2E_REPO=your-account/your-disposable-repo pnpm verify:github:live
 - Stone, Google Play Store'da veya public App Store listesinde dağıtılmaz.
 - Android sürümü, kişisel olarak imzalanmış ve doğrudan kurulabilen bir APK'dır.
 - iOS sürümü, proje sahibinin Apple Developer hesabıyla private TestFlight kurulumu olarak dağıtılır.
-- Windows sürümü ileride doğrudan installer veya portable desktop build olarak dağıtılır.
+- Windows sürümü GitHub Actions tarafından üretilen NSIS installer ile doğrudan dağıtılabilir;
+  installer Windows'ta indirilmiş, kurulmuş ve başlatılmıştır.
 - Stone içindeki projelerin `Store Süreci`, release checklist'i ve Android/iOS release durumları bu dağıtım kararından bağımsız olarak kullanılmaya devam eder.
 
 ## Paketi kullanma
@@ -145,6 +146,14 @@ mobile app does not yet expose a full-workspace restore UI.
 5. Android için kişisel imzalı APK, iOS için proje sahibinin hesabıyla private TestFlight build'i üret.
 
 Kişisel `.env`, Firebase native config dosyaları, signing credential'ları, kullanıcı notları ve gerçek proje verileri Git'e eklenmemelidir. Bongita fontu repo içindeki `apps/mobile/assets/fonts/Bongita-Regular.otf` yolunda bulunmalıdır; indirilen veya sahte uzantılı bir font kullanılmaz.
+
+Goal 9B otomatik kabul kanıtı `GOAL-9B-ACCEPTANCE-REPORT.md`, fiziksel cihaz, gerçek credential ve
+görsel kontroller ise `GOAL-9B-MANUAL-ACCEPTANCE.md` içindedir. Manuel liste imzalanmadan Goal 9B
+tamamen kabul edilmiş sayılmaz.
+
+Repo, Bongita veya yerel `Icons/` PNG kaynakları için yeniden dağıtım lisansı ya da satın alma
+kanıtı içermez. Owner, binary'leri kişisel kullanım dışında paylaşmadan önce kaynak ve lisans
+koşullarını belgelemelidir.
 
 ## Beklenen depo yapısı
 
