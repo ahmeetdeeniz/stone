@@ -3,6 +3,8 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 const fontPath = path.join(findWorkspaceRoot(), "apps/mobile/assets/fonts/Bongita-Regular.otf");
+const fontsSourcePath = path.join(findWorkspaceRoot(), "apps/mobile/src/design/fonts.ts");
+const tabLayoutPath = path.join(findWorkspaceRoot(), "apps/mobile/app/(tabs)/_layout.tsx");
 
 describe("Stone branding font asset", () => {
   it("keeps the approved OTF source at the documented path", () => {
@@ -11,6 +13,17 @@ describe("Stone branding font asset", () => {
     expect(fontPath.endsWith("Bongita-Regular.otf")).toBe(true);
     expect(statSync(fontPath).isFile()).toBe(true);
     expect(font.byteLength).toBeGreaterThan(0);
+  });
+
+  it("imports only the font and icon modules Stone uses", () => {
+    const fontsSource = readFileSync(fontsSourcePath, "utf8");
+    const tabLayoutSource = readFileSync(tabLayoutPath, "utf8");
+
+    expect(fontsSource).not.toMatch(/from ["']@expo-google-fonts\/inter["']/);
+    expect(fontsSource).toContain('@expo-google-fonts/inter/400Regular"');
+    expect(fontsSource).toContain('@expo-google-fonts/inter/700Bold"');
+    expect(tabLayoutSource).toContain('@expo/vector-icons/Ionicons"');
+    expect(tabLayoutSource).not.toMatch(/from ["']@expo\/vector-icons["']/);
   });
 });
 
