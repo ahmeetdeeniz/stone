@@ -13,7 +13,7 @@ describe("Firestore owner isolation rules", () => {
 
   beforeAll(async () => {
     environment = await initializeTestEnvironment({
-      projectId: "stone-rules-test",
+      projectId: "demo-stone",
       firestore: {
         rules: readFileSync(resolve(process.cwd(), "firestore.rules"), "utf8"),
       },

@@ -1,6 +1,13 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { describe, expect, it } from "vitest";
+import {
+  assertFails,
+  assertSucceeds,
+  initializeTestEnvironment,
+  type RulesTestEnvironment,
+} from "@firebase/rules-unit-testing";
+import { ref, uploadBytes } from "firebase/storage";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 describe("Firebase Storage drawing boundary", () => {
   it("keeps drawing files owner-scoped and type/size constrained", () => {
@@ -31,3 +38,52 @@ describe("Firebase Storage drawing boundary", () => {
     expect(storage).toContain("await item.delete()");
   });
 });
+
+describe.runIf(Boolean(process.env.FIREBASE_STORAGE_EMULATOR_HOST))(
+  "Firebase Storage drawing emulator rules",
+  () => {
+    let environment: RulesTestEnvironment;
+
+    beforeAll(async () => {
+      environment = await initializeTestEnvironment({
+        projectId: "demo-stone",
+        storage: { rules: readFileSync(resolve(process.cwd(), "storage.rules"), "utf8") },
+      });
+    });
+
+    afterAll(async () => {
+      await environment.cleanup();
+    });
+
+    it("allows only immutable owner revision files with the expected MIME type", async () => {
+      const owner = environment.authenticatedContext("owner").storage();
+      const other = environment.authenticatedContext("other").storage();
+      const bytes = new TextEncoder().encode('{"schema":1}');
+      const path = "users/owner/drawings/drawing-1/revisions/1/source.stoneink";
+
+      await assertSucceeds(
+        uploadBytes(ref(owner, path), bytes, { contentType: "application/json" }),
+      );
+      await assertFails(uploadBytes(ref(other, path), bytes, { contentType: "application/json" }));
+      await assertFails(
+        uploadBytes(
+          ref(owner, "users/owner/drawings/drawing-1/revisions/0/source.stoneink"),
+          bytes,
+          { contentType: "application/json" },
+        ),
+      );
+      await assertFails(
+        uploadBytes(
+          ref(owner, "users/owner/drawings/drawing-1/revisions/2/source.stoneink"),
+          bytes,
+          { contentType: "text/plain" },
+        ),
+      );
+      await assertFails(
+        uploadBytes(ref(owner, "users/owner/drawings/drawing-1/source.stoneink"), bytes, {
+          contentType: "application/json",
+        }),
+      );
+    });
+  },
+);
