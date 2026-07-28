@@ -2,13 +2,14 @@ rules_version = '2';
 
 service firebase.storage {
   match /b/{bucket}/o {
-    match /users/{uid}/drawings/{drawingId}/{fileName} {
+    match /users/{uid}/drawings/{drawingId}/revisions/{revision}/{fileName} {
       function owner() {
         return request.auth != null && request.auth.uid == uid;
       }
 
       allow read: if owner();
       allow write: if owner()
+        && revision.matches('^[1-9][0-9]*$')
         && fileName in ['source.stoneink', 'preview.png']
         && request.resource.size <= 10 * 1024 * 1024
         && ((fileName == 'source.stoneink' && request.resource.contentType == 'application/json')

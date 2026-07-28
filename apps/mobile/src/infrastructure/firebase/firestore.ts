@@ -31,6 +31,7 @@ export class FirebaseSyncRemote implements SyncRemote {
         drawingStoragePayload = await this.drawingStorage.upload(
           event.ownerId,
           event.entityId,
+          event.revision,
           String(event.payload.sourcePath),
           String(event.payload.previewPath),
         );

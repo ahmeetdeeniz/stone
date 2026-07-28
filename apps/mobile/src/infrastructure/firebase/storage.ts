@@ -1,5 +1,8 @@
 import storage from "@react-native-firebase/storage";
 import { Directory, File, Paths } from "expo-file-system";
+import { storagePath } from "./storage-path";
+
+export { storagePath } from "./storage-path";
 
 export interface DrawingStoragePayload {
   sourcePath: string;
@@ -12,11 +15,12 @@ export class FirebaseDrawingStorage {
   public async upload(
     ownerId: string,
     drawingId: string,
+    revision: number,
     sourcePath: string,
     previewPath: string,
   ): Promise<DrawingStoragePayload> {
-    const sourceStoragePath = storagePath(ownerId, drawingId, "source.stoneink");
-    const previewStoragePath = storagePath(ownerId, drawingId, "preview.png");
+    const sourceStoragePath = storagePath(ownerId, drawingId, revision, "source.stoneink");
+    const previewStoragePath = storagePath(ownerId, drawingId, revision, "preview.png");
     await storage().ref(sourceStoragePath).putFile(sourcePath, { contentType: "application/json" });
     await storage().ref(previewStoragePath).putFile(previewPath, { contentType: "image/png" });
     return { sourcePath, previewPath, sourceStoragePath, previewStoragePath };
@@ -49,12 +53,4 @@ export class FirebaseDrawingStorage {
       previewStoragePath,
     };
   }
-}
-
-export function storagePath(
-  ownerId: string,
-  drawingId: string,
-  fileName: "source.stoneink" | "preview.png",
-): string {
-  return `users/${ownerId}/drawings/${drawingId}/${fileName}`;
 }

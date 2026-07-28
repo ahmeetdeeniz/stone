@@ -6,6 +6,10 @@ describe("Firebase Storage drawing boundary", () => {
   it("keeps drawing files owner-scoped and type/size constrained", () => {
     const rules = readFileSync(resolve(process.cwd(), "storage.rules"), "utf8");
     expect(rules).toContain("request.auth.uid == uid");
+    expect(rules).toContain(
+      "match /users/{uid}/drawings/{drawingId}/revisions/{revision}/{fileName}",
+    );
+    expect(rules).toContain("revision.matches('^[1-9][0-9]*$')");
     expect(rules).toContain("fileName in ['source.stoneink', 'preview.png']");
     expect(rules).toContain("request.resource.contentType == 'application/json'");
     expect(rules).toContain("request.resource.contentType == 'image/png'");
