@@ -7,6 +7,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "start": "expo start --dev-client",
     "doctor": "expo-doctor",
+    "preexport": "pnpm --filter @stone/domain --filter @stone/markdown --filter @stone/editor --filter @stone/sync --filter @stone/ink run typecheck",
     "export": "expo export --platform android --platform ios",
     "android": "expo run:android",
     "ios": "expo run:ios"
