@@ -6,7 +6,7 @@ tags:
 stone:
   schema: 1
   type: project
-  id: project-goal-9b
+  id: project-live-preview
   status: testing
   priority: high
   currentVersion: 1.0.0
@@ -15,7 +15,7 @@ stone:
   nextAction: Fiziksel cihaz kabulünü tamamla
 ---
 
-# Stone Goal 9B — Türkçe kabul
+# Stone Live Preview — Türkçe uyumluluk
 
 Uzun bir paragraf içinde **kalın**, _italik_, `inline code`, #etiket,
 [dış bağlantı](https://example.com) ve desteklenmeyen ama korunması gereken [[İç Bağlantı]] bulunur.
