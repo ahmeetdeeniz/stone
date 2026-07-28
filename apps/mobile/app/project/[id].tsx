@@ -9,6 +9,7 @@ import type {
   ProjectDecision,
   ProjectTask,
   ProjectVersion,
+  Task,
 } from "@stone/domain";
 import {
   projectPriorities,
@@ -31,10 +32,11 @@ export default function ProjectDetailScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
   const router = useRouter();
   const { user } = useAuth();
-  const { projectUseCases, deviceId } = useAppServices();
+  const { projectUseCases, taskUseCases, deviceId } = useAppServices();
   const [project, setProject] = useState<Project | null>(null);
   const [versions, setVersions] = useState<readonly ProjectVersion[]>([]);
   const [tasks, setTasks] = useState<readonly ProjectTask[]>([]);
+  const [planningTasks, setPlanningTasks] = useState<readonly Task[]>([]);
   const [blockers, setBlockers] = useState<readonly ProjectBlocker[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -61,14 +63,16 @@ export default function ProjectDetailScreen() {
       setError(null);
       const loaded = await projectUseCases.get(user.uid, id);
       if (!loaded) throw new Error("Proje bulunamadı.");
-      const [loadedVersions, loadedTasks, loadedBlockers] = await Promise.all([
+      const [loadedVersions, loadedTasks, loadedPlanningTasks, loadedBlockers] = await Promise.all([
         projectUseCases.versions(user.uid, id),
         projectUseCases.tasks(user.uid, id),
+        taskUseCases.list(user.uid, { projectId: id }),
         projectUseCases.blockers(user.uid, id),
       ]);
       setProject(loaded);
       setVersions(loadedVersions);
       setTasks(loadedTasks);
+      setPlanningTasks(loadedPlanningTasks);
       setBlockers(loadedBlockers);
       setTitle(loaded.title);
       setStatus(loaded.status);
@@ -85,7 +89,7 @@ export default function ProjectDetailScreen() {
     } finally {
       setLoading(false);
     }
-  }, [id, projectUseCases, user]);
+  }, [id, projectUseCases, taskUseCases, user]);
 
   useEffect(() => void load(), [load]);
 
@@ -357,6 +361,38 @@ export default function ProjectDetailScreen() {
                     {task.priority ? `Öncelik: ${task.priority}` : ""}
                     {task.dueDate ? ` · ${task.dueDate}` : ""}
                     {task.blocked ? " · Blocker" : ""}
+                  </StoneText>
+                </Pressable>
+              ))
+            )}
+          </Section>
+
+          <Section
+            title={`Planlama görevleri (${planningTasks.filter((task) => task.state === "completed").length}/${planningTasks.length})`}
+          >
+            {planningTasks.length === 0 ? (
+              <StoneText variant="bodySmall">
+                Bu projeye atanmış bağımsız veya not bağlantılı görev yok.
+              </StoneText>
+            ) : (
+              planningTasks.map((task) => (
+                <Pressable
+                  key={task.id}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${task.title} görevini aç`}
+                  onPress={() =>
+                    router.push({ pathname: "/task/[id]" as never, params: { id: task.id } })
+                  }
+                  style={styles.task}
+                >
+                  <StoneText variant="body">
+                    {task.state === "completed" ? "☑" : "☐"} {task.title}
+                  </StoneText>
+                  <StoneText variant="caption">
+                    Durum: {task.state}
+                    {task.priority !== "none" ? ` · Öncelik: ${task.priority}` : ""}
+                    {task.dueDate ? ` · ${task.dueDate}` : ""}
+                    {task.sourceDocumentId ? " · Kaynak not" : ""}
                   </StoneText>
                 </Pressable>
               ))

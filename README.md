@@ -1,6 +1,6 @@
 # Stone
 
-**A calm, personal Markdown workspace for notes, projects, ink, and recovery across your own devices.**
+**A calm, personal Markdown workspace for notes, tasks, projects, ink, and recovery across your own devices.**
 
 > **Public preview.** Automated source and clean-clone gates pass. Physical Android/iPhone/tablet,
 > final accessibility, and live credential-restart checks remain pending; binary distribution
@@ -22,6 +22,8 @@ Firebase project and, optionally, GitHub OAuth App and separately deployed MCP s
   and explicit conflict handling protect edits when the network is unavailable.
 - **Projects live beside notes.** Portable frontmatter and task metadata drive project, version,
   blocker, Kanban, and Today views.
+- **Planning works offline.** Standalone and Markdown-backed tasks coexist with due dates, priority,
+  subtasks, recurrence and project relationships.
 - **Ink remains editable.** Hybrid notes use a normal PNG reference plus an ignorable link to the
   vector `.stoneink` source.
 - **You own the services.** Firebase, GitHub access, signing accounts, and MCP deployment belong to
@@ -49,6 +51,17 @@ presented as product evidence.
   progress, Kanban, and Today ranking on mobile
 - Read-only project/version/blocker summaries and Today navigation on Windows
 
+### Tasks and planning
+
+- Standalone tasks on mobile and Windows with offline creation, editing, completion/reopen,
+  soft-delete, priority, due date/time, tags, estimates, project links, search and planning filters
+- Ordered mobile subtasks plus deterministic daily, weekday, weekly and monthly recurrence;
+  completed occurrences are preserved and the next occurrence is a separate idempotent record
+- Portable Markdown task lists are indexed after note saves; fenced code is excluded, and a linked
+  completion updates only the source checkbox
+- Today combines due, overdue and project work; Upcoming, Overdue, Completed and project-filtered
+  views use indexed local data
+
 ### Ink, sync, and recovery
 
 - Pressure-aware pen/highlighter strokes and vector shapes in `.stoneink`, with PNG previews
@@ -62,8 +75,9 @@ presented as product evidence.
   storage through Windows Credential Manager
 - GitHub Device Flow, repository listing/linking, clone, pull, status, reviewed commit/push, and
   restore; destructive Git operations are intentionally excluded
-- Provider-neutral remote MCP service with OAuth, scoped tools, revisions, idempotency, and audit
-  records; deployment/provider publication is operator-owned
+- Provider-neutral remote MCP service with OAuth, scoped tools, revisions, idempotency, audit
+  records and bounded task CRUD/Today/Overdue tools; deployment/provider publication is
+  operator-owned
 
 ## Platform and parity
 
@@ -153,12 +167,15 @@ private notes in public issues.
 - Mobile full-workspace restore UI, public iOS binaries, macOS/Linux desktop, and a maintainer-hosted
   backend are not available.
 - MCP hosting and provider publication are not automatic.
+- Due times are planning metadata only; Stone does not yet schedule operating-system task
+  notifications.
+- Calendar views/time blocking, focus timers/analytics and native widgets are not implemented.
 
 ## Roadmap
 
-Possible post-preview directions include advanced tasks, calendar/time blocking, a focus timer,
-Android/iOS widgets, improved tablet layouts, and richer revision restore. They are not implemented
-commitments.
+Possible post-preview directions include calendar/time blocking, reminder notifications, a focus
+timer, Android/iOS widgets, improved tablet layouts, and richer revision restore. They are not
+implemented commitments.
 
 ## Contributing, support, and license
 

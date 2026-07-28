@@ -887,6 +887,14 @@ export class SQLiteProjectRepository implements ProjectRepository {
       project.ownerId,
       project.id,
     );
+    const planningCounts = await this.database.getFirstAsync<{
+      open_tasks: number;
+      high_priority: number;
+    }>(
+      "SELECT COUNT(*) AS open_tasks, COALESCE(SUM(CASE WHEN priority = 'high' THEN 1 ELSE 0 END), 0) AS high_priority FROM tasks WHERE owner_id = ? AND project_id = ? AND state = 'open' AND deleted_at IS NULL",
+      project.ownerId,
+      project.id,
+    );
     const blockerCounts = await this.database.getFirstAsync<{ open_blockers: number }>(
       "SELECT COUNT(*) AS open_blockers FROM project_blockers WHERE owner_id = ? AND project_id = ? AND resolved = 0",
       project.ownerId,
@@ -900,8 +908,11 @@ export class SQLiteProjectRepository implements ProjectRepository {
     const health = calculateProjectHealth(
       project,
       {
-        openTasks: taskCounts?.open_tasks ?? 0,
-        openCriticalBlockers: (taskCounts?.critical ?? 0) + (blockerCounts?.open_blockers ?? 0),
+        openTasks: (taskCounts?.open_tasks ?? 0) + (planningCounts?.open_tasks ?? 0),
+        openCriticalBlockers:
+          (taskCounts?.critical ?? 0) +
+          (planningCounts?.high_priority ?? 0) +
+          (blockerCounts?.open_blockers ?? 0),
         missingStoreChecklist:
           project.status === "store_process" &&
           (!checklist || calculateTaskProgress(checklist.markdown).total === 0),

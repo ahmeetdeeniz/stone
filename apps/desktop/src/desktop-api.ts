@@ -9,6 +9,28 @@ export interface DesktopDocument {
   updatedAt: string;
 }
 
+export interface DesktopTask {
+  id: string;
+  title: string;
+  description: string | null;
+  state: "open" | "completed" | "cancelled";
+  completedAt: string | null;
+  dueDate: string | null;
+  dueTime: string | null;
+  timezone: string;
+  priority: "none" | "low" | "medium" | "high";
+  sortOrder: number;
+  tags: string[];
+  projectId: string | null;
+  parentTaskId: string | null;
+  estimatedMinutes: number | null;
+  recurrence: Record<string, unknown> | null;
+  revision: number;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt: string | null;
+}
+
 export interface FileFingerprint {
   sha256: string;
   modifiedMs: number;
@@ -62,6 +84,9 @@ async function call<T>(command: string, args?: Record<string, unknown>): Promise
 
 export const desktopApi = {
   listDocuments: () => call<DesktopDocument[]>("list_documents"),
+  listTasks: () => call<DesktopTask[]>("list_tasks"),
+  saveTask: (task: DesktopTask) => call<DesktopTask>("save_task", { task }),
+  deleteTask: (id: string) => call<DesktopTask>("delete_task", { id }),
   getDocument: (id: string) => call<DesktopDocument | null>("get_document", { id }),
   saveDocument: (document: { id: string; title: string; markdown: string; path?: string | null }) =>
     call<DesktopDocument>("save_document", { document }),

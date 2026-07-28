@@ -24,10 +24,11 @@ import {
   requireFirebaseConfigured,
   type AuthSession,
   type DesktopDocument,
+  type DesktopTask,
   type FileFingerprint,
 } from "./desktop-api";
 
-type Section = "notes" | "projects" | "today" | "settings";
+type Section = "notes" | "projects" | "tasks" | "today" | "settings";
 type Theme = "system" | "light" | "dark";
 function titleFromMarkdown(markdown: string): string {
   const heading = markdown.match(/^#\s+(.+)$/m)?.[1]?.trim();
@@ -190,6 +191,7 @@ function StoneShell({ session, onSignedOut }: { session: AuthSession; onSignedOu
   const [section, setSection] = useState<Section>("notes");
   const [theme, setTheme] = useState<Theme>("system");
   const [documents, setDocuments] = useState<DesktopDocument[]>([]);
+  const [tasks, setTasks] = useState<DesktopTask[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [document, setDocument] = useState<DesktopDocument | null>(null);
   const [fingerprint, setFingerprint] = useState<FileFingerprint | null>(null);
@@ -201,7 +203,19 @@ function StoneShell({ session, onSignedOut }: { session: AuthSession; onSignedOu
   const editorHost = useRef<HTMLDivElement>(null);
   const editor = useRef<EditorView | null>(null);
   const draft = useRef("");
-  const projects = useMemo(() => buildProjectSummaries(documents), [documents]);
+  const projects = useMemo(
+    () =>
+      buildProjectSummaries(documents).map((project) => {
+        const related = tasks.filter((task) => task.projectId === project.id);
+        return {
+          ...project,
+          completedTasks:
+            project.completedTasks + related.filter((task) => task.state === "completed").length,
+          totalTasks: project.totalTasks + related.length,
+        };
+      }),
+    [documents, tasks],
+  );
   const todayItems = useMemo(() => buildTodayItems(projects), [projects]);
   const recentNotes = useMemo(
     () =>
@@ -224,6 +238,13 @@ function StoneShell({ session, onSignedOut }: { session: AuthSession; onSignedOu
         setDocuments(items);
         if (items[0]) setSelectedId(items[0].id);
       })
+      .catch((caught) => setMessage(toMessage(caught)));
+  }, []);
+
+  useEffect(() => {
+    void desktopApi
+      .listTasks()
+      .then(setTasks)
       .catch((caught) => setMessage(toMessage(caught)));
   }, []);
 
@@ -435,9 +456,11 @@ function StoneShell({ session, onSignedOut }: { session: AuthSession; onSignedOu
       ? "Notlar"
       : section === "projects"
         ? "Projeler"
-        : section === "today"
-          ? "Bugün"
-          : "Ayarlar";
+        : section === "tasks"
+          ? "Görevler"
+          : section === "today"
+            ? "Bugün"
+            : "Ayarlar";
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -455,6 +478,9 @@ function StoneShell({ session, onSignedOut }: { session: AuthSession; onSignedOu
             icon="▦"
           >
             Projeler
+          </NavButton>
+          <NavButton active={section === "tasks"} onClick={() => setSection("tasks")} icon="✓">
+            Görevler
           </NavButton>
           <NavButton active={section === "today"} onClick={() => setSection("today")} icon="◷">
             Bugün
@@ -596,8 +622,22 @@ function StoneShell({ session, onSignedOut }: { session: AuthSession; onSignedOu
             <GithubPanel />
           </section>
         )}
+        {section === "tasks" && (
+          <TaskPlanner
+            tasks={tasks}
+            projects={projects}
+            onChange={setTasks}
+            onMessage={setMessage}
+          />
+        )}
         {section === "today" && (
-          <TodayOverview items={todayItems} recentNotes={recentNotes} onOpen={openDocument} />
+          <TodayOverview
+            items={todayItems}
+            tasks={tasks}
+            recentNotes={recentNotes}
+            onOpen={openDocument}
+            onOpenTasks={() => setSection("tasks")}
+          />
         )}
         {section === "settings" && (
           <section className="settings-panel">
@@ -654,6 +694,311 @@ function EmptyState({ title, detail }: { title: string; detail: string }) {
       <h2 className="brand-heading">{title}</h2>
       <p>{detail}</p>
     </div>
+  );
+}
+
+function TaskPlanner({
+  tasks,
+  projects,
+  onChange,
+  onMessage,
+}: {
+  tasks: readonly DesktopTask[];
+  projects: readonly DesktopProjectSummary[];
+  onChange: (tasks: DesktopTask[]) => void;
+  onMessage: (message: string | null) => void;
+}) {
+  const [title, setTitle] = useState("");
+  const [query, setQuery] = useState("");
+  const [view, setView] = useState<"all" | "today" | "upcoming" | "overdue" | "completed">("today");
+  const [selected, setSelected] = useState<string | null>(null);
+  const today = new Date().toISOString().slice(0, 10);
+  const visible = tasks.filter((task) => {
+    if (
+      query &&
+      !`${task.title} ${task.description ?? ""} ${task.tags.join(" ")}`
+        .toLocaleLowerCase()
+        .includes(query.toLocaleLowerCase())
+    )
+      return false;
+    if (view === "completed") return task.state === "completed";
+    if (task.state !== "open") return false;
+    if (view === "today") return task.dueDate === today;
+    if (view === "overdue") return Boolean(task.dueDate && task.dueDate < today);
+    if (view === "upcoming") return Boolean(task.dueDate && task.dueDate > today);
+    return true;
+  });
+  const current = tasks.find((task) => task.id === selected) ?? null;
+
+  async function save(task: DesktopTask) {
+    try {
+      const saved = await desktopApi.saveTask(task);
+      onChange([saved, ...tasks.filter((item) => item.id !== saved.id)]);
+      setSelected(saved.id);
+      onMessage("Görev yerel olarak kaydedildi.");
+    } catch (caught) {
+      onMessage(toMessage(caught));
+    }
+  }
+
+  async function add() {
+    if (!title.trim()) return;
+    const timestamp = new Date().toISOString();
+    await save({
+      id: crypto.randomUUID(),
+      title: title.trim(),
+      description: null,
+      state: "open",
+      completedAt: null,
+      dueDate: view === "today" ? today : null,
+      dueTime: null,
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+      priority: "none",
+      sortOrder: Date.now(),
+      tags: [],
+      projectId: null,
+      parentTaskId: null,
+      estimatedMinutes: null,
+      recurrence: null,
+      revision: 0,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      deletedAt: null,
+    });
+    setTitle("");
+  }
+
+  return (
+    <section className="task-workspace" aria-labelledby="task-heading">
+      <div className="task-list-panel">
+        <div className="task-heading">
+          <div>
+            <p className="eyebrow">PLANLAMA</p>
+            <h2 id="task-heading">Görevler</h2>
+          </div>
+          <span>{visible.length} görev</span>
+        </div>
+        <form
+          className="task-quick-add"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void add();
+          }}
+        >
+          <label>
+            Hızlı görev ekle
+            <input value={title} onChange={(event) => setTitle(event.target.value)} />
+          </label>
+          <button className="primary-button compact" disabled={!title.trim()}>
+            Ekle
+          </button>
+        </form>
+        <label>
+          Görevlerde ara
+          <input value={query} onChange={(event) => setQuery(event.target.value)} />
+        </label>
+        <div className="task-filters" role="toolbar" aria-label="Görev görünümleri">
+          {(["all", "today", "upcoming", "overdue", "completed"] as const).map((item) => (
+            <button
+              key={item}
+              className={view === item ? "selected" : ""}
+              aria-pressed={view === item}
+              onClick={() => setView(item)}
+            >
+              {item === "all"
+                ? "Tümü"
+                : item === "today"
+                  ? "Bugün"
+                  : item === "upcoming"
+                    ? "Yaklaşan"
+                    : item === "overdue"
+                      ? "Geciken"
+                      : "Tamamlanan"}
+            </button>
+          ))}
+        </div>
+        <div className="task-list" role="list">
+          {visible.length === 0 ? (
+            <EmptyState title="Bu görünüm sakin" detail="Filtreye uyan görev yok." />
+          ) : (
+            visible.map((task) => (
+              <div
+                className={`task-list-row ${selected === task.id ? "selected" : ""}`}
+                key={task.id}
+              >
+                <button
+                  className="task-checkbox"
+                  role="checkbox"
+                  aria-checked={task.state === "completed"}
+                  aria-label={`${task.title} görevini ${task.state === "completed" ? "yeniden aç" : "tamamla"}`}
+                  onClick={() =>
+                    void save({
+                      ...task,
+                      state: task.state === "completed" ? "open" : "completed",
+                      completedAt: task.state === "completed" ? null : new Date().toISOString(),
+                    })
+                  }
+                >
+                  {task.state === "completed" ? "✓" : ""}
+                </button>
+                <button className="task-open" onClick={() => setSelected(task.id)}>
+                  <strong>{task.title}</strong>
+                  <span>
+                    {task.priority !== "none" ? `${task.priority} · ` : ""}
+                    {task.dueDate ?? "Tarihsiz"}
+                  </span>
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+      <TaskEditor
+        task={current}
+        projects={projects}
+        onSave={(task) => void save(task)}
+        onDelete={(task) =>
+          void desktopApi
+            .deleteTask(task.id)
+            .then(() => {
+              onChange(tasks.filter((item) => item.id !== task.id));
+              setSelected(null);
+            })
+            .catch((caught) => onMessage(toMessage(caught)))
+        }
+      />
+    </section>
+  );
+}
+
+function TaskEditor({
+  task,
+  projects,
+  onSave,
+  onDelete,
+}: {
+  task: DesktopTask | null;
+  projects: readonly DesktopProjectSummary[];
+  onSave: (task: DesktopTask) => void;
+  onDelete: (task: DesktopTask) => void;
+}) {
+  const [draft, setDraft] = useState<DesktopTask | null>(task);
+  useEffect(() => setDraft(task), [task]);
+  if (!draft)
+    return (
+      <aside className="task-editor">
+        <EmptyState
+          title="Bir görev seç"
+          detail="Ayrıntıları düzenlemek için listeden görev seç."
+        />
+      </aside>
+    );
+  return (
+    <aside className="task-editor" aria-label="Görev ayrıntıları">
+      <h2>Görev ayrıntıları</h2>
+      <label>
+        Başlık
+        <input
+          value={draft.title}
+          onChange={(event) => setDraft({ ...draft, title: event.target.value })}
+        />
+      </label>
+      <label>
+        Açıklama
+        <textarea
+          value={draft.description ?? ""}
+          onChange={(event) => setDraft({ ...draft, description: event.target.value || null })}
+        />
+      </label>
+      <div className="task-editor-grid">
+        <label>
+          Tarih
+          <input
+            type="date"
+            value={draft.dueDate ?? ""}
+            onChange={(event) => setDraft({ ...draft, dueDate: event.target.value || null })}
+          />
+        </label>
+        <label>
+          Saat
+          <input
+            type="time"
+            value={draft.dueTime ?? ""}
+            onChange={(event) => setDraft({ ...draft, dueTime: event.target.value || null })}
+          />
+        </label>
+      </div>
+      <label>
+        Öncelik
+        <select
+          value={draft.priority}
+          onChange={(event) =>
+            setDraft({ ...draft, priority: event.target.value as DesktopTask["priority"] })
+          }
+        >
+          <option value="none">Yok</option>
+          <option value="low">Düşük</option>
+          <option value="medium">Orta</option>
+          <option value="high">Yüksek</option>
+        </select>
+      </label>
+      <label>
+        Proje
+        <select
+          value={draft.projectId ?? ""}
+          onChange={(event) => setDraft({ ...draft, projectId: event.target.value || null })}
+        >
+          <option value="">Projesiz</option>
+          {projects.map((project) => (
+            <option key={project.id} value={project.id}>
+              {project.title}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label>
+        Etiketler
+        <input
+          value={draft.tags.join(", ")}
+          onChange={(event) =>
+            setDraft({
+              ...draft,
+              tags: event.target.value
+                .split(",")
+                .map((tag) => tag.trim())
+                .filter(Boolean),
+            })
+          }
+        />
+      </label>
+      <label>
+        Tahmini dakika
+        <input
+          type="number"
+          min="1"
+          value={draft.estimatedMinutes ?? ""}
+          onChange={(event) =>
+            setDraft({
+              ...draft,
+              estimatedMinutes: event.target.value ? Number(event.target.value) : null,
+            })
+          }
+        />
+      </label>
+      <p className="muted">Saat bilgisi henüz işletim sistemi bildirimi planlamaz.</p>
+      <div className="task-editor-actions">
+        <button
+          className="primary-button"
+          disabled={!draft.title.trim()}
+          onClick={() => onSave(draft)}
+        >
+          Kaydet
+        </button>
+        <button className="secondary-button" onClick={() => onDelete(draft)}>
+          Sil
+        </button>
+      </div>
+    </aside>
   );
 }
 
@@ -715,13 +1060,21 @@ function ProjectOverview({
 
 function TodayOverview({
   items,
+  tasks,
   recentNotes,
   onOpen,
+  onOpenTasks,
 }: {
   items: readonly DesktopTodayItem[];
+  tasks: readonly DesktopTask[];
   recentNotes: readonly DesktopDocument[];
   onOpen: (documentId: string) => void;
+  onOpenTasks: () => void;
 }) {
+  const today = new Date().toISOString().slice(0, 10);
+  const dueTasks = tasks
+    .filter((task) => task.state === "open" && task.dueDate && task.dueDate <= today)
+    .slice(0, 8);
   return (
     <section className="today-workspace">
       <div className="today-heading">
@@ -730,6 +1083,30 @@ function TodayOverview({
         <p className="muted">Blocker, yaklaşan hedef ve sonraki işlerin sakin özeti.</p>
       </div>
       <div className="today-columns">
+        <section className="today-card">
+          <h3>Görevler</h3>
+          {dueTasks.length === 0 ? (
+            <div className="inline-empty">
+              <strong>Bugün sakin</strong>
+              <span>Bugüne kalan veya geciken görev yok.</span>
+            </div>
+          ) : (
+            <div className="today-list">
+              {dueTasks.map((task) => (
+                <button key={task.id} onClick={onOpenTasks}>
+                  <span className="today-kind today-kind-target">
+                    {task.dueDate === today ? "Bugün" : "Gecikti"}
+                  </span>
+                  <strong>{task.title}</strong>
+                  <span>
+                    {task.priority !== "none" ? `${task.priority} öncelik · ` : ""}
+                    {task.dueDate}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+        </section>
         <section className="today-card">
           <h3>Proje odağı</h3>
           {items.length === 0 ? (

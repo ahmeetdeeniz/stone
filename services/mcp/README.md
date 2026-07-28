@@ -39,7 +39,13 @@ ChatGPT's current remote MCP flow uses the ChatGPT connector OAuth callback URI 
 
 ## Tool safety contract
 
-Read tools are bounded and owner-scoped: note search/get, project/version reads, today tasks, blockers and release checklists. Write tools are limited to creating/appending notes, task state/metadata updates, project next action/status, versions, release items and decisions. Every write requires `expectedRevision` and an idempotency key, is audited, and is reversible at the data-model level. Project status changes require explicit confirmation. No write accepts arbitrary collection paths or unbounded Markdown.
+Read tools are bounded and owner-scoped: note search/get, project/version reads, standalone task
+list/get/Today/Overdue, Markdown tasks, blockers and release checklists. Writes include
+revision-safe standalone task create/update/complete/reopen/soft-delete alongside the existing
+note, project, version, release and decision operations. Every write requires `expectedRevision`
+and an idempotency key, is audited, and is reversible at the data-model level. Project status
+changes require explicit confirmation. No write accepts arbitrary collection paths or unbounded
+Markdown.
 
 The initial service intentionally has no custom provider UI. Structured results are usable by every MCP client and keep the business data on the server; a provider-specific UI can be added later without changing the core contract.
 

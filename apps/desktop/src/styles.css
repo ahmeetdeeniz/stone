@@ -555,6 +555,146 @@ nav {
   font-weight: 800;
   text-transform: uppercase;
 }
+
+.task-workspace {
+  display: grid;
+  grid-template-columns: minmax(420px, 1fr) minmax(340px, 0.7fr);
+  height: 100%;
+  min-height: 0;
+}
+
+.task-list-panel,
+.task-editor {
+  min-height: 0;
+  overflow: auto;
+  padding: 24px;
+}
+
+.task-list-panel {
+  border-right: 1px solid var(--border);
+}
+
+.task-heading,
+.task-editor-actions,
+.task-list-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.task-heading {
+  justify-content: space-between;
+}
+
+.task-quick-add {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: end;
+  gap: 12px;
+  margin: 20px 0;
+}
+
+.task-filters {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 16px 0;
+}
+
+.task-filters button {
+  min-height: 40px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  padding: 0 14px;
+}
+
+.task-filters button.selected {
+  border-color: var(--primary);
+  background: var(--active-line);
+}
+
+.task-list {
+  display: grid;
+  gap: 8px;
+}
+
+.task-list-row {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 8px;
+  background: var(--surface);
+}
+
+.task-list-row.selected {
+  border-color: var(--primary);
+}
+
+.task-checkbox {
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  border: 2px solid var(--primary);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text);
+}
+
+.task-open {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+}
+
+.task-open span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.task-editor {
+  display: grid;
+  align-content: start;
+  gap: 16px;
+}
+
+.task-editor label {
+  display: grid;
+  gap: 6px;
+}
+
+.task-editor textarea {
+  min-height: 120px;
+  resize: vertical;
+}
+
+.task-editor-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+@media (max-width: 900px) {
+  .task-workspace {
+    grid-template-columns: 1fr;
+    overflow: auto;
+  }
+
+  .task-list-panel {
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+    overflow: visible;
+  }
+
+  .task-editor {
+    overflow: visible;
+  }
+}
 .project-summary-card progress {
   width: 100%;
   height: 6px;

@@ -42,6 +42,30 @@ pub struct DesktopDocument {
     pub updated_at: String,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct DesktopTask {
+    pub id: String,
+    pub title: String,
+    pub description: Option<String>,
+    pub state: String,
+    pub completed_at: Option<String>,
+    pub due_date: Option<String>,
+    pub due_time: Option<String>,
+    pub timezone: String,
+    pub priority: String,
+    pub sort_order: f64,
+    pub tags: Vec<String>,
+    pub project_id: Option<String>,
+    pub parent_task_id: Option<String>,
+    pub estimated_minutes: Option<i64>,
+    pub recurrence: Option<serde_json::Value>,
+    pub revision: i64,
+    pub created_at: String,
+    pub updated_at: String,
+    pub deleted_at: Option<String>,
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct FileFingerprint {
@@ -193,6 +217,9 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             list_documents,
+            list_tasks,
+            save_task,
+            delete_task,
             get_document,
             save_document,
             open_markdown_file,
@@ -262,6 +289,14 @@ impl Database {
                 [Utc::now().to_rfc3339()],
             )?;
         }
+        if current < 3 {
+            connection.execute_batch("CREATE TABLE IF NOT EXISTS tasks (id TEXT PRIMARY KEY, payload TEXT NOT NULL, state TEXT NOT NULL, due_date TEXT, project_id TEXT, parent_task_id TEXT, sort_order REAL NOT NULL DEFAULT 0, revision INTEGER NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, deleted_at TEXT); CREATE INDEX IF NOT EXISTS desktop_tasks_due_idx ON tasks(state, deleted_at, due_date); CREATE INDEX IF NOT EXISTS desktop_tasks_project_idx ON tasks(project_id, state, deleted_at); CREATE INDEX IF NOT EXISTS desktop_tasks_parent_idx ON tasks(parent_task_id, sort_order);")?;
+            connection.pragma_update(None, "user_version", 3_i64)?;
+            connection.execute(
+                "INSERT OR IGNORE INTO migrations(version, applied_at) VALUES(3, ?1)",
+                [Utc::now().to_rfc3339()],
+            )?;
+        }
         let device_id = connection.query_row("SELECT id FROM devices LIMIT 1", [], |row| row.get(0)).optional()?.unwrap_or_else(|| {
             let id = Uuid::new_v4().to_string();
             let _ = connection.execute("INSERT INTO devices(id, platform, name, created_at) VALUES(?1, 'windows', 'Stone Desktop', ?2)", params![id, Utc::now().to_rfc3339()]);
@@ -276,6 +311,34 @@ impl Database {
 
 fn now() -> String {
     Utc::now().to_rfc3339()
+}
+
+fn validate_task(task: &DesktopTask) -> Result<(), String> {
+    if task.title.trim().is_empty() || task.title.chars().count() > 512 {
+        return Err("Görev başlığı zorunludur ve 512 karakteri aşamaz.".to_owned());
+    }
+    if !matches!(task.state.as_str(), "open" | "completed" | "cancelled") {
+        return Err("Görev durumu geçersiz.".to_owned());
+    }
+    if !matches!(task.priority.as_str(), "none" | "low" | "medium" | "high") {
+        return Err("Görev önceliği geçersiz.".to_owned());
+    }
+    if task.state == "completed" && task.completed_at.is_none() {
+        return Err("Tamamlanan görev completion zamanı taşımalıdır.".to_owned());
+    }
+    Ok(())
+}
+
+fn task_sync_payload(task: &DesktopTask) -> serde_json::Value {
+    let mut value = serde_json::to_value(task).unwrap_or_else(|_| serde_json::json!({}));
+    if let Some(fields) = value.as_object_mut() {
+        fields.insert("schemaVersion".to_owned(), serde_json::json!(1));
+        fields.insert("sourceDocumentId".to_owned(), serde_json::Value::Null);
+        fields.insert("sourceBlockId".to_owned(), serde_json::Value::Null);
+        fields.insert("recurrenceSeriesId".to_owned(), serde_json::Value::Null);
+        fields.insert("occurrenceDate".to_owned(), serde_json::Value::Null);
+    }
+    value
 }
 fn validate_markdown_path(path: &Path) -> Result<(), String> {
     let extension = path
@@ -353,6 +416,87 @@ fn list_documents(state: State<'_, Mutex<Database>>) -> Result<Vec<DesktopDocume
         .map_err(|error| error.to_string())?;
     rows.collect::<Result<Vec<_>, _>>()
         .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn list_tasks(state: State<'_, Mutex<Database>>) -> Result<Vec<DesktopTask>, String> {
+    let db = state.lock().map_err(|_| "Veritabanı kilidi alınamadı.")?;
+    let mut statement = db
+        .connection
+        .prepare("SELECT payload FROM tasks WHERE deleted_at IS NULL ORDER BY due_date IS NULL, due_date, sort_order, updated_at DESC")
+        .map_err(|error| error.to_string())?;
+    let rows = statement
+        .query_map([], |row| {
+            let payload: String = row.get(0)?;
+            serde_json::from_str::<DesktopTask>(&payload).map_err(|error| {
+                rusqlite::Error::FromSqlConversionFailure(
+                    payload.len(),
+                    rusqlite::types::Type::Text,
+                    Box::new(error),
+                )
+            })
+        })
+        .map_err(|error| error.to_string())?;
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn save_task(
+    mut task: DesktopTask,
+    state: State<'_, Mutex<Database>>,
+) -> Result<DesktopTask, String> {
+    validate_task(&task)?;
+    let db = state.lock().map_err(|_| "Veritabanı kilidi alınamadı.")?;
+    let transaction = db
+        .connection
+        .unchecked_transaction()
+        .map_err(|error| error.to_string())?;
+    let previous: Option<i64> = transaction
+        .query_row(
+            "SELECT revision FROM tasks WHERE id = ?1",
+            [&task.id],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(|error| error.to_string())?;
+    let revision = previous.unwrap_or(0) + 1;
+    let timestamp = now();
+    task.revision = revision;
+    task.updated_at = timestamp.clone();
+    if previous.is_none() {
+        task.created_at = timestamp.clone();
+    }
+    let payload = serde_json::to_string(&task).map_err(|error| error.to_string())?;
+    transaction.execute("INSERT INTO tasks(id, payload, state, due_date, project_id, parent_task_id, sort_order, revision, created_at, updated_at, deleted_at) VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload, state=excluded.state, due_date=excluded.due_date, project_id=excluded.project_id, parent_task_id=excluded.parent_task_id, sort_order=excluded.sort_order, revision=excluded.revision, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at", params![task.id, payload, task.state, task.due_date, task.project_id, task.parent_task_id, task.sort_order, revision, task.created_at, timestamp, task.deleted_at]).map_err(|error| error.to_string())?;
+    transaction.execute("INSERT INTO outbox(id, owner_id, entity_type, entity_id, operation, base_revision, revision, payload, created_at, status) VALUES(?1, '', 'task', ?2, 'upsert', ?3, ?4, ?5, ?6, 'pending')", params![Uuid::new_v4().to_string(), task.id, previous.unwrap_or(0), revision, task_sync_payload(&task).to_string(), timestamp]).map_err(|error| error.to_string())?;
+    transaction.commit().map_err(|error| error.to_string())?;
+    Ok(task)
+}
+
+#[tauri::command]
+fn delete_task(id: String, state: State<'_, Mutex<Database>>) -> Result<DesktopTask, String> {
+    let current = {
+        let db = state.lock().map_err(|_| "Veritabanı kilidi alınamadı.")?;
+        let payload: String = db
+            .connection
+            .query_row(
+                "SELECT payload FROM tasks WHERE id = ?1 AND deleted_at IS NULL",
+                [&id],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(|error| error.to_string())?
+            .ok_or_else(|| "Görev bulunamadı.".to_owned())?;
+        serde_json::from_str::<DesktopTask>(&payload).map_err(|error| error.to_string())?
+    };
+    save_task(
+        DesktopTask {
+            deleted_at: Some(now()),
+            ..current
+        },
+        state,
+    )
 }
 
 #[tauri::command]
@@ -758,6 +902,7 @@ async fn firebase_lookup_email(api_key: &str, id_token: &str) -> Result<Option<S
 #[derive(Debug)]
 struct PendingOutbox {
     id: String,
+    entity_type: String,
     entity_id: String,
     base_revision: i64,
     revision: i64,
@@ -774,16 +919,17 @@ fn pending_outbox(state: &Mutex<Database>, owner_id: &str) -> Result<Vec<Pending
         .map_err(|error| error.to_string())?;
     let mut statement = db
         .connection
-        .prepare("SELECT id, entity_id, base_revision, revision, payload FROM outbox WHERE owner_id = ?1 AND status = 'pending' ORDER BY created_at LIMIT 50")
+        .prepare("SELECT id, entity_type, entity_id, base_revision, revision, payload FROM outbox WHERE owner_id = ?1 AND status = 'pending' ORDER BY created_at LIMIT 50")
         .map_err(|error| error.to_string())?;
     let rows = statement
         .query_map([owner_id], |row| {
-            let payload: String = row.get(4)?;
+            let payload: String = row.get(5)?;
             Ok(PendingOutbox {
                 id: row.get(0)?,
-                entity_id: row.get(1)?,
-                base_revision: row.get(2)?,
-                revision: row.get(3)?,
+                entity_type: row.get(1)?,
+                entity_id: row.get(2)?,
+                base_revision: row.get(3)?,
+                revision: row.get(4)?,
                 payload: serde_json::from_str(&payload).unwrap_or_else(|_| serde_json::json!({})),
             })
         })
@@ -802,13 +948,21 @@ fn firestore_revision(value: &serde_json::Value) -> i64 {
         .unwrap_or(0)
 }
 
-fn firestore_string(value: Option<&serde_json::Value>) -> serde_json::Value {
+fn firestore_value(value: &serde_json::Value) -> serde_json::Value {
     match value {
-        Some(value) if value.is_null() => serde_json::json!({"nullValue": null}),
-        Some(value) if value.is_boolean() => serde_json::json!({"booleanValue": value}),
-        Some(value) if value.is_number() => serde_json::json!({"doubleValue": value}),
-        Some(value) => serde_json::json!({"stringValue": value.as_str().unwrap_or_default()}),
-        None => serde_json::json!({"nullValue": null}),
+        serde_json::Value::Null => serde_json::json!({"nullValue": null}),
+        serde_json::Value::Bool(value) => serde_json::json!({"booleanValue": value}),
+        serde_json::Value::Number(value) if value.is_i64() || value.is_u64() => {
+            serde_json::json!({"integerValue": value.to_string()})
+        }
+        serde_json::Value::Number(value) => serde_json::json!({"doubleValue": value}),
+        serde_json::Value::String(value) => serde_json::json!({"stringValue": value}),
+        serde_json::Value::Array(values) => serde_json::json!({
+            "arrayValue": {"values": values.iter().map(firestore_value).collect::<Vec<_>>()}
+        }),
+        serde_json::Value::Object(values) => serde_json::json!({
+            "mapValue": {"fields": values.iter().map(|(key, value)| (key.clone(), firestore_value(value))).collect::<serde_json::Map<_, _>>()}
+        }),
     }
 }
 
@@ -819,8 +973,10 @@ fn firestore_fields(
     device_id: &str,
 ) -> serde_json::Value {
     let mut fields = serde_json::Map::new();
-    for key in ["id", "title", "markdown", "path"] {
-        fields.insert(key.to_owned(), firestore_string(payload.get(key)));
+    if let Some(payload_fields) = payload.as_object() {
+        for (key, value) in payload_fields {
+            fields.insert(key.clone(), firestore_value(value));
+        }
     }
     fields.insert(
         "ownerId".to_owned(),
@@ -832,11 +988,26 @@ fn firestore_fields(
     );
     fields.insert(
         "updatedAt".to_owned(),
-        serde_json::json!({"timestampValue": now()}),
+        serde_json::json!({"stringValue": now()}),
     );
     fields.insert(
         "updatedByDeviceId".to_owned(),
         serde_json::json!({"stringValue": device_id}),
+    );
+    let event_id = format!(
+        "desktop:{device_id}:{}:{revision}",
+        payload
+            .get("id")
+            .and_then(|value| value.as_str())
+            .unwrap_or_default()
+    );
+    fields.insert(
+        "idempotencyKey".to_owned(),
+        serde_json::json!({"stringValue": event_id}),
+    );
+    fields.insert(
+        "lastEventId".to_owned(),
+        serde_json::json!({"stringValue": event_id}),
     );
     serde_json::Value::Object(fields)
 }
@@ -848,6 +1019,98 @@ fn firestore_text(value: &serde_json::Value, key: &str) -> Option<String> {
         .and_then(|field| field.get("stringValue"))
         .and_then(|value| value.as_str())
         .map(str::to_owned)
+}
+
+fn decode_firestore_value(value: &serde_json::Value) -> serde_json::Value {
+    if value.get("nullValue").is_some() {
+        return serde_json::Value::Null;
+    }
+    if let Some(value) = value.get("stringValue") {
+        return value.clone();
+    }
+    if let Some(value) = value.get("booleanValue") {
+        return value.clone();
+    }
+    if let Some(value) = value.get("integerValue").and_then(|value| value.as_str()) {
+        return value
+            .parse::<i64>()
+            .map(serde_json::Value::from)
+            .unwrap_or(serde_json::Value::Null);
+    }
+    if let Some(value) = value.get("doubleValue") {
+        return value.clone();
+    }
+    if let Some(values) = value
+        .get("arrayValue")
+        .and_then(|value| value.get("values"))
+        .and_then(|value| value.as_array())
+    {
+        return serde_json::Value::Array(values.iter().map(decode_firestore_value).collect());
+    }
+    if let Some(fields) = value
+        .get("mapValue")
+        .and_then(|value| value.get("fields"))
+        .and_then(|value| value.as_object())
+    {
+        return serde_json::Value::Object(
+            fields
+                .iter()
+                .map(|(key, value)| (key.clone(), decode_firestore_value(value)))
+                .collect(),
+        );
+    }
+    serde_json::Value::Null
+}
+
+fn remote_task(value: &serde_json::Value) -> Option<DesktopTask> {
+    let fields = value.get("fields")?.as_object()?;
+    let decoded = serde_json::Value::Object(
+        fields
+            .iter()
+            .map(|(key, value)| (key.clone(), decode_firestore_value(value)))
+            .collect(),
+    );
+    serde_json::from_value(decoded).ok()
+}
+
+fn apply_remote_tasks(
+    database: &Mutex<Database>,
+    remote_tasks: &[serde_json::Value],
+) -> Result<u32, String> {
+    let db = database
+        .lock()
+        .map_err(|_| "Veritabanı kilidi alınamadı.")?;
+    let mut pulled = 0;
+    for remote in remote_tasks {
+        let Some(task) = remote_task(remote) else {
+            continue;
+        };
+        let has_pending: bool = db
+            .connection
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM outbox WHERE entity_type = 'task' AND entity_id = ?1 AND status = 'pending')",
+                [&task.id],
+                |row| row.get(0),
+            )
+            .map_err(|error| error.to_string())?;
+        let local_revision: Option<i64> = db
+            .connection
+            .query_row(
+                "SELECT revision FROM tasks WHERE id = ?1",
+                [&task.id],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(|error| error.to_string())?;
+        if has_pending || local_revision.is_some_and(|revision| revision >= task.revision) {
+            continue;
+        }
+        validate_task(&task)?;
+        let payload = serde_json::to_string(&task).map_err(|error| error.to_string())?;
+        db.connection.execute("INSERT INTO tasks(id, payload, state, due_date, project_id, parent_task_id, sort_order, revision, created_at, updated_at, deleted_at) VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload, state=excluded.state, due_date=excluded.due_date, project_id=excluded.project_id, parent_task_id=excluded.parent_task_id, sort_order=excluded.sort_order, revision=excluded.revision, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at", params![task.id, payload, task.state, task.due_date, task.project_id, task.parent_task_id, task.sort_order, task.revision, task.created_at, task.updated_at, task.deleted_at]).map_err(|error| error.to_string())?;
+        pulled += 1;
+    }
+    Ok(pulled)
 }
 
 fn firestore_timestamp(value: &serde_json::Value) -> String {
@@ -945,7 +1208,12 @@ async fn sync_now(
     let mut pushed = 0;
     let mut conflicts = 0;
     for event in pending {
-        let url = format!("https://firestore.googleapis.com/v1/projects/{project_id}/databases/(default)/documents/users/{}/documents/{}", session.uid, event.entity_id);
+        let collection = match event.entity_type.as_str() {
+            "document" => "documents",
+            "task" => "tasks",
+            _ => return Err("Desteklenmeyen desktop sync entity.".to_owned()),
+        };
+        let url = format!("https://firestore.googleapis.com/v1/projects/{project_id}/databases/(default)/documents/users/{}/{}/{}", session.uid, collection, event.entity_id);
         let response = match client.get(&url).bearer_auth(&session.id_token).send().await {
             Ok(response) => response,
             Err(_) => {
@@ -1018,7 +1286,7 @@ async fn sync_now(
             })
         }
     };
-    let pulled = if list_response.status() == reqwest::StatusCode::NOT_FOUND {
+    let mut pulled = if list_response.status() == reqwest::StatusCode::NOT_FOUND {
         0
     } else if list_response.status().is_success() {
         let body = list_response
@@ -1034,6 +1302,27 @@ async fn sync_now(
     } else {
         return Err(firebase_error(list_response).await);
     };
+    let task_collection_url = format!("https://firestore.googleapis.com/v1/projects/{project_id}/databases/(default)/documents/users/{}/tasks?pageSize=100", session.uid);
+    let task_response = client
+        .get(task_collection_url)
+        .bearer_auth(&session.id_token)
+        .send()
+        .await
+        .map_err(|error| format!("Firebase bağlantısı başarısız: {error}"))?;
+    if task_response.status().is_success() {
+        let body = task_response
+            .json::<serde_json::Value>()
+            .await
+            .map_err(|error| error.to_string())?;
+        let tasks = body
+            .get("documents")
+            .and_then(|documents| documents.as_array())
+            .map(Vec::as_slice)
+            .unwrap_or(&[]);
+        pulled += apply_remote_tasks(&database, tasks)?;
+    } else if task_response.status() != reqwest::StatusCode::NOT_FOUND {
+        return Err(firebase_error(task_response).await);
+    }
     Ok(SyncSummary {
         pushed,
         pulled,

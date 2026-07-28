@@ -52,6 +52,21 @@ describe("task domain", () => {
     expect(matchesTaskList(today, { due: "today", today: "2026-01-02" })).toBe(true);
     expect([today, overdue].sort(compareTasks).map((item) => item.id)).toEqual(["a", "b"]);
   });
+
+  it("keeps thousand-entry planning calculations bounded and stable", () => {
+    const tasks = Array.from({ length: 1_000 }, (_, index) =>
+      task({
+        id: `task-${index}`,
+        dueDate: index % 2 === 0 ? "2026-01-01" : "2026-01-03",
+        sortOrder: index,
+      }),
+    );
+    expect(
+      tasks
+        .filter((item) => matchesTaskList(item, { due: "overdue", today: "2026-01-02" }))
+        .sort(compareTasks),
+    ).toHaveLength(500);
+  });
 });
 
 describe("task recurrence", () => {

@@ -19,8 +19,12 @@ Capture the real current build with intentional sample data and no personal iden
 
 - [ ] Mobile Notes/editor with Markdown Live Preview
 - [ ] Mobile Projects/Kanban and Today
+- [ ] Mobile Tasks: create/edit/complete/reopen/delete, subtasks, project link, recurrence,
+      Today/Upcoming/Overdue, search/filter/sort, keyboard and offline restart
 - [ ] Tablet drawing with `.stoneink` source and PNG preview
 - [ ] Windows editor and project/Today summary
+- [ ] Windows Tasks: quick add/edit/complete/reopen/delete, project link, filters, keyboard focus,
+      offline restart and anchored-shell scroll behavior
 - [ ] Windows GitHub connection/restore without user code, repository identity, or token
 - [ ] MCP client showing only synthetic Stone data
 - [ ] Light/dark, narrow-window, keyboard, screen-reader labels, and contrast reviewed
@@ -58,3 +62,14 @@ Capture the real current build with intentional sample data and no personal iden
 - [ ] OAuth metadata, redirect allow-list, audience/scopes, revisions, idempotency, and audit records
       are verified against the intended provider.
 - [ ] Provider publication is described separately from repository availability.
+- [ ] Synthetic task CRUD, Today and Overdue tools remain owner-scoped, revision-safe and
+      idempotent.
+
+## Task cross-device acceptance
+
+- [ ] Create on device A and receive on device B.
+- [ ] Complete on device B and reflect on device A without duplicate recurrence.
+- [ ] Edit offline on both devices and recover both payloads through conflict handling.
+- [ ] Complete a Markdown-linked task from Tasks and verify only the correct source checkbox changes.
+- [ ] Edit/move a Markdown task in the editor and verify reindexing without an unnecessary duplicate.
+- [ ] Restart mobile and Windows offline and verify locally durable task state.

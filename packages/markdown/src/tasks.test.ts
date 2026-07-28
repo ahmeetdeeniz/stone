@@ -45,4 +45,12 @@ describe("Markdown tasks", () => {
     const moved = `Another paragraph\n${source}`;
     expect(extractMarkdownTasks(moved)[0]?.blockId).toBe("stone-task-move");
   });
+
+  it("indexes a large workspace note deterministically", () => {
+    const source = Array.from({ length: 1_000 }, (_, index) => `- [ ] Task ${index}`).join("\n");
+    const first = extractMarkdownTasks(source);
+    const second = extractMarkdownTasks(source);
+    expect(first).toHaveLength(1_000);
+    expect(second.map((task) => task.fingerprint)).toEqual(first.map((task) => task.fingerprint));
+  });
 });
