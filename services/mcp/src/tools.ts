@@ -507,6 +507,11 @@ export function createMcpServer(service: StoneMcpService): McpServer {
     endAt: z.string().datetime().nullable().optional(),
     timezone: z.string().min(1).max(100).optional(),
     projectId: z.string().max(200).nullable().optional(),
+    occurrenceDate: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/u)
+      .optional(),
+    recurrenceScope: z.enum(["occurrence", "future", "series"]).optional(),
     ...write,
   };
   server.registerTool(
@@ -532,7 +537,15 @@ export function createMcpServer(service: StoneMcpService): McpServer {
     async ({ id, ...input }, extra) =>
       result(await service.updateCalendarEvent(context(extra), id, input)),
   );
-  const calendarDelete = { id: z.string().min(1).max(200), ...write };
+  const calendarDelete = {
+    id: z.string().min(1).max(200),
+    occurrenceDate: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/u)
+      .optional(),
+    recurrenceScope: z.enum(["occurrence", "future", "series"]).optional(),
+    ...write,
+  };
   server.registerTool(
     "delete_calendar_event",
     {

@@ -1,5 +1,13 @@
 import { randomUUID } from "node:crypto";
-import { canTransitionProjectStatus, validateCalendarItem, type CalendarItem } from "@stone/domain";
+import {
+  canTransitionProjectStatus,
+  deleteCalendarRecurrence,
+  editCalendarRecurrence,
+  validateCalendarItem,
+  type CalendarItem,
+  type CalendarOccurrenceChanges,
+  type CalendarRecurrenceEditScope,
+} from "@stone/domain";
 import {
   ensureTaskMetadata,
   extractTasks,
@@ -37,6 +45,16 @@ function validateCalendarRecord(value: CalendarRecord): CalendarRecord {
   return value;
 }
 
+function requireRecurrenceScope(
+  occurrenceDate: string | undefined,
+  scope: CalendarRecurrenceEditScope | undefined,
+): CalendarRecurrenceEditScope {
+  if (!occurrenceDate || !scope)
+    throw new McpInputError("Recurring event writes require occurrenceDate and recurrenceScope.");
+  assertIsoDate(occurrenceDate, "occurrenceDate");
+  return scope;
+}
+
 function definedCalendarChanges(input: CalendarUpdateInput): Partial<CalendarRecord> {
   const changes: Partial<CalendarRecord> = {};
   for (const key of [
@@ -56,6 +74,21 @@ function definedCalendarChanges(input: CalendarUpdateInput): Partial<CalendarRec
     if (value !== undefined) Object.assign(changes, { [key]: value });
   }
   return changes;
+}
+
+function definedOccurrenceChanges(input: CalendarUpdateInput): CalendarOccurrenceChanges {
+  return {
+    ...(input.title !== undefined ? { title: input.title } : {}),
+    ...(input.description !== undefined ? { description: input.description } : {}),
+    ...(input.startDate !== undefined ? { startDate: input.startDate } : {}),
+    ...(input.endDate !== undefined ? { endDate: input.endDate } : {}),
+    ...(input.startAt !== undefined ? { startAt: input.startAt } : {}),
+    ...(input.endAt !== undefined ? { endAt: input.endAt } : {}),
+    ...(input.location !== undefined ? { location: input.location } : {}),
+    ...(input.category !== undefined
+      ? { category: input.category as CalendarItem["category"] }
+      : {}),
+  };
 }
 
 export interface ReadOptions {
@@ -128,6 +161,13 @@ export interface CalendarUpdateInput extends WriteOptions {
   location?: string | null | undefined;
   category?: string | undefined;
   planningNote?: string | null | undefined;
+  occurrenceDate?: string | undefined;
+  recurrenceScope?: CalendarRecurrenceEditScope | undefined;
+}
+
+export interface CalendarDeleteInput extends WriteOptions {
+  occurrenceDate?: string | undefined;
+  recurrenceScope?: CalendarRecurrenceEditScope | undefined;
 }
 
 export interface StoneMcpServiceOptions {
@@ -385,6 +425,77 @@ export class StoneMcpService {
     const current = await this.store.getCalendar(context.userId, id);
     if (!current || current.deletedAt) throw new McpNotFoundError("Calendar item not found.");
     const now = this.now().toISOString();
+    if (current.recurrence) {
+      const scope = requireRecurrenceScope(input.occurrenceDate, input.recurrenceScope);
+      if (
+        scope === "occurrence" &&
+        (input.description !== undefined ||
+          input.location !== undefined ||
+          input.category !== undefined ||
+          input.timezone !== undefined ||
+          input.projectId !== undefined ||
+          input.planningNote !== undefined)
+      )
+        throw new McpInputError(
+          "Occurrence-only edits support title and times; use future or series for other fields.",
+        );
+      const recurrenceMutation = editCalendarRecurrence(
+        current as unknown as CalendarItem,
+        input.occurrenceDate!,
+        scope,
+        definedOccurrenceChanges(input),
+        this.idFactory(),
+      );
+      const allChanges = definedCalendarChanges(input);
+      const mutation = {
+        current:
+          scope === "series"
+            ? ({ ...recurrenceMutation.current, ...allChanges } as CalendarItem)
+            : recurrenceMutation.current,
+        future: recurrenceMutation.future
+          ? ({ ...recurrenceMutation.future, ...allChanges } as CalendarItem)
+          : null,
+      };
+      const future = mutation.future
+        ? validateCalendarRecord({
+            ...(mutation.future as unknown as CalendarRecord),
+            ownerId: context.userId,
+            revision: 1,
+            createdAt: now,
+            updatedAt: now,
+            updatedByDeviceId: `${MCP_DEVICE_PREFIX}${context.clientId}`,
+          })
+        : null;
+      if (future)
+        await this.store.writeCalendar({
+          ownerId: context.userId,
+          calendarId: future.id,
+          expectedRevision: 0,
+          idempotencyKey: `${validateIdempotencyKey(input.idempotencyKey)}:future`,
+          tool: "update_calendar_event",
+          confirmation: input.confirmation ?? null,
+          inputSummary: { id, occurrenceDate: input.occurrenceDate, scope, branch: "future" },
+          mutate: () => future,
+        });
+      const next = validateCalendarRecord({
+        ...(mutation.current as unknown as CalendarRecord),
+        revision: current.revision + 1,
+        updatedAt: now,
+        updatedByDeviceId: `${MCP_DEVICE_PREFIX}${context.clientId}`,
+      });
+      return this.store.writeCalendar({
+        ownerId: context.userId,
+        calendarId: id,
+        expectedRevision: validateExpectedRevision(input.expectedRevision),
+        idempotencyKey: validateIdempotencyKey(input.idempotencyKey),
+        tool: "update_calendar_event",
+        confirmation: input.confirmation ?? null,
+        inputSummary: { id, occurrenceDate: input.occurrenceDate, scope },
+        mutate: () => next,
+      });
+    }
+    if (input.occurrenceDate || input.recurrenceScope)
+      throw new McpInputError("Recurrence scope is only valid for a recurring event.");
     return this.store.writeCalendar({
       ownerId: context.userId,
       calendarId: id,
@@ -409,11 +520,60 @@ export class StoneMcpService {
     });
   }
 
-  public async deleteCalendarEvent(context: AuthContext, id: string, input: WriteOptions) {
+  public async deleteCalendarEvent(context: AuthContext, id: string, input: CalendarDeleteInput) {
     requireScope(context, "stone.write.calendar");
     const current = await this.store.getCalendar(context.userId, id);
     if (!current) throw new McpNotFoundError("Calendar item not found.");
     const now = this.now().toISOString();
+    if (current.recurrence) {
+      const scope = requireRecurrenceScope(input.occurrenceDate, input.recurrenceScope);
+      const mutation = deleteCalendarRecurrence(
+        current as unknown as CalendarItem,
+        input.occurrenceDate!,
+        scope,
+        now,
+        this.idFactory(),
+      );
+      const future = mutation.future
+        ? validateCalendarRecord({
+            ...(mutation.future as unknown as CalendarRecord),
+            ownerId: context.userId,
+            revision: 1,
+            createdAt: now,
+            updatedAt: now,
+            updatedByDeviceId: `${MCP_DEVICE_PREFIX}${context.clientId}`,
+          })
+        : null;
+      if (future)
+        await this.store.writeCalendar({
+          ownerId: context.userId,
+          calendarId: future.id,
+          expectedRevision: 0,
+          idempotencyKey: `${validateIdempotencyKey(input.idempotencyKey)}:future`,
+          tool: "delete_calendar_event",
+          confirmation: input.confirmation ?? null,
+          inputSummary: { id, occurrenceDate: input.occurrenceDate, scope, branch: "future" },
+          mutate: () => future,
+        });
+      const next = validateCalendarRecord({
+        ...(mutation.current as unknown as CalendarRecord),
+        revision: current.revision + 1,
+        updatedAt: now,
+        updatedByDeviceId: `${MCP_DEVICE_PREFIX}${context.clientId}`,
+      });
+      return this.store.writeCalendar({
+        ownerId: context.userId,
+        calendarId: id,
+        expectedRevision: validateExpectedRevision(input.expectedRevision),
+        idempotencyKey: validateIdempotencyKey(input.idempotencyKey),
+        tool: "delete_calendar_event",
+        confirmation: input.confirmation ?? null,
+        inputSummary: { id, occurrenceDate: input.occurrenceDate, scope },
+        mutate: () => next,
+      });
+    }
+    if (input.occurrenceDate || input.recurrenceScope)
+      throw new McpInputError("Recurrence scope is only valid for a recurring event.");
     return this.store.writeCalendar({
       ownerId: context.userId,
       calendarId: id,
