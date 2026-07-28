@@ -674,6 +674,7 @@ function StoneShell({ session, onSignedOut }: { session: AuthSession; onSignedOu
             items={calendarItems}
             tasks={tasks}
             projects={projects}
+            documents={documents}
             onChange={setCalendarItems}
             onMessage={setMessage}
           />
@@ -1116,18 +1117,34 @@ function CalendarWorkspace({
   items,
   tasks,
   projects,
+  documents,
   onChange,
   onMessage,
 }: {
   items: readonly CalendarItem[];
   tasks: readonly DesktopTask[];
   projects: readonly DesktopProjectSummary[];
+  documents: readonly DesktopDocument[];
   onChange: (items: CalendarItem[]) => void;
   onMessage: (message: string) => void;
 }) {
   const [view, setView] = useState<"month" | "week" | "day" | "agenda">("week");
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [location, setLocation] = useState("");
+  const [allDay, setAllDay] = useState(false);
+  const [eventEndDate, setEventEndDate] = useState("");
+  const [eventTimezone, setEventTimezone] = useState(
+    () => Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+  );
+  const [eventCategory, setEventCategory] = useState<CalendarItem["category"]>("purple");
+  const [eventProjectId, setEventProjectId] = useState("");
+  const [eventSourceDocumentId, setEventSourceDocumentId] = useState("");
+  const [recurrenceFrequency, setRecurrenceFrequency] = useState<
+    "" | "daily" | "weekdays" | "weekly" | "monthly"
+  >("");
+  const [recurrenceUntilDate, setRecurrenceUntilDate] = useState("");
   const [taskId, setTaskId] = useState("");
   const [startTime, setStartTime] = useState("09:00");
   const [endTime, setEndTime] = useState("10:00");
@@ -1137,6 +1154,16 @@ function CalendarWorkspace({
   const [editTitle, setEditTitle] = useState("");
   const [editDescription, setEditDescription] = useState("");
   const [editPlanningNote, setEditPlanningNote] = useState("");
+  const [editLocation, setEditLocation] = useState("");
+  const [editAllDay, setEditAllDay] = useState(false);
+  const [editStartDate, setEditStartDate] = useState("");
+  const [editEndDate, setEditEndDate] = useState("");
+  const [editStartTime, setEditStartTime] = useState("09:00");
+  const [editEndTime, setEditEndTime] = useState("10:00");
+  const [editTimezone, setEditTimezone] = useState("UTC");
+  const [editCategory, setEditCategory] = useState<CalendarItem["category"]>("purple");
+  const [editProjectId, setEditProjectId] = useState("");
+  const [editSourceDocumentId, setEditSourceDocumentId] = useState("");
   const [search, setSearch] = useState("");
   const [projectFilter, setProjectFilter] = useState("");
   const [kindFilter, setKindFilter] = useState<"" | CalendarItem["kind"]>("");
@@ -1194,13 +1221,89 @@ function CalendarWorkspace({
     return !search || item.title.toLocaleLowerCase().includes(search.toLocaleLowerCase());
   });
   const selectedItem = items.find((item) => item.id === selectedItemId) ?? null;
+  const displayedSelectedItem =
+    selectedItem && selectedOccurrenceDate
+      ? (expandCalendarOccurrences(selectedItem, selectedOccurrenceDate, selectedOccurrenceDate)[0]
+          ?.item ?? selectedItem)
+      : selectedItem;
+  const editsOccurrenceOnly =
+    Boolean(selectedItem?.recurrence) &&
+    Boolean(selectedOccurrenceDate) &&
+    recurrenceScope === "occurrence";
+  const hasUnsavedCalendarEdits =
+    Boolean(displayedSelectedItem) &&
+    JSON.stringify({
+      title: editTitle,
+      description: editDescription,
+      planningNote: editPlanningNote,
+      location: editLocation,
+      allDay: editAllDay,
+      startDate: editStartDate,
+      endDate: editEndDate,
+      startTime: editStartTime,
+      endTime: editEndTime,
+      timezone: editTimezone,
+      category: editCategory,
+      projectId: editProjectId,
+      sourceDocumentId: editSourceDocumentId,
+    }) !==
+      JSON.stringify({
+        title: displayedSelectedItem?.title ?? "",
+        description: displayedSelectedItem?.description ?? "",
+        planningNote: displayedSelectedItem?.planningNote ?? "",
+        location: displayedSelectedItem?.location ?? "",
+        allDay: displayedSelectedItem?.allDay ?? false,
+        startDate: displayedSelectedItem?.startDate ?? "",
+        endDate: displayedSelectedItem?.endDate ?? "",
+        startTime: displayedSelectedItem?.startAt
+          ? instantToZonedWallTime(
+              displayedSelectedItem.startAt,
+              displayedSelectedItem.timezone,
+            ).slice(11, 16)
+          : "09:00",
+        endTime: displayedSelectedItem?.endAt
+          ? instantToZonedWallTime(
+              displayedSelectedItem.endAt,
+              displayedSelectedItem.timezone,
+            ).slice(11, 16)
+          : "10:00",
+        timezone: displayedSelectedItem?.timezone ?? "UTC",
+        category: displayedSelectedItem?.category ?? "purple",
+        projectId: displayedSelectedItem?.projectId ?? "",
+        sourceDocumentId: displayedSelectedItem?.sourceDocumentId ?? "",
+      });
   useEffect(() => {
-    setEditTitle(selectedItem?.title ?? "");
-    setEditDescription(selectedItem?.description ?? "");
-    setEditPlanningNote(selectedItem?.planningNote ?? "");
-  }, [selectedItem]);
+    const displayed = displayedSelectedItem;
+    setEditTitle(displayed?.title ?? "");
+    setEditDescription(displayed?.description ?? "");
+    setEditPlanningNote(displayed?.planningNote ?? "");
+    setEditLocation(displayed?.location ?? "");
+    setEditAllDay(displayed?.allDay ?? false);
+    setEditStartDate(displayed?.startDate ?? "");
+    setEditEndDate(displayed?.endDate ?? "");
+    setEditTimezone(displayed?.timezone ?? "UTC");
+    setEditCategory(displayed?.category ?? "purple");
+    setEditProjectId(displayed?.projectId ?? "");
+    setEditSourceDocumentId(displayed?.sourceDocumentId ?? "");
+    if (displayed?.startAt)
+      setEditStartTime(instantToZonedWallTime(displayed.startAt, displayed.timezone).slice(11, 16));
+    else setEditStartTime("09:00");
+    if (displayed?.endAt)
+      setEditEndTime(instantToZonedWallTime(displayed.endAt, displayed.timezone).slice(11, 16));
+    else setEditEndTime("10:00");
+  }, [selectedItem, selectedOccurrenceDate]);
 
-  function openCalendarItem(itemId: string, occurrenceDate?: string | null) {
+  function openCalendarItem(
+    itemId: string,
+    occurrenceDate?: string | null,
+    discardUnsaved = false,
+  ) {
+    if (
+      !discardUnsaved &&
+      hasUnsavedCalendarEdits &&
+      !window.confirm("Kaydedilmemiş takvim değişiklikleri atılsın mı?")
+    )
+      return;
     setSelectedItemId(itemId);
     setSelectedOccurrenceDate(occurrenceDate ?? null);
     setRecurrenceScope("occurrence");
@@ -1217,9 +1320,11 @@ function CalendarWorkspace({
     const selectedTaskId = input?.taskId ?? taskId;
     if (!title.trim() && !selectedTaskId) return;
     const now = new Date().toISOString();
+    const itemId = crypto.randomUUID();
     const task = tasks.find((value) => value.id === selectedTaskId);
-    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+    const timezone = eventTimezone;
     const scheduledDate = input?.date ?? date;
+    const scheduledEndDate = task ? scheduledDate : eventEndDate || scheduledDate;
     const scheduledStart = input?.startTime ?? startTime;
     const startMinute = Number(scheduledStart.slice(0, 2)) * 60 + Number(scheduledStart.slice(3));
     const duration = task?.estimatedMinutes ?? 60;
@@ -1227,7 +1332,7 @@ function CalendarWorkspace({
     const scheduledEnd = `${String(Math.floor(endMinute / 60)).padStart(2, "0")}:${String(endMinute % 60).padStart(2, "0")}`;
     const item: CalendarItem = {
       schemaVersion: 1,
-      id: crypto.randomUUID(),
+      id: itemId,
       ownerId: "",
       revision: 0,
       createdAt: now,
@@ -1236,26 +1341,47 @@ function CalendarWorkspace({
       updatedByDeviceId: "",
       kind: task ? "task_block" : "event",
       title: task?.title ?? title.trim(),
-      description: null,
-      allDay: false,
+      description: task ? null : description.trim() || null,
+      allDay: task ? false : allDay,
       startDate: scheduledDate,
-      endDate: scheduledDate,
-      startAt: zonedWallTimeToInstant(scheduledDate, scheduledStart, timezone, "earlier"),
-      endAt: zonedWallTimeToInstant(
-        scheduledDate,
-        task ? scheduledEnd : endTime,
-        timezone,
-        "later",
-      ),
+      endDate: scheduledEndDate,
+      startAt:
+        !task && allDay
+          ? null
+          : zonedWallTimeToInstant(scheduledDate, scheduledStart, timezone, "earlier"),
+      endAt:
+        !task && allDay
+          ? null
+          : zonedWallTimeToInstant(
+              scheduledEndDate,
+              task ? scheduledEnd : endTime,
+              timezone,
+              "later",
+            ),
       timezone,
-      location: null,
-      category: task ? "blue" : "purple",
-      projectId: task?.projectId ?? null,
-      sourceDocumentId: task?.sourceDocumentId ?? null,
+      location: task ? null : location.trim() || null,
+      category: task ? "blue" : eventCategory,
+      projectId: task?.projectId ?? (eventProjectId || null),
+      sourceDocumentId: task?.sourceDocumentId ?? (eventSourceDocumentId || null),
       taskId: task?.id ?? null,
       planningNote: null,
-      recurrence: null,
-      recurrenceSeriesId: null,
+      recurrence:
+        !task && recurrenceFrequency
+          ? {
+              frequency: recurrenceFrequency,
+              interval: 1,
+              unit:
+                recurrenceFrequency === "monthly"
+                  ? "month"
+                  : recurrenceFrequency === "weekly"
+                    ? "week"
+                    : "day",
+              preferredDayOfMonth:
+                recurrenceFrequency === "monthly" ? Number(scheduledDate.slice(8)) : null,
+              untilDate: recurrenceUntilDate || null,
+            }
+          : null,
+      recurrenceSeriesId: !task && recurrenceFrequency ? itemId : null,
       recurrenceId: null,
       overrides: [],
       externalUid: null,
@@ -1265,6 +1391,8 @@ function CalendarWorkspace({
       const saved = await desktopApi.saveCalendarItem(item);
       onChange([...items, saved]);
       setTitle("");
+      setDescription("");
+      setLocation("");
       setTaskId("");
       onMessage(
         task ? "Görev zaman bloğu olarak planlandı; son tarihi değişmedi." : "Etkinlik kaydedildi.",
@@ -1338,9 +1466,20 @@ function CalendarWorkspace({
   async function saveSelected() {
     if (!selectedItem || !editTitle.trim()) return;
     try {
-      const changes = {
+      const timedChanges = editAllDay
+        ? { startAt: null, endAt: null }
+        : {
+            startAt: zonedWallTimeToInstant(editStartDate, editStartTime, editTimezone, "earlier"),
+            endAt: zonedWallTimeToInstant(editEndDate, editEndTime, editTimezone, "later"),
+          };
+      const occurrenceChanges = {
         title: editTitle.trim(),
         description: editDescription.trim() || null,
+        location: editLocation.trim() || null,
+        startDate: editStartDate,
+        endDate: editEndDate,
+        category: editCategory,
+        ...timedChanges,
       };
       const mutation =
         selectedItem.recurrence && selectedOccurrenceDate
@@ -1348,24 +1487,40 @@ function CalendarWorkspace({
               selectedItem,
               selectedOccurrenceDate,
               recurrenceScope,
-              changes,
+              occurrenceChanges,
               crypto.randomUUID(),
             )
           : {
               current: {
                 ...selectedItem,
-                ...changes,
+                ...occurrenceChanges,
+                allDay: editAllDay,
+                timezone: editTimezone,
+                projectId: editProjectId || null,
+                sourceDocumentId: editSourceDocumentId || null,
                 planningNote: editPlanningNote.trim() || null,
               },
               future: null,
             };
+      if (selectedItem.recurrence && recurrenceScope !== "occurrence") {
+        const target = recurrenceScope === "future" ? mutation.future : mutation.current;
+        if (target) {
+          Object.assign(target, {
+            allDay: editAllDay,
+            timezone: editTimezone,
+            projectId: editProjectId || null,
+            sourceDocumentId: editSourceDocumentId || null,
+            planningNote: editPlanningNote.trim() || null,
+          });
+        }
+      }
       const future = mutation.future ? await desktopApi.saveCalendarItem(mutation.future) : null;
       const saved = await desktopApi.saveCalendarItem(mutation.current);
       onChange([
         ...items.map((item) => (item.id === saved.id ? saved : item)),
         ...(future ? [future] : []),
       ]);
-      if (future) openCalendarItem(future.id, future.startDate);
+      if (future) openCalendarItem(future.id, future.startDate, true);
       onMessage("Etkinlik ayrıntıları kaydedildi.");
     } catch (caught) {
       onMessage(toMessage(caught));
@@ -1387,7 +1542,7 @@ function CalendarWorkspace({
         recurrenceId: null,
       });
       onChange([...items, saved]);
-      openCalendarItem(saved.id);
+      openCalendarItem(saved.id, null, true);
       onMessage("Takvim kaydı açıkça çoğaltıldı.");
     } catch (caught) {
       onMessage(toMessage(caught));
@@ -1509,6 +1664,108 @@ function CalendarWorkspace({
             <input value={title} onChange={(event) => setTitle(event.target.value)} />
           </label>
           <label>
+            Açıklama
+            <textarea
+              value={description}
+              onChange={(event) => setDescription(event.target.value)}
+            />
+          </label>
+          <label>
+            Konum
+            <input value={location} onChange={(event) => setLocation(event.target.value)} />
+          </label>
+          <label className="calendar-checkbox">
+            <input
+              type="checkbox"
+              checked={allDay}
+              onChange={(event) => setAllDay(event.target.checked)}
+            />
+            Tüm gün
+          </label>
+          <label>
+            Bitiş tarihi
+            <input
+              type="date"
+              min={date}
+              value={eventEndDate || date}
+              onChange={(event) => setEventEndDate(event.target.value)}
+            />
+          </label>
+          <label>
+            IANA saat dilimi
+            <input
+              value={eventTimezone}
+              onChange={(event) => setEventTimezone(event.target.value)}
+            />
+          </label>
+          <label>
+            Kategori
+            <select
+              value={eventCategory}
+              onChange={(event) => setEventCategory(event.target.value as CalendarItem["category"])}
+            >
+              {(["neutral", "purple", "blue", "green", "amber", "red"] as const).map((category) => (
+                <option key={category}>{category}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Proje
+            <select
+              value={eventProjectId}
+              onChange={(event) => setEventProjectId(event.target.value)}
+            >
+              <option value="">Proje yok</option>
+              {projects.map((project) => (
+                <option key={project.id} value={project.id}>
+                  {project.title}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Kaynak not
+            <select
+              value={eventSourceDocumentId}
+              onChange={(event) => setEventSourceDocumentId(event.target.value)}
+            >
+              <option value="">Kaynak not yok</option>
+              {documents.slice(0, 200).map((document) => (
+                <option key={document.id} value={document.id}>
+                  {document.title}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Tekrar
+            <select
+              value={recurrenceFrequency}
+              onChange={(event) =>
+                setRecurrenceFrequency(
+                  event.target.value as "" | "daily" | "weekdays" | "weekly" | "monthly",
+                )
+              }
+            >
+              <option value="">Tekrarlanmaz</option>
+              <option value="daily">Her gün</option>
+              <option value="weekdays">Hafta içi</option>
+              <option value="weekly">Her hafta</option>
+              <option value="monthly">Her ay</option>
+            </select>
+          </label>
+          {recurrenceFrequency ? (
+            <label>
+              Tekrar bitişi
+              <input
+                type="date"
+                min={date}
+                value={recurrenceUntilDate}
+                onChange={(event) => setRecurrenceUntilDate(event.target.value)}
+              />
+            </label>
+          ) : null}
+          <label>
             Veya görev planla
             <select value={taskId} onChange={(event) => setTaskId(event.target.value)}>
               <option value="">Görev seçilmedi</option>
@@ -1536,24 +1793,26 @@ function CalendarWorkspace({
                 ))}
             </div>
           </label>
-          <div className="time-fields">
-            <label>
-              Başlangıç
-              <input
-                type="time"
-                value={startTime}
-                onChange={(event) => setStartTime(event.target.value)}
-              />
-            </label>
-            <label>
-              Bitiş
-              <input
-                type="time"
-                value={endTime}
-                onChange={(event) => setEndTime(event.target.value)}
-              />
-            </label>
-          </div>
+          {!allDay || taskId ? (
+            <div className="time-fields">
+              <label>
+                Başlangıç
+                <input
+                  type="time"
+                  value={startTime}
+                  onChange={(event) => setStartTime(event.target.value)}
+                />
+              </label>
+              <label>
+                Bitiş
+                <input
+                  type="time"
+                  value={endTime}
+                  onChange={(event) => setEndTime(event.target.value)}
+                />
+              </label>
+            </div>
+          ) : null}
           <button
             className="primary-button"
             onClick={() => void create()}
@@ -1640,13 +1899,129 @@ function CalendarWorkspace({
                 <textarea
                   value={editDescription}
                   onChange={(event) => setEditDescription(event.target.value)}
+                  disabled={editsOccurrenceOnly}
                 />
+              </label>
+              {editsOccurrenceOnly ? (
+                <p>Tek örnek kapsamında yalnızca başlık ve saatler değiştirilebilir.</p>
+              ) : null}
+              <label>
+                Konum
+                <input
+                  value={editLocation}
+                  onChange={(event) => setEditLocation(event.target.value)}
+                  disabled={editsOccurrenceOnly}
+                />
+              </label>
+              <label className="calendar-checkbox">
+                <input
+                  type="checkbox"
+                  checked={editAllDay}
+                  onChange={(event) => setEditAllDay(event.target.checked)}
+                  disabled={editsOccurrenceOnly}
+                />
+                Tüm gün
+              </label>
+              <label>
+                Başlangıç tarihi
+                <input
+                  type="date"
+                  value={editStartDate}
+                  onChange={(event) => setEditStartDate(event.target.value)}
+                  disabled={editsOccurrenceOnly}
+                />
+              </label>
+              <label>
+                Bitiş tarihi
+                <input
+                  type="date"
+                  value={editEndDate}
+                  onChange={(event) => setEditEndDate(event.target.value)}
+                  disabled={editsOccurrenceOnly}
+                />
+              </label>
+              {!editAllDay ? (
+                <>
+                  <label>
+                    Başlangıç saati
+                    <input
+                      type="time"
+                      value={editStartTime}
+                      onChange={(event) => setEditStartTime(event.target.value)}
+                    />
+                  </label>
+                  <label>
+                    Bitiş saati
+                    <input
+                      type="time"
+                      value={editEndTime}
+                      onChange={(event) => setEditEndTime(event.target.value)}
+                    />
+                  </label>
+                </>
+              ) : null}
+              <label>
+                IANA zaman dilimi
+                <input
+                  value={editTimezone}
+                  onChange={(event) => setEditTimezone(event.target.value)}
+                  disabled={editsOccurrenceOnly}
+                />
+              </label>
+              <label>
+                Kategori
+                <select
+                  value={editCategory}
+                  onChange={(event) =>
+                    setEditCategory(event.target.value as CalendarItem["category"])
+                  }
+                  disabled={editsOccurrenceOnly}
+                >
+                  {(["neutral", "purple", "blue", "green", "amber", "red"] as const).map(
+                    (category) => (
+                      <option key={category} value={category}>
+                        {category}
+                      </option>
+                    ),
+                  )}
+                </select>
+              </label>
+              <label>
+                Proje
+                <select
+                  value={editProjectId}
+                  onChange={(event) => setEditProjectId(event.target.value)}
+                  disabled={editsOccurrenceOnly}
+                >
+                  <option value="">Projesiz</option>
+                  {projects.map((project) => (
+                    <option key={project.id} value={project.id}>
+                      {project.title}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Kaynak not
+                <select
+                  value={editSourceDocumentId}
+                  onChange={(event) => setEditSourceDocumentId(event.target.value)}
+                  disabled={editsOccurrenceOnly}
+                >
+                  <option value="">Bağlantı yok</option>
+                  {documents.slice(0, 200).map((document) => (
+                    <option key={document.id} value={document.id}>
+                      {document.title}
+                    </option>
+                  ))}
+                </select>
               </label>
               <label>
                 Planlama notu
                 <textarea
                   value={editPlanningNote}
                   onChange={(event) => setEditPlanningNote(event.target.value)}
+                  disabled={editsOccurrenceOnly}
                 />
               </label>
               {selectedItem.recurrence && selectedOccurrenceDate ? (

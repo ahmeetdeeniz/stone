@@ -1,10 +1,11 @@
-import { Stack, useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { Stack, useLocalSearchParams, useNavigation, useRouter } from "expo-router";
+import { useEffect, useRef, useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import {
   instantToZonedWallTime,
   zonedWallTimeToInstant,
   type CalendarItem,
+  type Document,
   type Project,
 } from "@stone/domain";
 import { ErrorState, LoadingState } from "../../src/components/states";
@@ -15,15 +16,18 @@ import { useAppServices } from "../../src/providers/app-provider";
 import { useAuth } from "../../src/providers/auth-provider";
 
 const recurrenceOptions = ["none", "daily", "weekdays", "weekly", "monthly", "custom"] as const;
+const categoryOptions = ["neutral", "purple", "blue", "green", "amber", "red"] as const;
 type RecurrenceChoice = (typeof recurrenceOptions)[number];
 
 export default function CalendarDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const navigation = useNavigation();
   const { user } = useAuth();
-  const { calendar, projectUseCases, deviceId } = useAppServices();
+  const { calendar, projectUseCases, noteUseCases, deviceId } = useAppServices();
   const [item, setItem] = useState<CalendarItem | null>(null);
   const [projects, setProjects] = useState<readonly Project[]>([]);
+  const [notes, setNotes] = useState<readonly Document[]>([]);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [location, setLocation] = useState("");
@@ -34,20 +38,42 @@ export default function CalendarDetailScreen() {
   const [timezone, setTimezone] = useState("");
   const [allDay, setAllDay] = useState(false);
   const [projectId, setProjectId] = useState<string | null>(null);
+  const [sourceDocumentId, setSourceDocumentId] = useState<string | null>(null);
+  const [category, setCategory] = useState<CalendarItem["category"]>("purple");
   const [recurrence, setRecurrence] = useState<RecurrenceChoice>("none");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const baselineRef = useRef("");
+  const allowNavigationRef = useRef(false);
+  const formSnapshot = JSON.stringify({
+    title,
+    description,
+    location,
+    startDate,
+    endDate,
+    startTime,
+    endTime,
+    timezone,
+    allDay,
+    projectId,
+    sourceDocumentId,
+    category,
+    recurrence,
+  });
+  const isDirty = Boolean(item) && baselineRef.current !== formSnapshot;
 
   const load = async () => {
     if (!user || !id) return;
     try {
-      const [current, projectList] = await Promise.all([
+      const [current, projectList, noteList] = await Promise.all([
         calendar.getById(user.uid, id),
         projectUseCases.list(user.uid),
+        noteUseCases.list(user.uid),
       ]);
       if (!current) throw new Error("Etkinlik bulunamadı.");
       setItem(current);
       setProjects(projectList);
+      setNotes(noteList);
       setTitle(current.title);
       setDescription(current.description ?? "");
       setLocation(current.location ?? "");
@@ -56,6 +82,8 @@ export default function CalendarDetailScreen() {
       setTimezone(current.timezone);
       setAllDay(current.allDay);
       setProjectId(current.projectId);
+      setSourceDocumentId(current.sourceDocumentId);
+      setCategory(current.category);
       setRecurrence(current.recurrence?.frequency ?? "none");
       setStartTime(
         current.startAt ? instantToZonedWallTime(current.startAt, current.timezone).slice(11) : "",
@@ -63,12 +91,54 @@ export default function CalendarDetailScreen() {
       setEndTime(
         current.endAt ? instantToZonedWallTime(current.endAt, current.timezone).slice(11) : "",
       );
+      baselineRef.current = JSON.stringify({
+        title: current.title,
+        description: current.description ?? "",
+        location: current.location ?? "",
+        startDate: current.startDate,
+        endDate: current.endDate,
+        startTime: current.startAt
+          ? instantToZonedWallTime(current.startAt, current.timezone).slice(11)
+          : "",
+        endTime: current.endAt
+          ? instantToZonedWallTime(current.endAt, current.timezone).slice(11)
+          : "",
+        timezone: current.timezone,
+        allDay: current.allDay,
+        projectId: current.projectId,
+        sourceDocumentId: current.sourceDocumentId,
+        category: current.category,
+        recurrence: current.recurrence?.frequency ?? "none",
+      });
       setError(null);
     } catch (caught) {
       setError(message(caught));
     }
   };
   useEffect(() => void load(), [id, user]);
+  useEffect(
+    () =>
+      navigation.addListener("beforeRemove", (event) => {
+        if (!isDirty || allowNavigationRef.current) return;
+        event.preventDefault();
+        Alert.alert(
+          "Kaydedilmemiş değişiklikler",
+          "Bu ekrandan ayrılırsanız değişiklikleriniz kaybolacak.",
+          [
+            { text: "Düzenlemeye devam et", style: "cancel" },
+            {
+              text: "Değişiklikleri at",
+              style: "destructive",
+              onPress: () => {
+                allowNavigationRef.current = true;
+                navigation.dispatch(event.data.action);
+              },
+            },
+          ],
+        );
+      }),
+    [isDirty, navigation],
+  );
 
   const save = async () => {
     if (!user || !item) return;
@@ -90,6 +160,8 @@ export default function CalendarDetailScreen() {
             : zonedWallTimeToInstant(startDate, startTime, timezone, "earlier"),
           endAt: allDay ? null : zonedWallTimeToInstant(endDate, endTime, timezone, "later"),
           projectId,
+          sourceDocumentId,
+          category,
           recurrence:
             recurrence === "none"
               ? null
@@ -108,6 +180,7 @@ export default function CalendarDetailScreen() {
         deviceId,
       );
       setItem(next);
+      baselineRef.current = formSnapshot;
       Alert.alert("Kaydedildi", "Değişiklik önce yerel SQLite'a kaydedildi.");
     } catch (caught) {
       Alert.alert("Etkinlik kaydedilemedi", message(caught));
@@ -126,6 +199,7 @@ export default function CalendarDetailScreen() {
           void (async () => {
             if (!user || !item) return;
             await calendar.softDelete(user.uid, item.id, deviceId);
+            allowNavigationRef.current = true;
             router.back();
           })(),
       },
@@ -223,6 +297,33 @@ export default function CalendarDetailScreen() {
                 label={project.title}
                 selected={projectId === project.id}
                 onPress={() => setProjectId(project.id)}
+              />
+            ))}
+          </ScrollView>
+          <StoneText variant="label">Kategori</StoneText>
+          <ScrollView horizontal contentContainerStyle={styles.choices}>
+            {categoryOptions.map((value) => (
+              <Choice
+                key={value}
+                label={value}
+                selected={category === value}
+                onPress={() => setCategory(value)}
+              />
+            ))}
+          </ScrollView>
+          <StoneText variant="label">Kaynak not</StoneText>
+          <ScrollView horizontal contentContainerStyle={styles.choices}>
+            <Choice
+              label="Bağlantı yok"
+              selected={!sourceDocumentId}
+              onPress={() => setSourceDocumentId(null)}
+            />
+            {notes.slice(0, 200).map((note) => (
+              <Choice
+                key={note.id}
+                label={note.title}
+                selected={sourceDocumentId === note.id}
+                onPress={() => setSourceDocumentId(note.id)}
               />
             ))}
           </ScrollView>
