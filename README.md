@@ -29,7 +29,9 @@ uygulama kimliklerinizi ve dağıtım hesaplarınızı kullanarak yerel olarak �
 - Windows/Tauri not editörü ve yerel Markdown klasörleri
 - GitHub repo listeleme, clone, pull, reviewed commit/push ve yeni bilgisayar restore
 
-Desktop henüz mobildeki proje/Bugün/çizim/trash/revision/conflict UI'larıyla tam parity sağlamaz.
+Desktop proje Markdown'ından salt-okunur durum/ilerleme/sürüm/blocker özetleri ve gerçek bir Bugün
+görünümü üretir; proje düzenleme/Kanban ile çizim/trash/revision/conflict akışlarında mobil ile tam
+parity sağlamaz.
 MCP için public deployment veya provider publication da repository tarafından otomatik olarak
 sağlanmaz; ikisi de aşağıdaki self-hosted kurulum sınırlarına tabidir.
 
@@ -50,7 +52,7 @@ To use it locally:
 3. Run `pnpm install`, then `pnpm desktop:dev`.
 4. Install the Visual C++ build tools and WebView2 when creating a Windows Tauri installer locally with `pnpm desktop:tauri:build`. A production NSIS installer can also be built without any local Windows toolchain via the `Desktop Windows Release` GitHub Actions workflow — see below.
 
-The desktop app stores local data in its Tauri application data directory, uses the Windows credential store for Firebase refresh tokens, and links only Markdown files selected by the user. Each self-hosted installation must use its own Firebase project and may configure its own mobile package and iOS bundle identifiers. The desktop app **compiles** without any Firebase configuration present (the values are simply empty at build time); signing in shows a clear "VITE_FIREBASE_API_KEY yapılandırılmamış" error at runtime instead of a confusing network failure if `apps/desktop/.env.local` was never configured.
+The desktop app stores local data in its Tauri application data directory, uses the Windows credential store for Firebase refresh tokens, waits for saved-session restoration before showing sign-in, and links only Markdown files selected by the user. Each self-hosted installation must use its own Firebase project and may configure its own mobile package and iOS bundle identifiers. The desktop app **compiles** without any Firebase configuration present (the values are simply empty at build time); signing in shows a clear "VITE_FIREBASE_API_KEY yapılandırılmamış" error at runtime instead of a confusing network failure if `apps/desktop/.env.local` was never configured.
 
 ### GitHub desktop setup
 

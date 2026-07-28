@@ -8,7 +8,7 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "typecheck": "tsc -b",
-    "test": "vitest run src/desktop.test.ts",
+    "test": "vitest run src",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
     "tauri:build:nsis": "tauri build --bundles nsis"

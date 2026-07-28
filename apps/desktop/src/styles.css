@@ -535,23 +535,123 @@ nav {
   margin-bottom: 8px;
   font-size: 22px;
 }
-.project-view-tabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 7px;
+.project-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 10px;
   margin-top: 20px;
 }
-.project-view-tabs span {
-  padding: 8px 12px;
+.project-summary-card {
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+  color: var(--text);
+  text-align: left;
+  background: var(--surface-strong);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.project-summary-card:hover,
+.project-summary-card:focus-visible {
+  border-color: var(--accent);
+  outline: none;
+}
+.project-summary-card > span {
+  color: var(--muted);
+  font-size: 12px;
+}
+.project-card-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.status-badge,
+.today-kind {
+  padding: 4px 8px;
+  color: var(--accent-strong);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+.project-summary-card progress {
+  width: 100%;
+  height: 6px;
+  accent-color: var(--accent);
+}
+.inline-empty {
+  display: grid;
+  gap: 4px;
+  padding: 18px;
   color: var(--muted);
   background: var(--surface-strong);
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 700;
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+  font-size: 13px;
 }
-.project-view-tabs .active {
-  color: white;
-  background: var(--accent);
+.inline-empty strong {
+  color: var(--text);
+}
+.today-workspace {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.today-heading {
+  margin-bottom: 20px;
+}
+.today-heading h2 {
+  margin-bottom: 6px;
+  font-size: 28px;
+}
+.today-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(280px, 1fr));
+  gap: 16px;
+}
+.today-card {
+  padding: 22px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+}
+.today-card h3 {
+  margin: 0 0 14px;
+}
+.today-list {
+  display: grid;
+  gap: 8px;
+}
+.today-list button {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 10px;
+  padding: 13px;
+  color: var(--text);
+  text-align: left;
+  background: var(--surface-strong);
+  border: 1px solid transparent;
+  border-radius: 9px;
+}
+.today-list button:hover,
+.today-list button:focus-visible {
+  border-color: var(--accent);
+  outline: none;
+}
+.today-list button > span:not(.today-kind),
+.today-list button > small {
+  grid-column: 2;
+  color: var(--muted);
+}
+.today-kind-blocker {
+  color: #a73e55;
+  background: #c95b6717;
+}
+.today-kind-target {
+  color: #906000;
+  background: #c58a1d17;
 }
 .conflict-banner {
   padding: 10px 17px;

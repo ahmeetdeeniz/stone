@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { EditorView, highlightActiveLine } from "@codemirror/view";
 import { createEditorState } from "@stone/editor";
 import { normalizeMarkdown } from "@stone/markdown";
@@ -8,6 +8,12 @@ import noteIcon from "../../../Icons/note-pencil.png";
 import projectIcon from "../../../Icons/projector-screen-chart.png";
 import todayIcon from "../../../Icons/calendar-dot.png";
 import settingsIcon from "../../../Icons/gear.png";
+import {
+  buildProjectSummaries,
+  buildTodayItems,
+  type DesktopProjectSummary,
+  type DesktopTodayItem,
+} from "./project-summary";
 import {
   desktopApi,
   isTauri,
@@ -191,6 +197,17 @@ function StoneShell({ session, onSignedOut }: { session: AuthSession; onSignedOu
   const editorHost = useRef<HTMLDivElement>(null);
   const editor = useRef<EditorView | null>(null);
   const draft = useRef("");
+  const projects = useMemo(() => buildProjectSummaries(documents), [documents]);
+  const todayItems = useMemo(() => buildTodayItems(projects), [projects]);
+  const recentNotes = useMemo(
+    () =>
+      documents
+        .filter((item) => !projects.some((project) => project.documentId === item.id))
+        .slice()
+        .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
+        .slice(0, 4),
+    [documents, projects],
+  );
 
   useEffect(() => {
     globalThis.document.documentElement.dataset.theme = theme;
@@ -404,6 +421,11 @@ function StoneShell({ session, onSignedOut }: { session: AuthSession; onSignedOu
     }
   }
 
+  function openDocument(documentId: string) {
+    setSelectedId(documentId);
+    setSection("notes");
+  }
+
   const activeLabel =
     section === "notes"
       ? "Notlar"
@@ -570,25 +592,16 @@ function StoneShell({ session, onSignedOut }: { session: AuthSession; onSignedOu
               <p className="eyebrow">PROJE MERKEZİ</p>
               <h2>Aktif proje durumunu tek yerde izle</h2>
               <p className="muted">
-                Proje durumları, sürümler ve blocker’lar mobil çalışma alanından eşitlenir. GitHub
-                bağlantıları ve restore araçları aşağıda yönetilir.
+                Durum, ilerleme, sürüm ve blocker özetleri taşınabilir proje Markdown’ından okunur.
+                GitHub bağlantıları ve restore araçları aşağıda yönetilir.
               </p>
-              <div className="project-view-tabs" aria-label="Proje görünümleri">
-                <span className="active">Genel bakış</span>
-                <span>Liste</span>
-                <span>Kanban</span>
-                <span>Sürümler</span>
-                <span>Blocker’lar</span>
-              </div>
+              <ProjectOverview projects={projects} onOpen={openDocument} />
             </div>
             <GithubPanel />
           </section>
         )}
         {section === "today" && (
-          <Placeholder
-            title="Bugün"
-            detail="Bugün görünümü, proje görevleri etkinleştirildiğinde burada yer alacak."
-          />
+          <TodayOverview items={todayItems} recentNotes={recentNotes} onOpen={openDocument} />
         )}
         {section === "settings" && (
           <section className="settings-panel">
@@ -647,12 +660,121 @@ function EmptyState({ title, detail }: { title: string; detail: string }) {
     </div>
   );
 }
-function Placeholder({ title, detail }: { title: string; detail: string }) {
+
+function ProjectOverview({
+  projects,
+  onOpen,
+}: {
+  projects: readonly DesktopProjectSummary[];
+  onOpen: (documentId: string) => void;
+}) {
+  if (projects.length === 0)
+    return (
+      <div className="inline-empty">
+        <strong>Henüz proje belgesi yok</strong>
+        <span>
+          Mobilde oluşturulan veya bağlı klasördeki Stone proje Markdown’ı burada görünür.
+        </span>
+      </div>
+    );
   return (
-    <section className="placeholder">
-      <p className="eyebrow">TEMEL</p>
-      <h2>{title}</h2>
-      <p>{detail}</p>
+    <div className="project-summary-grid">
+      {projects.map((project) => (
+        <button
+          className="project-summary-card"
+          key={project.id}
+          onClick={() => onOpen(project.documentId)}
+        >
+          <div className="project-card-heading">
+            <strong>{project.title}</strong>
+            <span className="status-badge">{project.status}</span>
+          </div>
+          <span>
+            {project.completedTasks}/{project.totalTasks} görev · {project.priority} öncelik
+          </span>
+          <progress
+            max={Math.max(1, project.totalTasks)}
+            value={project.completedTasks}
+            aria-label={`${project.title} ilerlemesi`}
+          />
+          <span>
+            {project.currentVersion ?? "Mevcut sürüm yok"} →{" "}
+            {project.nextVersion ?? "Sonraki sürüm yok"}
+          </span>
+          <span>{project.nextAction ?? "Sonraki iş belirlenmedi"}</span>
+          <span>
+            {project.blockers.length > 0
+              ? `${project.blockers.length} açık blocker`
+              : "Açık blocker yok"}
+            {project.versions.length > 0 ? ` · ${project.versions.length} sürüm` : ""}
+          </span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function TodayOverview({
+  items,
+  recentNotes,
+  onOpen,
+}: {
+  items: readonly DesktopTodayItem[];
+  recentNotes: readonly DesktopDocument[];
+  onOpen: (documentId: string) => void;
+}) {
+  return (
+    <section className="today-workspace">
+      <div className="today-heading">
+        <p className="eyebrow">BUGÜN</p>
+        <h2 className="brand-heading">Sıradaki önemli şeyler</h2>
+        <p className="muted">Blocker, yaklaşan hedef ve sonraki işlerin sakin özeti.</p>
+      </div>
+      <div className="today-columns">
+        <section className="today-card">
+          <h3>Proje odağı</h3>
+          {items.length === 0 ? (
+            <div className="inline-empty">
+              <strong>Bugün sakin</strong>
+              <span>Açık blocker, yaklaşan hedef veya tanımlı sonraki iş yok.</span>
+            </div>
+          ) : (
+            <div className="today-list">
+              {items.map((item) => (
+                <button key={item.id} onClick={() => onOpen(item.projectId)}>
+                  <span className={`today-kind today-kind-${item.kind}`}>
+                    {item.kind === "blocker"
+                      ? "Blocker"
+                      : item.kind === "target"
+                        ? "Hedef"
+                        : "Sonraki iş"}
+                  </span>
+                  <strong>{item.projectTitle}</strong>
+                  <span>{item.text}</span>
+                  {item.targetDate && <small>{item.targetDate}</small>}
+                </button>
+              ))}
+            </div>
+          )}
+        </section>
+        <section className="today-card">
+          <h3>Son güncellenen notlar</h3>
+          {recentNotes.length === 0 ? (
+            <div className="inline-empty">
+              <span>Henüz yakın zamanda güncellenmiş not yok.</span>
+            </div>
+          ) : (
+            <div className="today-list">
+              {recentNotes.map((note) => (
+                <button key={note.id} onClick={() => onOpen(note.id)}>
+                  <strong>{note.title}</strong>
+                  <span>{new Date(note.updatedAt).toLocaleString("tr-TR")}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </section>
+      </div>
     </section>
   );
 }
