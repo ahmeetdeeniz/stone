@@ -1139,6 +1139,9 @@ nav {
   outline: 2px solid var(--primary);
   outline-offset: -3px;
 }
+.month-day[aria-selected="true"] {
+  background: color-mix(in srgb, var(--primary) 9%, var(--surface));
+}
 .month-event {
   overflow: hidden;
   padding: 3px 5px;
@@ -1185,6 +1188,13 @@ nav {
   position: absolute;
   inset-inline: 0;
   border-top: 1px solid var(--border);
+}
+.current-time-line {
+  position: absolute;
+  inset-inline: 0;
+  z-index: 3;
+  border-top: 2px solid var(--danger);
+  pointer-events: none;
 }
 .positioned-event {
   position: absolute;

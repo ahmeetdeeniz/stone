@@ -144,6 +144,7 @@ export default function CalendarScreen() {
     date.setUTCDate(date.getUTCDate() - ((date.getUTCDay() + 6) % 7) + offset);
     return date.toISOString().slice(0, 10);
   });
+  const today = new Date().toISOString().slice(0, 10);
 
   return (
     <Screen padded={false}>
@@ -198,6 +199,11 @@ export default function CalendarScreen() {
               </Pressable>
             ))}
           </View>
+          {selectedDate === today ? (
+            <StoneText variant="caption" accessibilityLiveRegion="polite">
+              Şu an {new Date().toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}
+            </StoneText>
+          ) : null}
           <Surface>
             <StoneText variant="title3">Hızlı etkinlik</StoneText>
             <StoneInput

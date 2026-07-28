@@ -1678,6 +1678,7 @@ function CalendarWorkspace({
           <MonthCalendar
             days={days as ReturnType<typeof monthGrid>}
             items={visible}
+            selectedDate={date}
             onSelect={setDate}
             onOpen={openCalendarItem}
           />
@@ -1720,11 +1721,13 @@ function CalendarWorkspace({
 function MonthCalendar({
   days,
   items,
+  selectedDate,
   onSelect,
   onOpen,
 }: {
   days: ReturnType<typeof monthGrid>;
   items: readonly CalendarItem[];
+  selectedDate: string;
   onSelect: (date: string) => void;
   onOpen: (itemId: string, occurrenceDate?: string | null) => void;
 }) {
@@ -1745,8 +1748,17 @@ function MonthCalendar({
             role="gridcell"
             aria-label={`${day.date}${day.isToday ? ", bugün" : ""}, ${dayItems.length} kayıt`}
             aria-current={day.isToday ? "date" : undefined}
+            aria-selected={day.date === selectedDate}
             className={`month-day ${day.inPeriod ? "" : "outside"} ${day.isToday ? "today" : ""}`}
             onClick={() => onSelect(day.date)}
+            onKeyDown={(event) => {
+              const delta = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7 }[event.key];
+              if (delta === undefined) return;
+              event.preventDefault();
+              const target = new Date(`${day.date}T00:00:00Z`);
+              target.setUTCDate(target.getUTCDate() + delta);
+              onSelect(target.toISOString().slice(0, 10));
+            }}
           >
             <strong>{Number(day.date.slice(-2))}</strong>
             {dayItems.slice(0, 3).map((item) => (
@@ -1795,6 +1807,13 @@ function TimeGrid({
   onEventDrop: (itemId: string, occurrenceDate: string | null, date: string, time: string) => void;
   onOpen: (itemId: string, occurrenceDate?: string | null) => void;
 }) {
+  const now = new Date();
+  const localToday = [
+    now.getFullYear(),
+    String(now.getMonth() + 1).padStart(2, "0"),
+    String(now.getDate()).padStart(2, "0"),
+  ].join("-");
+  const currentMinute = now.getHours() * 60 + now.getMinutes();
   return (
     <div
       className="time-grid"
@@ -1851,6 +1870,14 @@ function TimeGrid({
           {Array.from({ length: 24 }, (_, hour) => (
             <div key={hour} className="hour-line" style={{ top: hour * 60 }} />
           ))}
+          {date === localToday ? (
+            <div
+              className="current-time-line"
+              style={{ top: currentMinute }}
+              role="separator"
+              aria-label={`Şu an ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`}
+            />
+          ) : null}
           {layoutTimedItems(items, date).map((position) => (
             <div
               key={`${position.item.id}:${position.item.recurrenceId ?? position.item.startDate}`}
