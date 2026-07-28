@@ -16,4 +16,18 @@ describe("Firebase Storage drawing boundary", () => {
     expect(rules).toContain("request.resource.size <= 10 * 1024 * 1024");
     expect(rules).toContain("allow read, write: if false");
   });
+
+  it("keeps account deletion wired to owner-scoped drawing cleanup", () => {
+    const remote = readFileSync(
+      resolve(process.cwd(), "apps/mobile/src/infrastructure/firebase/firestore.ts"),
+      "utf8",
+    );
+    const storage = readFileSync(
+      resolve(process.cwd(), "apps/mobile/src/infrastructure/firebase/storage.ts"),
+      "utf8",
+    );
+    expect(remote).toContain("await this.drawingStorage.deleteOwnerDrawings(ownerId)");
+    expect(storage).toContain("storage().ref(`users/${ownerId}/drawings`)");
+    expect(storage).toContain("await item.delete()");
+  });
 });

@@ -53,4 +53,14 @@ export class FirebaseDrawingStorage {
       previewStoragePath,
     };
   }
+
+  public async deleteOwnerDrawings(ownerId: string): Promise<void> {
+    await deleteTree(storage().ref(`users/${ownerId}/drawings`));
+  }
+}
+
+async function deleteTree(reference: ReturnType<ReturnType<typeof storage>["ref"]>): Promise<void> {
+  const result = await reference.listAll();
+  for (const prefix of result.prefixes) await deleteTree(prefix);
+  for (const item of result.items) await item.delete();
 }

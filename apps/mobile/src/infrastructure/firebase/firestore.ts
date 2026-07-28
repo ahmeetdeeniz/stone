@@ -138,6 +138,7 @@ export class FirebaseSyncRemote implements SyncRemote {
   public async deleteOwnerData(ownerId: string): Promise<void> {
     try {
       getFirebaseConfig();
+      await this.drawingStorage.deleteOwnerDrawings(ownerId);
       const database = firestore();
       for (const collection of [
         "documents",
