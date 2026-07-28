@@ -5,9 +5,12 @@ import { CursorCodec } from "./cursor.js";
 import {
   McpRevisionConflictError,
   type AuditEntry,
+  type CalendarRecord,
+  type CalendarWriteInput,
   type DocumentRecord,
   type DocumentWriteInput,
   type ListDocumentsOptions,
+  type ListCalendarOptions,
   type ListProjectsOptions,
   type ListVersionsOptions,
   type ListTasksOptions,
@@ -121,6 +124,21 @@ export class FirestoreStoneStore implements StoneStore {
     return snapshot.exists ? toTask(snapshot.data()) : null;
   }
 
+  public async getCalendar(ownerId: string, id: string): Promise<CalendarRecord | null> {
+    const snapshot = await this.entityRef(ownerId, "calendar", id).get();
+    return snapshot.exists ? (snapshot.data() as CalendarRecord) : null;
+  }
+
+  public async listCalendar(ownerId: string, options: ListCalendarOptions): Promise<Page<CalendarRecord>> {
+    const query: Query = this.database
+      .collection(`users/${ownerId}/calendar`)
+      .where("ownerId", "==", ownerId)
+      .orderBy("updatedAt", "desc");
+    return this.scan(query, ownerId, options.cursorKey ?? "calendar", options.pageToken, options.limit, (value) => value as CalendarRecord, (item) =>
+      Boolean((options.includeDeleted || !item.deletedAt) && item.endDate >= options.startDate && item.startDate <= options.endDate && (!options.projectId || item.projectId === options.projectId) && (!options.kind || item.kind === options.kind)),
+    );
+  }
+
   public async listTasks(ownerId: string, options: ListTasksOptions): Promise<Page<TaskRecord>> {
     const cursorKey = options.cursorKey ?? "tasks";
     const query: Query = this.database
@@ -157,6 +175,9 @@ export class FirestoreStoneStore implements StoneStore {
   public writeTask(input: TaskWriteInput): Promise<WriteResult<TaskRecord>> {
     return this.writeEntity("tasks", input.taskId, input, input.mutate);
   }
+  public writeCalendar(input: CalendarWriteInput): Promise<WriteResult<CalendarRecord>> {
+    return this.writeEntity("calendar", input.calendarId, input, input.mutate);
+  }
 
   public async listAudit(ownerId: string, limit: number): Promise<readonly AuditEntry[]> {
     const snapshot = await this.database
@@ -168,7 +189,7 @@ export class FirestoreStoneStore implements StoneStore {
   }
 
   private async writeEntity<
-    T extends DocumentRecord | ProjectRecord | VersionRecord | TaskRecord,
+    T extends DocumentRecord | ProjectRecord | VersionRecord | TaskRecord | CalendarRecord,
     I extends {
       ownerId: string;
       expectedRevision: number;
@@ -179,7 +200,7 @@ export class FirestoreStoneStore implements StoneStore {
       mutate: (current: T | null) => T;
     },
   >(
-    collection: "documents" | "projects" | "versions" | "tasks",
+    collection: "documents" | "projects" | "versions" | "tasks" | "calendar",
     id: string,
     input: I,
     mutate: (current: T | null) => T,
@@ -323,6 +344,7 @@ export class MemoryStoneStore implements StoneStore {
   private readonly projects = new Map<string, ProjectRecord>();
   private readonly versions = new Map<string, VersionRecord>();
   private readonly tasks = new Map<string, TaskRecord>();
+  private readonly calendar = new Map<string, CalendarRecord>();
   private readonly idempotency = new Map<string, WriteResult<unknown>>();
   private readonly cursors = new CursorCodec("memory-store-cursor-secret");
 
@@ -340,6 +362,9 @@ export class MemoryStoneStore implements StoneStore {
 
   public seedTask(task: TaskRecord): void {
     this.tasks.set(key(task.ownerId, task.id), structuredClone(task));
+  }
+  public seedCalendar(item: CalendarRecord): void {
+    this.calendar.set(key(item.ownerId, item.id), structuredClone(item));
   }
 
   public async getDocument(ownerId: string, id: string): Promise<DocumentRecord | null> {
@@ -443,6 +468,19 @@ export class MemoryStoneStore implements StoneStore {
       this.cursors,
     );
   }
+  public async getCalendar(ownerId: string, id: string): Promise<CalendarRecord | null> {
+    return clone(this.calendar.get(key(ownerId, id)) ?? null);
+  }
+  public async listCalendar(ownerId: string, options: ListCalendarOptions): Promise<Page<CalendarRecord>> {
+    const values = [...this.calendar.values()]
+      .filter((item) => item.ownerId === ownerId)
+      .filter((item) => options.includeDeleted || !item.deletedAt)
+      .filter((item) => item.endDate >= options.startDate && item.startDate <= options.endDate)
+      .filter((item) => !options.projectId || item.projectId === options.projectId)
+      .filter((item) => !options.kind || item.kind === options.kind)
+      .sort(sortUpdated);
+    return page(values, ownerId, options.cursorKey ?? "calendar", options.pageToken, options.limit, this.cursors);
+  }
 
   public writeDocument(input: DocumentWriteInput): Promise<WriteResult<DocumentRecord>> {
     return this.write(this.documents, input.documentId, input);
@@ -459,6 +497,9 @@ export class MemoryStoneStore implements StoneStore {
   public writeTask(input: TaskWriteInput): Promise<WriteResult<TaskRecord>> {
     return this.write(this.tasks, input.taskId, input);
   }
+  public writeCalendar(input: CalendarWriteInput): Promise<WriteResult<CalendarRecord>> {
+    return this.write(this.calendar, input.calendarId, input);
+  }
 
   public async listAudit(ownerId: string, limit: number): Promise<readonly AuditEntry[]> {
     return this.audits
@@ -467,10 +508,10 @@ export class MemoryStoneStore implements StoneStore {
       .reverse();
   }
 
-  private async write<T extends DocumentRecord | ProjectRecord | VersionRecord | TaskRecord>(
+  private async write<T extends DocumentRecord | ProjectRecord | VersionRecord | TaskRecord | CalendarRecord>(
     values: Map<string, T>,
     id: string,
-    input: DocumentWriteInput | ProjectWriteInput | VersionWriteInput | TaskWriteInput,
+    input: DocumentWriteInput | ProjectWriteInput | VersionWriteInput | TaskWriteInput | CalendarWriteInput,
   ): Promise<WriteResult<T>> {
     const idempotencyKey = `${input.ownerId}:${input.idempotencyKey}`;
     const replay = this.idempotency.get(idempotencyKey) as WriteResult<T> | undefined;

@@ -2,9 +2,11 @@ export const SCOPES = [
   "stone.read.notes",
   "stone.read.projects",
   "stone.read.tasks",
+  "stone.read.calendar",
   "stone.write.notes",
   "stone.write.projects",
   "stone.write.tasks",
+  "stone.write.calendar",
 ] as const;
 
 export type StoneScope = (typeof SCOPES)[number];
@@ -106,6 +108,39 @@ export interface TaskRecord {
   [key: string]: unknown;
 }
 
+export interface CalendarRecord {
+  id: string;
+  ownerId: string;
+  schemaVersion: 1;
+  kind: "event" | "task_block";
+  title: string;
+  description: string | null;
+  allDay: boolean;
+  startDate: string;
+  endDate: string;
+  startAt: string | null;
+  endAt: string | null;
+  timezone: string;
+  location: string | null;
+  category: string;
+  projectId: string | null;
+  sourceDocumentId: string | null;
+  taskId: string | null;
+  planningNote: string | null;
+  recurrence: Record<string, unknown> | null;
+  recurrenceSeriesId: string | null;
+  recurrenceId: string | null;
+  overrides: Record<string, unknown>[];
+  externalUid: string | null;
+  cancelledAt: string | null;
+  revision: number;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt: string | null;
+  updatedByDeviceId: string;
+  [key: string]: unknown;
+}
+
 export interface Page<T> {
   items: readonly T[];
   nextPageToken: string | null;
@@ -143,6 +178,17 @@ export interface ListTasksOptions {
   dueBefore?: string | undefined;
   dueAfter?: string | undefined;
   search?: string | undefined;
+  includeDeleted?: boolean | undefined;
+  cursorKey?: string | undefined;
+  pageToken?: string | undefined;
+  limit: number;
+}
+
+export interface ListCalendarOptions {
+  startDate: string;
+  endDate: string;
+  projectId?: string | undefined;
+  kind?: CalendarRecord["kind"] | undefined;
   includeDeleted?: boolean | undefined;
   cursorKey?: string | undefined;
   pageToken?: string | undefined;
@@ -211,6 +257,16 @@ export interface TaskWriteInput {
   inputSummary: Record<string, unknown>;
   mutate: (current: TaskRecord | null) => TaskRecord;
 }
+export interface CalendarWriteInput {
+  ownerId: string;
+  calendarId: string;
+  expectedRevision: number;
+  idempotencyKey: string;
+  tool: string;
+  confirmation: Record<string, unknown> | null;
+  inputSummary: Record<string, unknown>;
+  mutate: (current: CalendarRecord | null) => CalendarRecord;
+}
 
 export interface WriteResult<T> {
   entity: T;
@@ -227,10 +283,13 @@ export interface StoneStore {
   listVersions(ownerId: string, options: ListVersionsOptions): Promise<Page<VersionRecord>>;
   getTask(ownerId: string, id: string): Promise<TaskRecord | null>;
   listTasks(ownerId: string, options: ListTasksOptions): Promise<Page<TaskRecord>>;
+  getCalendar(ownerId: string, id: string): Promise<CalendarRecord | null>;
+  listCalendar(ownerId: string, options: ListCalendarOptions): Promise<Page<CalendarRecord>>;
   writeDocument(input: DocumentWriteInput): Promise<WriteResult<DocumentRecord>>;
   writeProject(input: ProjectWriteInput): Promise<WriteResult<ProjectRecord>>;
   writeVersion(input: VersionWriteInput): Promise<WriteResult<VersionRecord>>;
   writeTask(input: TaskWriteInput): Promise<WriteResult<TaskRecord>>;
+  writeCalendar(input: CalendarWriteInput): Promise<WriteResult<CalendarRecord>>;
   listAudit(ownerId: string, limit: number): Promise<readonly AuditEntry[]>;
 }
 

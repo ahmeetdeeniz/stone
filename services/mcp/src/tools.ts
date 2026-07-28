@@ -413,6 +413,96 @@ export function createMcpServer(service: StoneMcpService): McpServer {
     async (input, extra) =>
       result(await service.addDecision(context(extra), input.projectId, input)),
   );
+  const calendarWindow = {
+    startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u),
+    endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u),
+    projectId: z.string().max(200).optional(),
+    kind: z.enum(["event", "task_block"]).optional(),
+    ...page,
+  };
+  server.registerTool("list_calendar_events", {
+    title: "List calendar events",
+    description: "List a bounded, timezone-explicit Stone calendar window.",
+    inputSchema: calendarWindow,
+    annotations: readMeta,
+  }, async (input, extra) => result(await service.listCalendarEvents(context(extra), input)));
+  server.registerTool("list_agenda", {
+    title: "List agenda",
+    description: "List events and scheduled task blocks in a bounded date window.",
+    inputSchema: calendarWindow,
+    annotations: readMeta,
+  }, async (input, extra) => result(await service.listCalendarEvents(context(extra), input)));
+  server.registerTool("get_calendar_event", {
+    title: "Get calendar event",
+    description: "Get one owner-scoped Stone calendar record.",
+    inputSchema: { id: z.string().min(1).max(200) },
+    annotations: readMeta,
+  }, async (input, extra) => result(await service.getCalendarEvent(context(extra), input.id)));
+  const calendarCreate = {
+    title: z.string().min(1).max(512),
+    kind: z.enum(["event", "task_block"]).optional(),
+    startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u),
+    endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u),
+    startAt: z.string().datetime().optional(),
+    endAt: z.string().datetime().optional(),
+    timezone: z.string().min(1).max(100),
+    allDay: z.boolean().optional(),
+    taskId: z.string().max(200).optional(),
+    projectId: z.string().max(200).optional(),
+    description: z.string().max(64000).optional(),
+    location: z.string().max(1000).optional(),
+    category: z.enum(["neutral", "purple", "blue", "green", "amber", "red"]).optional(),
+    ...write,
+  };
+  server.registerTool("create_calendar_event", {
+    title: "Create calendar event",
+    description: "Create an owner-scoped standalone event with explicit timezone.",
+    inputSchema: calendarCreate,
+    annotations: writeMeta,
+  }, async (input, extra) => result(await service.createCalendarEvent(context(extra), input)));
+  server.registerTool("schedule_task", {
+    title: "Schedule task",
+    description: "Create a time block referencing an existing task; does not change its due date.",
+    inputSchema: { ...calendarCreate, kind: z.literal("task_block"), taskId: z.string().min(1).max(200) },
+    annotations: writeMeta,
+  }, async (input, extra) => result(await service.createCalendarEvent(context(extra), input)));
+  const calendarUpdate = {
+    id: z.string().min(1).max(200),
+    title: z.string().min(1).max(512).optional(),
+    description: z.string().max(64000).nullable().optional(),
+    startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u).optional(),
+    endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u).optional(),
+    startAt: z.string().datetime().nullable().optional(),
+    endAt: z.string().datetime().nullable().optional(),
+    timezone: z.string().min(1).max(100).optional(),
+    projectId: z.string().max(200).nullable().optional(),
+    ...write,
+  };
+  server.registerTool("update_calendar_event", {
+    title: "Update calendar event",
+    description: "Update one event with revision and idempotency protection.",
+    inputSchema: calendarUpdate,
+    annotations: writeMeta,
+  }, async ({ id, ...input }, extra) => result(await service.updateCalendarEvent(context(extra), id, input)));
+  server.registerTool("reschedule_task_block", {
+    title: "Reschedule task block",
+    description: "Move or resize a scheduled task block without changing task completion or due date.",
+    inputSchema: calendarUpdate,
+    annotations: writeMeta,
+  }, async ({ id, ...input }, extra) => result(await service.updateCalendarEvent(context(extra), id, input)));
+  const calendarDelete = { id: z.string().min(1).max(200), ...write };
+  server.registerTool("delete_calendar_event", {
+    title: "Delete calendar event",
+    description: "Soft-delete one calendar event with revision protection.",
+    inputSchema: calendarDelete,
+    annotations: { ...writeMeta, destructiveHint: true },
+  }, async ({ id, ...input }, extra) => result(await service.deleteCalendarEvent(context(extra), id, input)));
+  server.registerTool("unschedule_task_block", {
+    title: "Unschedule task block",
+    description: "Remove a task block without deleting or completing its task.",
+    inputSchema: calendarDelete,
+    annotations: { ...writeMeta, destructiveHint: true },
+  }, async ({ id, ...input }, extra) => result(await service.deleteCalendarEvent(context(extra), id, input)));
   return server;
 }
 

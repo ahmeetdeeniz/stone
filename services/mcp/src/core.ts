@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { canTransitionProjectStatus } from "@stone/domain";
+import { canTransitionProjectStatus, validateCalendarItem, type CalendarItem } from "@stone/domain";
 import {
   ensureTaskMetadata,
   extractTasks,
@@ -12,6 +12,7 @@ import {
   McpInputError,
   McpNotFoundError,
   type AuthContext,
+  type CalendarRecord,
   type DocumentRecord,
   type ProjectRecord,
   type StoneStore,
@@ -30,6 +31,23 @@ import { requireScope } from "./auth.js";
 const MAX_MARKDOWN = 512_000;
 const MAX_RESULTS = 100;
 const MCP_DEVICE_PREFIX = "mcp:";
+
+function validateCalendarRecord(value: CalendarRecord): CalendarRecord {
+  validateCalendarItem(value as unknown as CalendarItem);
+  return value;
+}
+
+function definedCalendarChanges(input: CalendarUpdateInput): Partial<CalendarRecord> {
+  const changes: Partial<CalendarRecord> = {};
+  for (const key of [
+    "title", "description", "startDate", "endDate", "startAt", "endAt", "timezone",
+    "projectId", "location", "category", "planningNote",
+  ] as const) {
+    const value = input[key];
+    if (value !== undefined) Object.assign(changes, { [key]: value });
+  }
+  return changes;
+}
 
 export interface ReadOptions {
   limit?: number | undefined;
@@ -71,6 +89,36 @@ export interface TaskUpdateInput extends WriteOptions {
   parentTaskId?: string | null | undefined;
   tags?: string[] | undefined;
   estimatedMinutes?: number | null | undefined;
+}
+
+export interface CalendarCreateInput extends WriteOptions {
+  title: string;
+  kind?: "event" | "task_block" | undefined;
+  startDate: string;
+  endDate: string;
+  startAt?: string | undefined;
+  endAt?: string | undefined;
+  timezone: string;
+  allDay?: boolean | undefined;
+  taskId?: string | undefined;
+  projectId?: string | undefined;
+  description?: string | undefined;
+  location?: string | undefined;
+  category?: string | undefined;
+}
+
+export interface CalendarUpdateInput extends WriteOptions {
+  title?: string | undefined;
+  description?: string | null | undefined;
+  startDate?: string | undefined;
+  endDate?: string | undefined;
+  startAt?: string | null | undefined;
+  endAt?: string | null | undefined;
+  timezone?: string | undefined;
+  projectId?: string | null | undefined;
+  location?: string | null | undefined;
+  category?: string | undefined;
+  planningNote?: string | null | undefined;
 }
 
 export interface StoneMcpServiceOptions {
@@ -235,6 +283,126 @@ export class StoneMcpService {
   public async getTask(context: AuthContext, taskId: string) {
     requireScope(context, "stone.read.tasks");
     return taskSummaryRecord(await this.getTaskRecord(context, taskId));
+  }
+
+  public async listCalendarEvents(
+    context: AuthContext,
+    input: ReadOptions & { startDate: string; endDate: string; projectId?: string | undefined; kind?: "event" | "task_block" | undefined },
+  ) {
+    requireScope(context, "stone.read.calendar");
+    assertIsoDate(input.startDate, "startDate");
+    assertIsoDate(input.endDate, "endDate");
+    if (input.endDate < input.startDate || Date.parse(`${input.endDate}T00:00:00Z`) - Date.parse(`${input.startDate}T00:00:00Z`) > 366 * 86_400_000)
+      throw new McpInputError("Calendar window must be ordered and at most 366 days.");
+    return this.store.listCalendar(context.userId, {
+      startDate: input.startDate,
+      endDate: input.endDate,
+      projectId: input.projectId,
+      kind: input.kind,
+      cursorKey: `calendar:${input.startDate}:${input.endDate}:${input.projectId ?? ""}:${input.kind ?? ""}`,
+      pageToken: input.pageToken,
+      limit: boundedLimit(input.limit),
+    });
+  }
+
+  public async getCalendarEvent(context: AuthContext, id: string) {
+    requireScope(context, "stone.read.calendar");
+    const item = await this.store.getCalendar(context.userId, id);
+    if (!item || item.deletedAt) throw new McpNotFoundError("Calendar item not found.");
+    return item;
+  }
+
+  public async createCalendarEvent(context: AuthContext, input: CalendarCreateInput) {
+    requireScope(context, "stone.write.calendar");
+    validateExpectedRevision(input.expectedRevision);
+    if (input.expectedRevision !== 0) throw new McpInputError("Create requires expectedRevision 0.");
+    const id = this.idFactory();
+    const now = this.now().toISOString();
+    const item = validateCalendarRecord({
+      id,
+      ownerId: context.userId,
+      schemaVersion: 1,
+      kind: input.kind ?? "event",
+      title: input.title,
+      description: input.description ?? null,
+      allDay: input.allDay ?? false,
+      startDate: input.startDate,
+      endDate: input.endDate,
+      startAt: input.startAt ?? null,
+      endAt: input.endAt ?? null,
+      timezone: input.timezone,
+      location: input.location ?? null,
+      category: input.category ?? "purple",
+      projectId: input.projectId ?? null,
+      sourceDocumentId: null,
+      taskId: input.taskId ?? null,
+      planningNote: null,
+      recurrence: null,
+      recurrenceSeriesId: null,
+      recurrenceId: null,
+      overrides: [],
+      externalUid: null,
+      cancelledAt: null,
+      revision: 1,
+      createdAt: now,
+      updatedAt: now,
+      deletedAt: null,
+      updatedByDeviceId: `${MCP_DEVICE_PREFIX}${context.clientId}`,
+    });
+    return this.store.writeCalendar({
+      ownerId: context.userId,
+      calendarId: id,
+      expectedRevision: 0,
+      idempotencyKey: validateIdempotencyKey(input.idempotencyKey),
+      tool: input.kind === "task_block" ? "schedule_task" : "create_calendar_event",
+      confirmation: input.confirmation ?? null,
+      inputSummary: { title: item.title, startDate: item.startDate, kind: item.kind },
+      mutate: () => item,
+    });
+  }
+
+  public async updateCalendarEvent(
+    context: AuthContext,
+    id: string,
+    input: CalendarUpdateInput,
+  ) {
+    requireScope(context, "stone.write.calendar");
+    const current = await this.store.getCalendar(context.userId, id);
+    if (!current || current.deletedAt) throw new McpNotFoundError("Calendar item not found.");
+    const now = this.now().toISOString();
+    return this.store.writeCalendar({
+      ownerId: context.userId,
+      calendarId: id,
+      expectedRevision: validateExpectedRevision(input.expectedRevision),
+      idempotencyKey: validateIdempotencyKey(input.idempotencyKey),
+      tool: current.kind === "task_block" ? "reschedule_task_block" : "update_calendar_event",
+      confirmation: input.confirmation ?? null,
+      inputSummary: { id, fields: Object.keys(input).filter((key) => !["idempotencyKey", "confirmation"].includes(key)) },
+      mutate: (value) => validateCalendarRecord({
+        ...value!,
+        ...definedCalendarChanges(input),
+        revision: value!.revision + 1,
+        updatedAt: now,
+        updatedByDeviceId: `${MCP_DEVICE_PREFIX}${context.clientId}`,
+      }),
+    });
+  }
+
+  public async deleteCalendarEvent(context: AuthContext, id: string, input: WriteOptions) {
+    requireScope(context, "stone.write.calendar");
+    const current = await this.store.getCalendar(context.userId, id);
+    if (!current) throw new McpNotFoundError("Calendar item not found.");
+    const now = this.now().toISOString();
+    return this.store.writeCalendar({
+      ownerId: context.userId,
+      calendarId: id,
+      expectedRevision: validateExpectedRevision(input.expectedRevision),
+      idempotencyKey: validateIdempotencyKey(input.idempotencyKey),
+      tool: current.kind === "task_block" ? "unschedule_task_block" : "delete_calendar_event",
+      confirmation: input.confirmation ?? null,
+      inputSummary: { id, kind: current.kind },
+      mutate: (value) => ({ ...value!, revision: value!.revision + 1, updatedAt: now, deletedAt: now, cancelledAt: now, updatedByDeviceId: `${MCP_DEVICE_PREFIX}${context.clientId}` }),
+    });
   }
 
   public async listOverdueTasks(context: AuthContext, date: string, options: ReadOptions = {}) {
