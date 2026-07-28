@@ -8,6 +8,7 @@ import {
   projectStatusLabels,
   type ProjectPriority,
   type ProjectStatus,
+  type CalendarItem,
 } from "@stone/domain";
 import GithubPanel from "./GithubPanel";
 import {
@@ -28,7 +29,7 @@ import {
   type FileFingerprint,
 } from "./desktop-api";
 
-type Section = "notes" | "projects" | "tasks" | "today" | "settings";
+type Section = "notes" | "projects" | "tasks" | "calendar" | "today" | "settings";
 type Theme = "system" | "light" | "dark";
 function titleFromMarkdown(markdown: string): string {
   const heading = markdown.match(/^#\s+(.+)$/m)?.[1]?.trim();
@@ -192,6 +193,7 @@ function StoneShell({ session, onSignedOut }: { session: AuthSession; onSignedOu
   const [theme, setTheme] = useState<Theme>("system");
   const [documents, setDocuments] = useState<DesktopDocument[]>([]);
   const [tasks, setTasks] = useState<DesktopTask[]>([]);
+  const [calendarItems, setCalendarItems] = useState<CalendarItem[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [document, setDocument] = useState<DesktopDocument | null>(null);
   const [fingerprint, setFingerprint] = useState<FileFingerprint | null>(null);
@@ -238,6 +240,16 @@ function StoneShell({ session, onSignedOut }: { session: AuthSession; onSignedOu
         setDocuments(items);
         if (items[0]) setSelectedId(items[0].id);
       })
+      .catch((caught) => setMessage(toMessage(caught)));
+  }, []);
+
+  useEffect(() => {
+    const today = new Date().toISOString().slice(0, 10);
+    const start = `${today.slice(0, 8)}01`;
+    const end = `${today.slice(0, 8)}31`;
+    void desktopApi
+      .listCalendarItems(start, end)
+      .then(setCalendarItems)
       .catch((caught) => setMessage(toMessage(caught)));
   }, []);
 
@@ -458,9 +470,11 @@ function StoneShell({ session, onSignedOut }: { session: AuthSession; onSignedOu
         ? "Projeler"
         : section === "tasks"
           ? "Görevler"
-          : section === "today"
-            ? "Bugün"
-            : "Ayarlar";
+          : section === "calendar"
+            ? "Takvim"
+            : section === "today"
+              ? "Bugün"
+              : "Ayarlar";
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -481,6 +495,13 @@ function StoneShell({ session, onSignedOut }: { session: AuthSession; onSignedOu
           </NavButton>
           <NavButton active={section === "tasks"} onClick={() => setSection("tasks")} icon="✓">
             Görevler
+          </NavButton>
+          <NavButton
+            active={section === "calendar"}
+            onClick={() => setSection("calendar")}
+            icon="□"
+          >
+            Takvim
           </NavButton>
           <NavButton active={section === "today"} onClick={() => setSection("today")} icon="◷">
             Bugün
@@ -627,6 +648,14 @@ function StoneShell({ session, onSignedOut }: { session: AuthSession; onSignedOu
             tasks={tasks}
             projects={projects}
             onChange={setTasks}
+            onMessage={setMessage}
+          />
+        )}
+        {section === "calendar" && (
+          <CalendarWorkspace
+            items={calendarItems}
+            tasks={tasks}
+            onChange={setCalendarItems}
             onMessage={setMessage}
           />
         )}
@@ -1060,6 +1089,190 @@ function ProjectOverview({
         </button>
       ))}
     </div>
+  );
+}
+
+function CalendarWorkspace({
+  items,
+  tasks,
+  onChange,
+  onMessage,
+}: {
+  items: readonly CalendarItem[];
+  tasks: readonly DesktopTask[];
+  onChange: (items: CalendarItem[]) => void;
+  onMessage: (message: string) => void;
+}) {
+  const [view, setView] = useState<"month" | "week" | "day" | "agenda">("week");
+  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [title, setTitle] = useState("");
+  const [taskId, setTaskId] = useState("");
+  const [startTime, setStartTime] = useState("09:00");
+  const [endTime, setEndTime] = useState("10:00");
+  const visible = items.filter(
+    (item) => item.startDate <= date && item.endDate >= date && !item.deletedAt,
+  );
+
+  async function create() {
+    if (!title.trim() && !taskId) return;
+    const now = new Date().toISOString();
+    const task = tasks.find((value) => value.id === taskId);
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+    const item: CalendarItem = {
+      schemaVersion: 1,
+      id: crypto.randomUUID(),
+      ownerId: "",
+      revision: 0,
+      createdAt: now,
+      updatedAt: now,
+      deletedAt: null,
+      updatedByDeviceId: "",
+      kind: task ? "task_block" : "event",
+      title: task?.title ?? title.trim(),
+      description: null,
+      allDay: false,
+      startDate: date,
+      endDate: date,
+      startAt: new Date(`${date}T${startTime}:00`).toISOString(),
+      endAt: new Date(`${date}T${endTime}:00`).toISOString(),
+      timezone,
+      location: null,
+      category: task ? "blue" : "purple",
+      projectId: task?.projectId ?? null,
+      sourceDocumentId: task?.sourceDocumentId ?? null,
+      taskId: task?.id ?? null,
+      planningNote: null,
+      recurrence: null,
+      recurrenceSeriesId: null,
+      recurrenceId: null,
+      overrides: [],
+      externalUid: null,
+      cancelledAt: null,
+    };
+    try {
+      const saved = await desktopApi.saveCalendarItem(item);
+      onChange([...items, saved]);
+      setTitle("");
+      setTaskId("");
+      onMessage(
+        task ? "Görev zaman bloğu olarak planlandı; son tarihi değişmedi." : "Etkinlik kaydedildi.",
+      );
+    } catch (caught) {
+      onMessage(toMessage(caught));
+    }
+  }
+  function shift(days: number) {
+    const value = new Date(`${date}T00:00:00Z`);
+    value.setUTCDate(value.getUTCDate() + days);
+    setDate(value.toISOString().slice(0, 10));
+  }
+  return (
+    <section className="calendar-workspace" aria-label="Takvim">
+      <div className="calendar-toolbar">
+        <div className="segmented" role="group" aria-label="Takvim görünümü">
+          {(["month", "week", "day", "agenda"] as const).map((value) => (
+            <button key={value} aria-pressed={view === value} onClick={() => setView(value)}>
+              {{ month: "Ay", week: "Hafta", day: "Gün", agenda: "Ajanda" }[value]}
+            </button>
+          ))}
+        </div>
+        <button onClick={() => shift(view === "month" ? -30 : view === "week" ? -7 : -1)}>
+          Önceki
+        </button>
+        <button onClick={() => setDate(new Date().toISOString().slice(0, 10))}>Bugün</button>
+        <input
+          aria-label="Tarihe git"
+          type="date"
+          value={date}
+          onChange={(event) => setDate(event.target.value)}
+        />
+        <button onClick={() => shift(view === "month" ? 30 : view === "week" ? 7 : 1)}>
+          Sonraki
+        </button>
+      </div>
+      <div className="calendar-grid">
+        <div className="calendar-create">
+          <h2>{date}</h2>
+          <p className="muted">
+            Saatler {Intl.DateTimeFormat().resolvedOptions().timeZone}. Yerel kayıt hemen yapılır.
+          </p>
+          <label>
+            Etkinlik başlığı
+            <input value={title} onChange={(event) => setTitle(event.target.value)} />
+          </label>
+          <label>
+            Veya görev planla
+            <select value={taskId} onChange={(event) => setTaskId(event.target.value)}>
+              <option value="">Görev seçilmedi</option>
+              {tasks
+                .filter((task) => task.state === "open" && !task.deletedAt)
+                .map((task) => (
+                  <option key={task.id} value={task.id}>
+                    {task.title}
+                  </option>
+                ))}
+            </select>
+          </label>
+          <div className="time-fields">
+            <label>
+              Başlangıç
+              <input
+                type="time"
+                value={startTime}
+                onChange={(event) => setStartTime(event.target.value)}
+              />
+            </label>
+            <label>
+              Bitiş
+              <input
+                type="time"
+                value={endTime}
+                onChange={(event) => setEndTime(event.target.value)}
+              />
+            </label>
+          </div>
+          <button
+            className="primary-button"
+            onClick={() => void create()}
+            disabled={!title.trim() && !taskId}
+          >
+            Takvime ekle
+          </button>
+          <p className="hint">Hatırlatıcı ve odak zamanlayıcısı bu sürümde yoktur.</p>
+        </div>
+        <div className="agenda-list" role="list" aria-label={`${date} ajandası`}>
+          <div className="current-time" aria-label="Geçerli zaman göstergesi">
+            Şimdi · {new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+          </div>
+          {visible.length === 0 ? (
+            <EmptyState title="Bu gün boş" detail="Etkinlik veya zaman bloğu yok." />
+          ) : (
+            visible.map((item) => (
+              <article
+                key={item.id}
+                role="listitem"
+                className={`calendar-event category-${item.category}`}
+              >
+                <span>
+                  {item.kind === "task_block"
+                    ? "Zaman bloğu"
+                    : item.allDay
+                      ? "Tüm gün"
+                      : "Etkinlik"}
+                </span>
+                <strong>{item.title}</strong>
+                <small>
+                  {item.allDay
+                    ? `${item.startDate}–${item.endDate}`
+                    : `${item.startAt?.slice(11, 16)}–${item.endAt?.slice(11, 16)} · ${item.timezone}`}
+                </small>
+                {item.taskId ? <small>Bağlı görev · tamamlanması bu bloğu silmez</small> : null}
+              </article>
+            ))
+          )}
+        </div>
+      </div>
+    </section>
   );
 }
 

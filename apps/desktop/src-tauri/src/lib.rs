@@ -232,6 +232,9 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             list_documents,
             list_tasks,
+            list_calendar_items,
+            save_calendar_item,
+            delete_calendar_item,
             save_task,
             delete_task,
             get_document,
@@ -308,6 +311,14 @@ impl Database {
             connection.pragma_update(None, "user_version", 3_i64)?;
             connection.execute(
                 "INSERT OR IGNORE INTO migrations(version, applied_at) VALUES(3, ?1)",
+                [Utc::now().to_rfc3339()],
+            )?;
+        }
+        if current < 4 {
+            connection.execute_batch("CREATE TABLE IF NOT EXISTS calendar_items (id TEXT PRIMARY KEY, payload TEXT NOT NULL, kind TEXT NOT NULL, start_date TEXT NOT NULL, end_date TEXT NOT NULL, task_id TEXT, project_id TEXT, revision INTEGER NOT NULL, updated_at TEXT NOT NULL, deleted_at TEXT); CREATE INDEX IF NOT EXISTS desktop_calendar_range_idx ON calendar_items(deleted_at, start_date, end_date); CREATE INDEX IF NOT EXISTS desktop_calendar_task_idx ON calendar_items(task_id, deleted_at, start_date);")?;
+            connection.pragma_update(None, "user_version", 4_i64)?;
+            connection.execute(
+                "INSERT OR IGNORE INTO migrations(version, applied_at) VALUES(4, ?1)",
                 [Utc::now().to_rfc3339()],
             )?;
         }
@@ -445,6 +456,124 @@ fn list_tasks(state: State<'_, Mutex<Database>>) -> Result<Vec<DesktopTask>, Str
         .map_err(|error| error.to_string())?;
     rows.collect::<Result<Vec<_>, _>>()
         .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn list_calendar_items(
+    start_date: String,
+    end_date: String,
+    state: State<'_, Mutex<Database>>,
+) -> Result<Vec<serde_json::Value>, String> {
+    if start_date.len() != 10 || end_date.len() != 10 || end_date < start_date {
+        return Err("Invalid calendar window.".into());
+    }
+    let database = state.lock().map_err(|_| "Database lock failed.")?;
+    let mut statement = database.connection.prepare(
+        "SELECT payload FROM calendar_items WHERE deleted_at IS NULL AND end_date >= ?1 AND start_date <= ?2 ORDER BY start_date, id LIMIT 2000",
+    ).map_err(|error| error.to_string())?;
+    let rows = statement
+        .query_map(params![start_date, end_date], |row| row.get::<_, String>(0))
+        .map_err(|error| error.to_string())?;
+    rows.map(|row| {
+        let payload = row.map_err(|error| error.to_string())?;
+        serde_json::from_str(&payload).map_err(|error| error.to_string())
+    })
+    .collect()
+}
+
+#[tauri::command]
+fn save_calendar_item(
+    mut item: serde_json::Value,
+    state: State<'_, Mutex<Database>>,
+) -> Result<serde_json::Value, String> {
+    let id = json_text(&item, "id")?;
+    let kind = json_text(&item, "kind")?;
+    let title = json_text(&item, "title")?;
+    let start_date = json_text(&item, "startDate")?;
+    let end_date = json_text(&item, "endDate")?;
+    if title.trim().is_empty()
+        || !matches!(kind.as_str(), "event" | "task_block")
+        || end_date < start_date
+    {
+        return Err("Invalid calendar item.".into());
+    }
+    if kind == "task_block"
+        && item
+            .get("taskId")
+            .and_then(|value| value.as_str())
+            .is_none()
+    {
+        return Err("A task block must reference a task.".into());
+    }
+    let mut database = state.lock().map_err(|_| "Database lock failed.")?;
+    let previous = database
+        .connection
+        .query_row(
+            "SELECT revision FROM calendar_items WHERE id=?1",
+            [&id],
+            |row| row.get::<_, i64>(0),
+        )
+        .optional()
+        .map_err(|error| error.to_string())?;
+    let revision = previous.unwrap_or(0) + 1;
+    let timestamp = Utc::now().to_rfc3339();
+    item["revision"] = serde_json::json!(revision);
+    item["updatedAt"] = serde_json::json!(timestamp);
+    item["updatedByDeviceId"] = serde_json::json!(database.device_id.clone());
+    let payload = item.to_string();
+    let deleted_at = item.get("deletedAt").and_then(|value| value.as_str());
+    let operation = if deleted_at.is_some() {
+        "delete"
+    } else {
+        "upsert"
+    };
+    let transaction = database
+        .connection
+        .transaction()
+        .map_err(|error| error.to_string())?;
+    transaction.execute(
+        "INSERT INTO calendar_items(id,payload,kind,start_date,end_date,task_id,project_id,revision,updated_at,deleted_at) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload,kind=excluded.kind,start_date=excluded.start_date,end_date=excluded.end_date,task_id=excluded.task_id,project_id=excluded.project_id,revision=excluded.revision,updated_at=excluded.updated_at,deleted_at=excluded.deleted_at",
+        params![id,payload,kind,start_date,end_date,item.get("taskId").and_then(|v|v.as_str()),item.get("projectId").and_then(|v|v.as_str()),revision,timestamp,deleted_at],
+    ).map_err(|error| error.to_string())?;
+    transaction.execute(
+        "INSERT INTO outbox(id,owner_id,entity_type,entity_id,operation,base_revision,revision,payload,created_at,status) VALUES(?1,'','calendar',?2,?3,?4,?5,?6,?7,'pending')",
+        params![Uuid::new_v4().to_string(),id,operation,previous.unwrap_or(0),revision,payload,timestamp],
+    ).map_err(|error| error.to_string())?;
+    transaction.commit().map_err(|error| error.to_string())?;
+    Ok(item)
+}
+
+#[tauri::command]
+fn delete_calendar_item(
+    id: String,
+    state: State<'_, Mutex<Database>>,
+) -> Result<serde_json::Value, String> {
+    let database = state.lock().map_err(|_| "Database lock failed.")?;
+    let payload: String = database
+        .connection
+        .query_row(
+            "SELECT payload FROM calendar_items WHERE id=?1 AND deleted_at IS NULL",
+            [&id],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(|error| error.to_string())?
+        .ok_or("Calendar item not found.")?;
+    drop(database);
+    let mut item: serde_json::Value =
+        serde_json::from_str(&payload).map_err(|error| error.to_string())?;
+    let now = Utc::now().to_rfc3339();
+    item["deletedAt"] = serde_json::json!(now);
+    item["cancelledAt"] = serde_json::json!(now);
+    save_calendar_item(item, state)
+}
+
+fn json_text(value: &serde_json::Value, field: &str) -> Result<String, String> {
+    value
+        .get(field)
+        .and_then(|entry| entry.as_str())
+        .map(str::to_owned)
+        .ok_or_else(|| format!("{field} is required."))
 }
 
 #[tauri::command]

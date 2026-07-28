@@ -40,8 +40,17 @@ function validateCalendarRecord(value: CalendarRecord): CalendarRecord {
 function definedCalendarChanges(input: CalendarUpdateInput): Partial<CalendarRecord> {
   const changes: Partial<CalendarRecord> = {};
   for (const key of [
-    "title", "description", "startDate", "endDate", "startAt", "endAt", "timezone",
-    "projectId", "location", "category", "planningNote",
+    "title",
+    "description",
+    "startDate",
+    "endDate",
+    "startAt",
+    "endAt",
+    "timezone",
+    "projectId",
+    "location",
+    "category",
+    "planningNote",
   ] as const) {
     const value = input[key];
     if (value !== undefined) Object.assign(changes, { [key]: value });
@@ -287,12 +296,21 @@ export class StoneMcpService {
 
   public async listCalendarEvents(
     context: AuthContext,
-    input: ReadOptions & { startDate: string; endDate: string; projectId?: string | undefined; kind?: "event" | "task_block" | undefined },
+    input: ReadOptions & {
+      startDate: string;
+      endDate: string;
+      projectId?: string | undefined;
+      kind?: "event" | "task_block" | undefined;
+    },
   ) {
     requireScope(context, "stone.read.calendar");
     assertIsoDate(input.startDate, "startDate");
     assertIsoDate(input.endDate, "endDate");
-    if (input.endDate < input.startDate || Date.parse(`${input.endDate}T00:00:00Z`) - Date.parse(`${input.startDate}T00:00:00Z`) > 366 * 86_400_000)
+    if (
+      input.endDate < input.startDate ||
+      Date.parse(`${input.endDate}T00:00:00Z`) - Date.parse(`${input.startDate}T00:00:00Z`) >
+        366 * 86_400_000
+    )
       throw new McpInputError("Calendar window must be ordered and at most 366 days.");
     return this.store.listCalendar(context.userId, {
       startDate: input.startDate,
@@ -315,7 +333,8 @@ export class StoneMcpService {
   public async createCalendarEvent(context: AuthContext, input: CalendarCreateInput) {
     requireScope(context, "stone.write.calendar");
     validateExpectedRevision(input.expectedRevision);
-    if (input.expectedRevision !== 0) throw new McpInputError("Create requires expectedRevision 0.");
+    if (input.expectedRevision !== 0)
+      throw new McpInputError("Create requires expectedRevision 0.");
     const id = this.idFactory();
     const now = this.now().toISOString();
     const item = validateCalendarRecord({
@@ -361,11 +380,7 @@ export class StoneMcpService {
     });
   }
 
-  public async updateCalendarEvent(
-    context: AuthContext,
-    id: string,
-    input: CalendarUpdateInput,
-  ) {
+  public async updateCalendarEvent(context: AuthContext, id: string, input: CalendarUpdateInput) {
     requireScope(context, "stone.write.calendar");
     const current = await this.store.getCalendar(context.userId, id);
     if (!current || current.deletedAt) throw new McpNotFoundError("Calendar item not found.");
@@ -377,14 +392,20 @@ export class StoneMcpService {
       idempotencyKey: validateIdempotencyKey(input.idempotencyKey),
       tool: current.kind === "task_block" ? "reschedule_task_block" : "update_calendar_event",
       confirmation: input.confirmation ?? null,
-      inputSummary: { id, fields: Object.keys(input).filter((key) => !["idempotencyKey", "confirmation"].includes(key)) },
-      mutate: (value) => validateCalendarRecord({
-        ...value!,
-        ...definedCalendarChanges(input),
-        revision: value!.revision + 1,
-        updatedAt: now,
-        updatedByDeviceId: `${MCP_DEVICE_PREFIX}${context.clientId}`,
-      }),
+      inputSummary: {
+        id,
+        fields: Object.keys(input).filter(
+          (key) => !["idempotencyKey", "confirmation"].includes(key),
+        ),
+      },
+      mutate: (value) =>
+        validateCalendarRecord({
+          ...value!,
+          ...definedCalendarChanges(input),
+          revision: value!.revision + 1,
+          updatedAt: now,
+          updatedByDeviceId: `${MCP_DEVICE_PREFIX}${context.clientId}`,
+        }),
     });
   }
 
@@ -401,7 +422,14 @@ export class StoneMcpService {
       tool: current.kind === "task_block" ? "unschedule_task_block" : "delete_calendar_event",
       confirmation: input.confirmation ?? null,
       inputSummary: { id, kind: current.kind },
-      mutate: (value) => ({ ...value!, revision: value!.revision + 1, updatedAt: now, deletedAt: now, cancelledAt: now, updatedByDeviceId: `${MCP_DEVICE_PREFIX}${context.clientId}` }),
+      mutate: (value) => ({
+        ...value!,
+        revision: value!.revision + 1,
+        updatedAt: now,
+        deletedAt: now,
+        cancelledAt: now,
+        updatedByDeviceId: `${MCP_DEVICE_PREFIX}${context.clientId}`,
+      }),
     });
   }
 

@@ -129,13 +129,29 @@ export class FirestoreStoneStore implements StoneStore {
     return snapshot.exists ? (snapshot.data() as CalendarRecord) : null;
   }
 
-  public async listCalendar(ownerId: string, options: ListCalendarOptions): Promise<Page<CalendarRecord>> {
+  public async listCalendar(
+    ownerId: string,
+    options: ListCalendarOptions,
+  ): Promise<Page<CalendarRecord>> {
     const query: Query = this.database
       .collection(`users/${ownerId}/calendar`)
       .where("ownerId", "==", ownerId)
       .orderBy("updatedAt", "desc");
-    return this.scan(query, ownerId, options.cursorKey ?? "calendar", options.pageToken, options.limit, (value) => value as CalendarRecord, (item) =>
-      Boolean((options.includeDeleted || !item.deletedAt) && item.endDate >= options.startDate && item.startDate <= options.endDate && (!options.projectId || item.projectId === options.projectId) && (!options.kind || item.kind === options.kind)),
+    return this.scan(
+      query,
+      ownerId,
+      options.cursorKey ?? "calendar",
+      options.pageToken,
+      options.limit,
+      (value) => value as CalendarRecord,
+      (item) =>
+        Boolean(
+          (options.includeDeleted || !item.deletedAt) &&
+          item.endDate >= options.startDate &&
+          item.startDate <= options.endDate &&
+          (!options.projectId || item.projectId === options.projectId) &&
+          (!options.kind || item.kind === options.kind),
+        ),
     );
   }
 
@@ -471,7 +487,10 @@ export class MemoryStoneStore implements StoneStore {
   public async getCalendar(ownerId: string, id: string): Promise<CalendarRecord | null> {
     return clone(this.calendar.get(key(ownerId, id)) ?? null);
   }
-  public async listCalendar(ownerId: string, options: ListCalendarOptions): Promise<Page<CalendarRecord>> {
+  public async listCalendar(
+    ownerId: string,
+    options: ListCalendarOptions,
+  ): Promise<Page<CalendarRecord>> {
     const values = [...this.calendar.values()]
       .filter((item) => item.ownerId === ownerId)
       .filter((item) => options.includeDeleted || !item.deletedAt)
@@ -479,7 +498,14 @@ export class MemoryStoneStore implements StoneStore {
       .filter((item) => !options.projectId || item.projectId === options.projectId)
       .filter((item) => !options.kind || item.kind === options.kind)
       .sort(sortUpdated);
-    return page(values, ownerId, options.cursorKey ?? "calendar", options.pageToken, options.limit, this.cursors);
+    return page(
+      values,
+      ownerId,
+      options.cursorKey ?? "calendar",
+      options.pageToken,
+      options.limit,
+      this.cursors,
+    );
   }
 
   public writeDocument(input: DocumentWriteInput): Promise<WriteResult<DocumentRecord>> {
@@ -508,10 +534,17 @@ export class MemoryStoneStore implements StoneStore {
       .reverse();
   }
 
-  private async write<T extends DocumentRecord | ProjectRecord | VersionRecord | TaskRecord | CalendarRecord>(
+  private async write<
+    T extends DocumentRecord | ProjectRecord | VersionRecord | TaskRecord | CalendarRecord,
+  >(
     values: Map<string, T>,
     id: string,
-    input: DocumentWriteInput | ProjectWriteInput | VersionWriteInput | TaskWriteInput | CalendarWriteInput,
+    input:
+      | DocumentWriteInput
+      | ProjectWriteInput
+      | VersionWriteInput
+      | TaskWriteInput
+      | CalendarWriteInput,
   ): Promise<WriteResult<T>> {
     const idempotencyKey = `${input.ownerId}:${input.idempotencyKey}`;
     const replay = this.idempotency.get(idempotencyKey) as WriteResult<T> | undefined;

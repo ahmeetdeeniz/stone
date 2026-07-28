@@ -181,4 +181,48 @@ describe("Firestore owner isolation rules", () => {
     await assertFails(reference.update({ ...task, revision: 3, priority: "critical" }));
     await assertFails(other.doc("users/other/tasks/task-2").set({ ...task, id: "task-2" }));
   });
+
+  it("isolates calendar records by owner and constrains relationships", async () => {
+    const owner = environment.authenticatedContext("owner").firestore();
+    const other = environment.authenticatedContext("other").firestore();
+    const reference = owner.doc("users/owner/calendar/event-1");
+    const event = {
+      id: "event-1",
+      ownerId: "owner",
+      schemaVersion: 1,
+      kind: "event",
+      title: "Planning",
+      description: null,
+      allDay: false,
+      startDate: "2026-08-01",
+      endDate: "2026-08-01",
+      startAt: "2026-08-01T09:00:00.000Z",
+      endAt: "2026-08-01T10:00:00.000Z",
+      timezone: "Europe/Istanbul",
+      location: null,
+      category: "purple",
+      projectId: null,
+      sourceDocumentId: null,
+      taskId: null,
+      planningNote: null,
+      recurrence: null,
+      recurrenceSeriesId: null,
+      recurrenceId: null,
+      overrides: [],
+      externalUid: null,
+      cancelledAt: null,
+      revision: 1,
+      createdAt: "2026-07-28T00:00:00.000Z",
+      updatedAt: "2026-07-28T00:00:00.000Z",
+      deletedAt: null,
+      updatedByDeviceId: "device",
+      idempotencyKey: "device:calendar:event-1:1",
+      lastEventId: "device:calendar:event-1:1",
+    };
+    await assertSucceeds(reference.set(event));
+    await assertFails(other.doc(reference.path).get());
+    await assertSucceeds(reference.update({ ...event, revision: 2, title: "Moved planning" }));
+    await assertFails(reference.update({ ...event, revision: 3, category: "pink" }));
+    await assertFails(other.doc("users/owner/calendar/event-2").set({ ...event, id: "event-2" }));
+  });
 });

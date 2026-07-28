@@ -1,4 +1,9 @@
-import { exportCalendarIcs, validateCalendarItem, type CalendarItem, type ExportedProjectFile } from "@stone/domain";
+import {
+  exportCalendarIcs,
+  validateCalendarItem,
+  type CalendarItem,
+  type ExportedProjectFile,
+} from "@stone/domain";
 import { File } from "expo-file-system";
 import { normalizeMarkdown, sanitizeFileName } from "@stone/markdown";
 import type { StoneDatabase } from "./database";

@@ -136,7 +136,11 @@ function parse(row: CalendarRow): CalendarItem {
   return validateCalendarItem(JSON.parse(row.payload) as CalendarItem);
 }
 
-async function queue(database: StoneDatabase, item: CalendarItem, baseRevision: number): Promise<void> {
+async function queue(
+  database: StoneDatabase,
+  item: CalendarItem,
+  baseRevision: number,
+): Promise<void> {
   await enqueueOutbox(database, {
     ownerId: item.ownerId,
     entityType: "calendar",

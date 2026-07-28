@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import type { CalendarItem } from "@stone/domain";
 
 export interface DesktopDocument {
   id: string;
@@ -90,6 +91,10 @@ async function call<T>(command: string, args?: Record<string, unknown>): Promise
 export const desktopApi = {
   listDocuments: () => call<DesktopDocument[]>("list_documents"),
   listTasks: () => call<DesktopTask[]>("list_tasks"),
+  listCalendarItems: (startDate: string, endDate: string) =>
+    call<CalendarItem[]>("list_calendar_items", { startDate, endDate }),
+  saveCalendarItem: (item: CalendarItem) => call<CalendarItem>("save_calendar_item", { item }),
+  deleteCalendarItem: (id: string) => call<CalendarItem>("delete_calendar_item", { id }),
   saveTask: (task: DesktopTask) => call<DesktopTask>("save_task", { task }),
   deleteTask: (id: string) => call<DesktopTask>("delete_task", { id }),
   getDocument: (id: string) => call<DesktopDocument | null>("get_document", { id }),

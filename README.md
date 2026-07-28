@@ -24,6 +24,8 @@ Firebase project and, optionally, GitHub OAuth App and separately deployed MCP s
   blocker, Kanban, and Today views.
 - **Planning works offline.** Standalone and Markdown-backed tasks coexist with due dates, priority,
   subtasks, recurrence and project relationships.
+- **Calendar planning stays local-first.** Standalone events and task time blocks remain distinct
+  from due dates, with timezone-aware storage and bounded recurrence.
 - **Ink remains editable.** Hybrid notes use a normal PNG reference plus an ignorable link to the
   vector `.stoneink` source.
 - **You own the services.** Firebase, GitHub access, signing accounts, and MCP deployment belong to
@@ -68,6 +70,20 @@ presented as product evidence.
 - Firebase Auth, Firestore, and Storage sync using owner-scoped rules
 - Durable local-first mobile writes, revision history, soft delete, and explicit conflict handling
 - Versioned full-workspace export container; full-workspace restore UI is not implemented
+
+### Calendar and Agenda
+
+- Mobile day Agenda and quick event creation; Windows calendar workspace with day navigation,
+  Agenda, date jump and task scheduling
+- One task can have multiple scheduled work blocks without changing its due date or completion;
+  removing a block does not delete the task
+- UTC instants plus intended IANA timezone for timed events; date-only inclusive boundaries for
+  all-day events; deterministic DST gap/repeated-hour handling
+- Bounded daily, weekday, weekly, monthly and custom recurrence with stable occurrence identities
+  and exceptions in the shared domain
+- Workspace JSON and standards-conscious `.ics` import/export subset for basic VEVENT, all-day,
+  supported recurrence and cancellation dates
+- No native reminders, external calendar accounts, invitations, focus timer or widgets
 
 ### Desktop, GitHub, and MCP
 
@@ -167,14 +183,14 @@ private notes in public issues.
 - Mobile full-workspace restore UI, public iOS binaries, macOS/Linux desktop, and a maintainer-hosted
   backend are not available.
 - MCP hosting and provider publication are not automatic.
-- Due times are planning metadata only; Stone does not yet schedule operating-system task
-  notifications.
-- Calendar views/time blocking, focus timers/analytics and native widgets are not implemented.
+- Due times and calendar records do not schedule operating-system notifications.
+- Calendar recurrence editing UI, polished overlap/resize/drag interactions, focus
+  timers/analytics and native widgets remain incomplete.
 
 ## Roadmap
 
-Possible post-preview directions include calendar/time blocking, reminder notifications, a focus
-timer, Android/iOS widgets, improved tablet layouts, and richer revision restore. They are not
+Possible post-preview directions include richer calendar interaction, reminder notifications, a
+focus timer, Android/iOS widgets, improved tablet layouts, and richer revision restore. They are not
 implemented commitments.
 
 ## Contributing, support, and license

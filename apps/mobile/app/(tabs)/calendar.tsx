@@ -108,29 +108,65 @@ export default function CalendarScreen() {
           </View>
           <Surface>
             <StoneText variant="title3">Hızlı etkinlik</StoneText>
-            <StoneInput label="Başlık" value={title} onChangeText={setTitle} placeholder="Etkinlik adı" />
+            <StoneInput
+              label="Başlık"
+              value={title}
+              onChangeText={setTitle}
+              placeholder="Etkinlik adı"
+            />
             <View style={styles.times}>
-              <View style={styles.time}><StoneInput label="Başlangıç" value={startTime} onChangeText={setStartTime} placeholder="09:00" /></View>
-              <View style={styles.time}><StoneInput label="Bitiş" value={endTime} onChangeText={setEndTime} placeholder="10:00" /></View>
+              <View style={styles.time}>
+                <StoneInput
+                  label="Başlangıç"
+                  value={startTime}
+                  onChangeText={setStartTime}
+                  placeholder="09:00"
+                />
+              </View>
+              <View style={styles.time}>
+                <StoneInput
+                  label="Bitiş"
+                  value={endTime}
+                  onChangeText={setEndTime}
+                  placeholder="10:00"
+                />
+              </View>
             </View>
-            <StoneButton label="Etkinlik oluştur" onPress={() => void create()} disabled={!title.trim()} />
+            <StoneButton
+              label="Etkinlik oluştur"
+              onPress={() => void create()}
+              disabled={!title.trim()}
+            />
           </Surface>
           <StoneText variant="title3">Günün ajandası</StoneText>
-          {loading ? <LoadingState label="Ajanda yükleniyor" /> : error ? (
+          {loading ? (
+            <LoadingState label="Ajanda yükleniyor" />
+          ) : error ? (
             <ErrorState message={error} onRetry={() => void load()} />
           ) : items.length === 0 ? (
-            <EmptyState title="Bu gün boş" description="Etkinlik veya planlanmış çalışma bloğu bulunmuyor." />
-          ) : items.map((item) => (
-            <Surface key={item.id}>
-              <StoneText variant="caption">
-                {item.kind === "task_block" ? "Zaman bloğu" : item.allDay ? "Tüm gün etkinliği" : "Etkinlik"}
-              </StoneText>
-              <StoneText variant="title3">{item.title}</StoneText>
-              <StoneText variant="bodySmall">
-                {item.allDay ? `${item.startDate} – ${item.endDate}` : `${item.startAt?.slice(11, 16)} – ${item.endAt?.slice(11, 16)} · ${item.timezone}`}
-              </StoneText>
-            </Surface>
-          ))}
+            <EmptyState
+              title="Bu gün boş"
+              description="Etkinlik veya planlanmış çalışma bloğu bulunmuyor."
+            />
+          ) : (
+            items.map((item) => (
+              <Surface key={item.id}>
+                <StoneText variant="caption">
+                  {item.kind === "task_block"
+                    ? "Zaman bloğu"
+                    : item.allDay
+                      ? "Tüm gün etkinliği"
+                      : "Etkinlik"}
+                </StoneText>
+                <StoneText variant="title3">{item.title}</StoneText>
+                <StoneText variant="bodySmall">
+                  {item.allDay
+                    ? `${item.startDate} – ${item.endDate}`
+                    : `${item.startAt?.slice(11, 16)} – ${item.endAt?.slice(11, 16)} · ${item.timezone}`}
+                </StoneText>
+              </Surface>
+            ))
+          )}
         </ResponsiveContent>
       </ScrollView>
     </Screen>
@@ -139,7 +175,13 @@ export default function CalendarScreen() {
 
 const styles = StyleSheet.create({
   page: { paddingHorizontal: spacing.lg, paddingTop: spacing.xl, paddingBottom: spacing.giant },
-  navigation: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: spacing.sm, marginVertical: spacing.lg },
+  navigation: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: spacing.sm,
+    marginVertical: spacing.lg,
+  },
   times: { flexDirection: "row", gap: spacing.md },
   time: { flex: 1 },
 });

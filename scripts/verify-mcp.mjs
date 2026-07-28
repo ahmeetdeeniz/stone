@@ -27,6 +27,15 @@ const requiredTools = [
   "create_version",
   "add_release_item",
   "add_decision",
+  "list_calendar_events",
+  "get_calendar_event",
+  "create_calendar_event",
+  "update_calendar_event",
+  "delete_calendar_event",
+  "list_agenda",
+  "schedule_task",
+  "reschedule_task_block",
+  "unschedule_task_block",
 ];
 for (const name of requiredTools)
   if (!tools.includes(`"${name}"`)) throw new Error(`MCP tool missing: ${name}`);

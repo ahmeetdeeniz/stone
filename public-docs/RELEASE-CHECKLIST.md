@@ -73,3 +73,15 @@ Capture the real current build with intentional sample data and no personal iden
 - [ ] Complete a Markdown-linked task from Tasks and verify only the correct source checkbox changes.
 - [ ] Edit/move a Markdown task in the editor and verify reindexing without an unnecessary duplicate.
 - [ ] Restart mobile and Windows offline and verify locally durable task state.
+
+## Calendar cross-device acceptance
+
+- [ ] Navigate Windows month/week/day/Agenda and mobile Agenda/day with keyboard, touch and screen reader.
+- [ ] Create, edit and soft-delete standalone, all-day, overnight and multi-day events.
+- [ ] Schedule a task through form and drag alternatives; move/resize/remove its block without changing due/completion.
+- [ ] Edit/delete one recurring occurrence and the whole series with explicit scope.
+- [ ] Restart offline and verify events, blocks and exceptions remain durable.
+- [ ] Import/export synthetic `.ics` fixtures and review the documented subset.
+- [ ] Create on device A, move offline on B, sync, and resolve concurrent revision conflicts.
+- [ ] Change device timezone and verify timed instants and all-day dates follow the documented policy.
+- [ ] Confirm no native reminder, focus timer, external calendar or widget behavior is implied.

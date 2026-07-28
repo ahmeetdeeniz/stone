@@ -51,27 +51,15 @@ describe("calendar time model", () => {
     expect(instantToZonedWallTime("2026-03-28T08:00:00.000Z", "Europe/Istanbul")).toBe(
       "2026-03-28T11:00",
     );
-    expect(() =>
-      zonedWallTimeToInstant("2026-03-08", "02:30", "America/New_York"),
-    ).toThrow(/gap/u);
+    expect(() => zonedWallTimeToInstant("2026-03-08", "02:30", "America/New_York")).toThrow(/gap/u);
   });
 
   it("requires an explicit choice for a repeated fall-back hour", () => {
-    expect(() =>
-      zonedWallTimeToInstant("2026-11-01", "01:30", "America/New_York"),
-    ).toThrow(/repeated/u);
-    const earlier = zonedWallTimeToInstant(
-      "2026-11-01",
-      "01:30",
-      "America/New_York",
-      "earlier",
+    expect(() => zonedWallTimeToInstant("2026-11-01", "01:30", "America/New_York")).toThrow(
+      /repeated/u,
     );
-    const later = zonedWallTimeToInstant(
-      "2026-11-01",
-      "01:30",
-      "America/New_York",
-      "later",
-    );
+    const earlier = zonedWallTimeToInstant("2026-11-01", "01:30", "America/New_York", "earlier");
+    const later = zonedWallTimeToInstant("2026-11-01", "01:30", "America/New_York", "later");
     expect(Date.parse(later) - Date.parse(earlier)).toBe(3_600_000);
   });
 
@@ -151,7 +139,11 @@ describe("ICS subset", () => {
       timezone: "Europe/Istanbul",
     });
     expect(imported.map((value) => value.title)).toEqual(["Çağrı, tasarım", "Release days"]);
-    expect(imported[1]).toMatchObject({ allDay: true, startDate: "2026-04-01", endDate: "2026-04-03" });
+    expect(imported[1]).toMatchObject({
+      allDay: true,
+      startDate: "2026-04-01",
+      endDate: "2026-04-03",
+    });
   });
 
   it("bounds files and rejects executable-looking content as inert data", () => {

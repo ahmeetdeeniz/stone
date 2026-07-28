@@ -68,7 +68,8 @@ export function matchesCalendarList(item: CalendarItem, options: CalendarListOpt
   if (options.category && item.category !== options.category) return false;
   if (options.search) {
     const query = options.search.trim().toLocaleLowerCase();
-    const text = `${item.title}\n${item.description ?? ""}\n${item.location ?? ""}`.toLocaleLowerCase();
+    const text =
+      `${item.title}\n${item.description ?? ""}\n${item.location ?? ""}`.toLocaleLowerCase();
     if (!text.includes(query)) return false;
   }
   return true;
@@ -121,7 +122,9 @@ function wallParts(timestamp: number, timezone: string): string {
 }
 
 function isIsoInstant(value: string | null): value is string {
-  return value !== null && /^\d{4}-\d{2}-\d{2}T.*Z$/u.test(value) && Number.isFinite(Date.parse(value));
+  return (
+    value !== null && /^\d{4}-\d{2}-\d{2}T.*Z$/u.test(value) && Number.isFinite(Date.parse(value))
+  );
 }
 
 function validateOverride(value: CalendarOccurrenceOverride, seen: Set<string>): void {

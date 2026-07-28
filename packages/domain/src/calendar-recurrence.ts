@@ -67,7 +67,9 @@ function overlaps(item: CalendarItem, start: string, end: string): boolean {
 }
 
 function dateDistance(left: string, right: string): number {
-  return Math.round((Date.parse(`${right}T00:00:00Z`) - Date.parse(`${left}T00:00:00Z`)) / 86_400_000);
+  return Math.round(
+    (Date.parse(`${right}T00:00:00Z`) - Date.parse(`${left}T00:00:00Z`)) / 86_400_000,
+  );
 }
 
 function addDays(date: string, days: number): string {
