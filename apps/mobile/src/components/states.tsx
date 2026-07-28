@@ -18,7 +18,7 @@ export function LoadingState({ label = "Yükleniyor" }: { label?: string }) {
 export function EmptyState({ title, description }: { title: string; description: string }) {
   return (
     <View style={styles.center}>
-      <StoneText variant="title2" style={styles.centerText}>
+      <StoneText variant="display" style={styles.centerText}>
         {title}
       </StoneText>
       <StoneText variant="body" style={styles.centerText}>

@@ -55,4 +55,13 @@ describe("editor boundary", () => {
     }).state;
     expect(() => buildLivePreviewDecorations(state)).not.toThrow();
   });
+
+  it("summarizes inactive frontmatter without changing Markdown source", () => {
+    const source = "---\ntitle: Stone\nstatus: active\n---\n\n# Heading\n";
+    const state = createEditorState(source).update({
+      selection: { anchor: source.length },
+    }).state;
+    expect(() => buildLivePreviewDecorations(state)).not.toThrow();
+    expect(state.doc.toString()).toBe(source);
+  });
 });

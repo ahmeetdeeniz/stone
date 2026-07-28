@@ -37,17 +37,22 @@ export default function GithubPanel() {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    void Promise.all([
-      desktopApi.githubStatus(),
-      desktopApi.githubListLinks(),
-      desktopApi.gitSystemVersion(),
-    ])
-      .then(([currentAccount, currentLinks, version]) => {
+    void desktopApi
+      .githubStatus()
+      .then((currentAccount) => {
         setAccount(currentAccount);
-        setLinks(currentLinks);
-        setGitVersion(version);
         if (currentAccount) void loadPage(1);
       })
+      .catch((error: unknown) =>
+        setNotice(`Kayıtlı GitHub bağlantısı doğrulanamadı: ${toMessage(error)}`),
+      );
+    void desktopApi
+      .githubListLinks()
+      .then(setLinks)
+      .catch((error: unknown) => setNotice(`Proje bağlantıları yüklenemedi: ${toMessage(error)}`));
+    void desktopApi
+      .gitSystemVersion()
+      .then(setGitVersion)
       .catch((error: unknown) => setGitError(toMessage(error)));
   }, []);
 

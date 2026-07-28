@@ -211,6 +211,12 @@ select:focus {
   border-radius: 8px;
   font-size: 13px;
 }
+.error-text p {
+  margin-bottom: 6px;
+}
+.error-text .text-button {
+  color: inherit;
+}
 .success-text {
   color: #26754d;
   font-size: 13px;
@@ -272,6 +278,21 @@ nav {
   width: 18px;
   color: var(--accent);
   text-align: center;
+}
+.nav-button img {
+  display: block;
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+  opacity: 0.72;
+}
+:root[data-theme="dark"] .nav-button img {
+  filter: invert(1);
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-theme="system"] .nav-button img {
+    filter: invert(1);
+  }
 }
 .nav-button.active,
 .nav-button:hover {
@@ -428,6 +449,64 @@ nav {
   border-left-color: var(--caret) !important;
   border-left-width: 2px !important;
 }
+.stone-live-heading-1 {
+  font-size: 1.9em;
+  font-weight: 750;
+}
+.stone-live-heading-2 {
+  font-size: 1.5em;
+  font-weight: 700;
+}
+.stone-live-heading-3 {
+  font-size: 1.22em;
+  font-weight: 700;
+}
+.stone-live-strong {
+  font-weight: 700;
+}
+.stone-live-emphasis {
+  font-style: italic;
+}
+.stone-live-inlineCode,
+.stone-live-code {
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  background: var(--surface-strong);
+}
+.stone-live-link {
+  color: var(--accent);
+  text-decoration: underline;
+}
+.stone-live-blockquote {
+  color: var(--muted);
+  border-left: 3px solid var(--line);
+  padding-left: 14px;
+}
+.stone-live-callout {
+  display: block;
+  margin: 8px 0;
+  padding: 10px 14px;
+  background: var(--surface-strong);
+  border-left: 4px solid var(--accent);
+  border-radius: 8px;
+}
+.stone-live-table {
+  display: block;
+  overflow-x: auto;
+  padding: 8px 12px;
+  background: var(--surface-strong);
+  border-radius: 8px;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+.stone-frontmatter-summary {
+  margin: 4px 0 12px;
+  padding: 8px 12px;
+  color: var(--muted);
+  background: var(--surface-strong);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 700;
+}
 .save-state {
   color: var(--muted);
   font-size: 11px;
@@ -522,6 +601,9 @@ nav {
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 14px;
+}
+.settings-panel > .github-panel {
+  grid-column: 1 / -1;
 }
 .github-panel {
   max-width: 1120px;

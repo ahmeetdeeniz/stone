@@ -1,9 +1,13 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { EditorView, highlightActiveLine } from "@codemirror/view";
 import { createEditorState } from "@stone/editor";
 import { normalizeMarkdown } from "@stone/markdown";
 import { listen } from "@tauri-apps/api/event";
 import GithubPanel from "./GithubPanel";
+import noteIcon from "../../../Icons/note-pencil.png";
+import projectIcon from "../../../Icons/projector-screen-chart.png";
+import todayIcon from "../../../Icons/calendar-dot.png";
+import settingsIcon from "../../../Icons/gear.png";
 import {
   desktopApi,
   isTauri,
@@ -27,18 +31,36 @@ export default function App() {
   const [authReady, setAuthReady] = useState(!isTauri);
   const [error, setError] = useState<string | null>(null);
 
+  const restoreSession = useCallback(async () => {
+    if (!isTauri) return;
+    setAuthReady(false);
+    setError(null);
+    try {
+      setSession(await desktopApi.authRestore());
+    } catch (caught) {
+      setError(
+        `Kayıtlı oturum geri yüklenemedi: ${toMessage(caught)} Tekrar deneyebilir veya yeniden giriş yapabilirsiniz.`,
+      );
+    } finally {
+      setAuthReady(true);
+    }
+  }, []);
+
   useEffect(() => {
     if (!isTauri) return;
-    desktopApi
-      .authRestore()
-      .then(setSession)
-      .catch(() => undefined)
-      .finally(() => setAuthReady(true));
-  }, []);
+    void restoreSession();
+  }, [restoreSession]);
 
   if (!authReady) return <FullState label="Stone hazırlanıyor…" />;
   if (!session) {
-    return <AuthScreen onAuthenticated={setSession} onError={setError} error={error} />;
+    return (
+      <AuthScreen
+        onAuthenticated={setSession}
+        onError={setError}
+        onRestore={() => void restoreSession()}
+        error={error}
+      />
+    );
   }
   return <StoneShell session={session} onSignedOut={() => setSession(null)} />;
 }
@@ -46,10 +68,12 @@ export default function App() {
 function AuthScreen({
   onAuthenticated,
   onError,
+  onRestore,
   error,
 }: {
   onAuthenticated: (session: AuthSession) => void;
   onError: (message: string | null) => void;
+  onRestore: () => void;
   error: string | null;
 }) {
   const [email, setEmail] = useState("");
@@ -114,9 +138,14 @@ function AuthScreen({
           />
         </label>
         {error && (
-          <p className="error-text" role="alert">
-            {error}
-          </p>
+          <div className="error-text" role="alert">
+            <p>{error}</p>
+            {error.startsWith("Kayıtlı oturum") && (
+              <button className="text-button" disabled={busy} onClick={onRestore}>
+                Oturumu yeniden dene
+              </button>
+            )}
+          </div>
         )}
         {resetSent && (
           <p className="success-text" role="status">
@@ -391,23 +420,31 @@ function StoneShell({ session, onSignedOut }: { session: AuthSession; onSignedOu
           <span className="brand-wordmark">Stone</span>
         </div>
         <nav aria-label="Ana menü">
-          <NavButton active={section === "notes"} onClick={() => setSection("notes")} icon="▤">
+          <NavButton
+            active={section === "notes"}
+            onClick={() => setSection("notes")}
+            icon={<img src={noteIcon} alt="" />}
+          >
             Notlar
           </NavButton>
           <NavButton
             active={section === "projects"}
             onClick={() => setSection("projects")}
-            icon="◫"
+            icon={<img src={projectIcon} alt="" />}
           >
             Projeler
           </NavButton>
-          <NavButton active={section === "today"} onClick={() => setSection("today")} icon="○">
+          <NavButton
+            active={section === "today"}
+            onClick={() => setSection("today")}
+            icon={<img src={todayIcon} alt="" />}
+          >
             Bugün
           </NavButton>
           <NavButton
             active={section === "settings"}
             onClick={() => setSection("settings")}
-            icon="⚙"
+            icon={<img src={settingsIcon} alt="" />}
           >
             Ayarlar
           </NavButton>
@@ -574,6 +611,7 @@ function StoneShell({ session, onSignedOut }: { session: AuthSession; onSignedOu
                 Çıkış yap
               </button>
             </div>
+            <GithubPanel />
           </section>
         )}
       </main>
@@ -589,7 +627,7 @@ function NavButton({
 }: {
   active: boolean;
   onClick: () => void;
-  icon: string;
+  icon: ReactNode;
   children: string;
 }) {
   return (

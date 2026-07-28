@@ -312,6 +312,24 @@ class TextWidget extends WidgetType {
   }
 }
 
+class FrontmatterWidget extends WidgetType {
+  public constructor(private readonly propertyCount: number) {
+    super();
+  }
+
+  public override eq(other: FrontmatterWidget): boolean {
+    return this.propertyCount === other.propertyCount;
+  }
+
+  public override toDOM(): HTMLElement {
+    const element = document.createElement("div");
+    element.className = "stone-frontmatter-summary";
+    element.setAttribute("aria-label", "Belge özellikleri");
+    element.textContent = `Belge özellikleri · ${this.propertyCount} alan`;
+    return element;
+  }
+}
+
 class TaskCheckboxWidget extends WidgetType {
   public constructor(
     private readonly checked: boolean,
@@ -351,6 +369,20 @@ function addBlockDecorations(
 ): void {
   const line = state.doc.line(block.lineFrom + 1);
   const text = line.text;
+  if (block.type === "frontmatter") {
+    const propertyCount = block.text
+      .split("\n")
+      .filter((value) => /^\s*[\w-]+\s*:/u.test(value)).length;
+    ranges.push({
+      from: block.from,
+      to: block.to,
+      decoration: Decoration.replace({
+        widget: new FrontmatterWidget(propertyCount),
+        block: true,
+      }),
+    });
+    return;
+  }
   const heading = text.match(/^(\s{0,3})#{1,6}\s/u);
   if (heading) {
     ranges.push({
@@ -396,6 +428,12 @@ function addBlockDecorations(
       from: block.from,
       to: block.to,
       decoration: Decoration.mark({ class: "stone-live-code" }),
+    });
+  if (block.type === "blockquote")
+    ranges.push({
+      from: block.from,
+      to: block.to,
+      decoration: Decoration.mark({ class: "stone-live-blockquote" }),
     });
   if (block.type === "callout")
     ranges.push({
