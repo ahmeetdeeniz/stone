@@ -469,7 +469,7 @@ fn list_calendar_items(
     }
     let database = state.lock().map_err(|_| "Database lock failed.")?;
     let mut statement = database.connection.prepare(
-        "SELECT payload FROM calendar_items WHERE deleted_at IS NULL AND end_date >= ?1 AND start_date <= ?2 ORDER BY start_date, id LIMIT 2000",
+        "SELECT payload FROM calendar_items WHERE deleted_at IS NULL AND ((end_date >= ?1 AND start_date <= ?2) OR (start_date <= ?2 AND json_extract(payload, '$.recurrence') IS NOT NULL)) ORDER BY start_date, id LIMIT 2000",
     ).map_err(|error| error.to_string())?;
     let rows = statement
         .query_map(params![start_date, end_date], |row| row.get::<_, String>(0))

@@ -1102,3 +1102,119 @@ nav {
     grid-template-columns: 1fr;
   }
 }
+.month-view {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(100px, 1fr));
+  align-content: start;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: auto;
+  background: var(--surface);
+}
+.month-weekday {
+  padding: 10px;
+  text-align: center;
+  color: var(--muted);
+  font-weight: 700;
+}
+.month-day {
+  min-height: 112px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  padding: 8px;
+  border: 0;
+  border-top: 1px solid var(--border);
+  border-inline-end: 1px solid var(--border);
+  border-radius: 0;
+  background: var(--surface);
+  color: var(--text);
+  text-align: start;
+}
+.month-day.outside {
+  opacity: 0.5;
+}
+.month-day.today {
+  outline: 2px solid var(--primary);
+  outline-offset: -3px;
+}
+.month-event {
+  overflow: hidden;
+  padding: 3px 5px;
+  border-radius: 5px;
+  background: var(--surface-raised);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 12px;
+}
+.time-grid {
+  display: grid;
+  align-content: start;
+  max-height: calc(100vh - 190px);
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+}
+.time-grid-header,
+.all-day-label,
+.all-day-cell {
+  min-height: 44px;
+  padding: 8px;
+  border-bottom: 1px solid var(--border);
+  border-inline-end: 1px solid var(--border);
+}
+.all-day-label {
+  color: var(--muted);
+}
+.time-axis,
+.time-column {
+  position: relative;
+  height: 1440px;
+  border-inline-end: 1px solid var(--border);
+}
+.time-axis span {
+  position: absolute;
+  inset-inline: 4px;
+  transform: translateY(-8px);
+  color: var(--muted);
+  font-size: 11px;
+}
+.hour-line {
+  position: absolute;
+  inset-inline: 0;
+  border-top: 1px solid var(--border);
+}
+.positioned-event {
+  position: absolute;
+  padding: 1px 2px;
+  z-index: 1;
+  overflow: hidden;
+}
+.positioned-event .calendar-event {
+  height: 100%;
+  overflow: hidden;
+  padding: 5px;
+}
+.draggable-tasks {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-block: 6px;
+}
+.draggable-tasks button {
+  flex: 0 0 auto;
+  cursor: grab;
+}
+.calendar-event-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  margin-top: 3px;
+}
+.calendar-event-actions button {
+  min-height: 28px;
+  padding: 2px 5px;
+  font-size: 10px;
+}

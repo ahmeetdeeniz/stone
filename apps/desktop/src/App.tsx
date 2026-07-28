@@ -4,8 +4,11 @@ import { createEditorState } from "@stone/editor";
 import { normalizeMarkdown } from "@stone/markdown";
 import { listen } from "@tauri-apps/api/event";
 import {
+  expandCalendarOccurrences,
+  instantToZonedWallTime,
   projectPriorityLabels,
   projectStatusLabels,
+  zonedWallTimeToInstant,
   type ProjectPriority,
   type ProjectStatus,
   type CalendarItem,
@@ -19,6 +22,7 @@ import {
 } from "./project-summary";
 import { transitionSaveState, type SaveState } from "./save-state";
 import { restoreDesktopSession } from "./session-restore";
+import { layoutTimedItems, monthGrid, weekDates } from "./calendar-layout";
 import {
   desktopApi,
   isTauri,
@@ -1109,15 +1113,56 @@ function CalendarWorkspace({
   const [taskId, setTaskId] = useState("");
   const [startTime, setStartTime] = useState("09:00");
   const [endTime, setEndTime] = useState("10:00");
-  const visible = items.filter(
-    (item) => item.startDate <= date && item.endDate >= date && !item.deletedAt,
-  );
+  const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [editPlanningNote, setEditPlanningNote] = useState("");
+  const today = new Date().toISOString().slice(0, 10);
+  const days =
+    view === "month" ? monthGrid(date, today) : view === "week" ? weekDates(date) : [date];
+  const firstDay = days[0];
+  const rangeStart = typeof firstDay === "string" ? firstDay : (firstDay?.date ?? date);
+  const lastDay = days.at(-1);
+  const rangeEnd = typeof lastDay === "string" ? lastDay : (lastDay?.date ?? date);
+  const visible = items
+    .flatMap((item) =>
+      item.deletedAt
+        ? []
+        : expandCalendarOccurrences(item, rangeStart, rangeEnd).map(
+            (occurrence) => occurrence.item,
+          ),
+    )
+    .sort(
+      (left, right) =>
+        left.startDate.localeCompare(right.startDate) ||
+        (left.startAt ?? "").localeCompare(right.startAt ?? ""),
+    );
+  const selectedItem = items.find((item) => item.id === selectedItemId) ?? null;
+  useEffect(() => {
+    setEditTitle(selectedItem?.title ?? "");
+    setEditDescription(selectedItem?.description ?? "");
+    setEditPlanningNote(selectedItem?.planningNote ?? "");
+  }, [selectedItem]);
 
-  async function create() {
-    if (!title.trim() && !taskId) return;
+  useEffect(() => {
+    void desktopApi
+      .listCalendarItems(rangeStart, rangeEnd)
+      .then(onChange)
+      .catch((caught) => onMessage(toMessage(caught)));
+  }, [onChange, onMessage, rangeEnd, rangeStart]);
+
+  async function create(input?: { taskId?: string; date?: string; startTime?: string }) {
+    const selectedTaskId = input?.taskId ?? taskId;
+    if (!title.trim() && !selectedTaskId) return;
     const now = new Date().toISOString();
-    const task = tasks.find((value) => value.id === taskId);
+    const task = tasks.find((value) => value.id === selectedTaskId);
     const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+    const scheduledDate = input?.date ?? date;
+    const scheduledStart = input?.startTime ?? startTime;
+    const startMinute = Number(scheduledStart.slice(0, 2)) * 60 + Number(scheduledStart.slice(3));
+    const duration = task?.estimatedMinutes ?? 60;
+    const endMinute = Math.min(startMinute + duration, 23 * 60 + 59);
+    const scheduledEnd = `${String(Math.floor(endMinute / 60)).padStart(2, "0")}:${String(endMinute % 60).padStart(2, "0")}`;
     const item: CalendarItem = {
       schemaVersion: 1,
       id: crypto.randomUUID(),
@@ -1131,10 +1176,15 @@ function CalendarWorkspace({
       title: task?.title ?? title.trim(),
       description: null,
       allDay: false,
-      startDate: date,
-      endDate: date,
-      startAt: new Date(`${date}T${startTime}:00`).toISOString(),
-      endAt: new Date(`${date}T${endTime}:00`).toISOString(),
+      startDate: scheduledDate,
+      endDate: scheduledDate,
+      startAt: zonedWallTimeToInstant(scheduledDate, scheduledStart, timezone, "earlier"),
+      endAt: zonedWallTimeToInstant(
+        scheduledDate,
+        task ? scheduledEnd : endTime,
+        timezone,
+        "later",
+      ),
       timezone,
       location: null,
       category: task ? "blue" : "purple",
@@ -1161,10 +1211,106 @@ function CalendarWorkspace({
       onMessage(toMessage(caught));
     }
   }
+  async function moveOrResize(item: CalendarItem, startDelta: number, endDelta: number) {
+    if (!item.startAt || !item.endAt) return;
+    const start = new Date(Date.parse(item.startAt) + startDelta * 60_000).toISOString();
+    const end = new Date(Date.parse(item.endAt) + endDelta * 60_000).toISOString();
+    if (Date.parse(end) <= Date.parse(start)) {
+      onMessage("Bitiş başlangıçtan sonra olmalıdır.");
+      return;
+    }
+    try {
+      const saved = await desktopApi.saveCalendarItem({ ...item, startAt: start, endAt: end });
+      onChange(items.map((value) => (value.id === saved.id ? saved : value)));
+      onMessage("Takvim kaydı yerel olarak güncellendi.");
+    } catch (caught) {
+      onMessage(toMessage(caught));
+    }
+  }
+  async function moveToSlot(itemId: string, targetDate: string, targetTime: string) {
+    const item = items.find((value) => value.id === itemId);
+    if (!item?.startAt || !item.endAt) return;
+    try {
+      const duration = Date.parse(item.endAt) - Date.parse(item.startAt);
+      const startAt = zonedWallTimeToInstant(targetDate, targetTime, item.timezone, "earlier");
+      const endAt = new Date(Date.parse(startAt) + duration).toISOString();
+      const endDate = instantToZonedWallTime(endAt, item.timezone).slice(0, 10);
+      const saved = await desktopApi.saveCalendarItem({
+        ...item,
+        startDate: targetDate,
+        endDate,
+        startAt,
+        endAt,
+      });
+      onChange(items.map((value) => (value.id === saved.id ? saved : value)));
+      onMessage("Takvim kaydı yeni zamanına taşındı.");
+    } catch (caught) {
+      onMessage(toMessage(caught));
+    }
+  }
+  async function saveSelected() {
+    if (!selectedItem || !editTitle.trim()) return;
+    try {
+      const saved = await desktopApi.saveCalendarItem({
+        ...selectedItem,
+        title: editTitle.trim(),
+        description: editDescription.trim() || null,
+        planningNote: editPlanningNote.trim() || null,
+      });
+      onChange(items.map((item) => (item.id === saved.id ? saved : item)));
+      onMessage("Etkinlik ayrıntıları kaydedildi.");
+    } catch (caught) {
+      onMessage(toMessage(caught));
+    }
+  }
+  async function duplicateSelected() {
+    if (!selectedItem) return;
+    const now = new Date().toISOString();
+    try {
+      const saved = await desktopApi.saveCalendarItem({
+        ...selectedItem,
+        id: crypto.randomUUID(),
+        revision: 0,
+        createdAt: now,
+        updatedAt: now,
+        deletedAt: null,
+        cancelledAt: null,
+        recurrenceSeriesId: null,
+        recurrenceId: null,
+      });
+      onChange([...items, saved]);
+      setSelectedItemId(saved.id);
+      onMessage("Takvim kaydı açıkça çoğaltıldı.");
+    } catch (caught) {
+      onMessage(toMessage(caught));
+    }
+  }
+  async function deleteSelected() {
+    if (!selectedItem) return;
+    try {
+      const deleted = await desktopApi.deleteCalendarItem(selectedItem.id);
+      onChange(items.map((item) => (item.id === deleted.id ? deleted : item)));
+      setSelectedItemId(null);
+      onMessage(
+        selectedItem.kind === "task_block"
+          ? "Zaman bloğu kaldırıldı; görev korunuyor."
+          : "Etkinlik soft-delete edildi.",
+      );
+    } catch (caught) {
+      onMessage(toMessage(caught));
+    }
+  }
   function shift(days: number) {
     const value = new Date(`${date}T00:00:00Z`);
     value.setUTCDate(value.getUTCDate() + days);
     setDate(value.toISOString().slice(0, 10));
+  }
+  function shiftPeriod(direction: -1 | 1) {
+    if (view === "month") {
+      const value = new Date(`${date.slice(0, 8)}01T00:00:00Z`);
+      value.setUTCMonth(value.getUTCMonth() + direction);
+      setDate(value.toISOString().slice(0, 10));
+    } else shift(direction * (view === "week" ? 7 : 1));
   }
   return (
     <section className="calendar-workspace" aria-label="Takvim">
@@ -1176,9 +1322,7 @@ function CalendarWorkspace({
             </button>
           ))}
         </div>
-        <button onClick={() => shift(view === "month" ? -30 : view === "week" ? -7 : -1)}>
-          Önceki
-        </button>
+        <button onClick={() => shiftPeriod(-1)}>Önceki</button>
         <button onClick={() => setDate(new Date().toISOString().slice(0, 10))}>Bugün</button>
         <input
           aria-label="Tarihe git"
@@ -1186,9 +1330,7 @@ function CalendarWorkspace({
           value={date}
           onChange={(event) => setDate(event.target.value)}
         />
-        <button onClick={() => shift(view === "month" ? 30 : view === "week" ? 7 : 1)}>
-          Sonraki
-        </button>
+        <button onClick={() => shiftPeriod(1)}>Sonraki</button>
       </div>
       <div className="calendar-grid">
         <div className="calendar-create">
@@ -1212,6 +1354,21 @@ function CalendarWorkspace({
                   </option>
                 ))}
             </select>
+            <div className="draggable-tasks" aria-label="Sürüklenebilir görevler">
+              {tasks
+                .filter((task) => task.state === "open" && !task.deletedAt)
+                .slice(0, 30)
+                .map((task) => (
+                  <button
+                    key={task.id}
+                    draggable
+                    onDragStart={(event) => event.dataTransfer.setData("text/stone-task", task.id)}
+                    onClick={() => setTaskId(task.id)}
+                  >
+                    {task.title}
+                  </button>
+                ))}
+            </div>
           </label>
           <div className="time-fields">
             <label>
@@ -1239,40 +1396,333 @@ function CalendarWorkspace({
             Takvime ekle
           </button>
           <p className="hint">Hatırlatıcı ve odak zamanlayıcısı bu sürümde yoktur.</p>
+          {selectedItem ? (
+            <div className="calendar-edit-panel">
+              <h3>Seçili kaydı düzenle</h3>
+              <label>
+                Başlık
+                <input value={editTitle} onChange={(event) => setEditTitle(event.target.value)} />
+              </label>
+              <label>
+                Açıklama
+                <textarea
+                  value={editDescription}
+                  onChange={(event) => setEditDescription(event.target.value)}
+                />
+              </label>
+              <label>
+                Planlama notu
+                <textarea
+                  value={editPlanningNote}
+                  onChange={(event) => setEditPlanningNote(event.target.value)}
+                />
+              </label>
+              <div className="calendar-event-actions">
+                <button onClick={() => void saveSelected()}>Kaydet</button>
+                <button onClick={() => void duplicateSelected()}>Çoğalt</button>
+                <button onClick={() => void deleteSelected()}>
+                  {selectedItem.kind === "task_block" ? "Bloğu kaldır" : "Sil"}
+                </button>
+              </div>
+            </div>
+          ) : null}
         </div>
-        <div className="agenda-list" role="list" aria-label={`${date} ajandası`}>
-          <div className="current-time" aria-label="Geçerli zaman göstergesi">
-            Şimdi · {new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-          </div>
-          {visible.length === 0 ? (
-            <EmptyState title="Bu gün boş" detail="Etkinlik veya zaman bloğu yok." />
-          ) : (
-            visible.map((item) => (
-              <article
-                key={item.id}
-                role="listitem"
-                className={`calendar-event category-${item.category}`}
-              >
-                <span>
-                  {item.kind === "task_block"
-                    ? "Zaman bloğu"
-                    : item.allDay
-                      ? "Tüm gün"
-                      : "Etkinlik"}
-                </span>
-                <strong>{item.title}</strong>
-                <small>
-                  {item.allDay
-                    ? `${item.startDate}–${item.endDate}`
-                    : `${item.startAt?.slice(11, 16)}–${item.endAt?.slice(11, 16)} · ${item.timezone}`}
-                </small>
-                {item.taskId ? <small>Bağlı görev · tamamlanması bu bloğu silmez</small> : null}
-              </article>
-            ))
-          )}
-        </div>
+        {view === "month" ? (
+          <MonthCalendar
+            days={days as ReturnType<typeof monthGrid>}
+            items={visible}
+            onSelect={setDate}
+            onOpen={setSelectedItemId}
+          />
+        ) : view === "week" ? (
+          <TimeGrid
+            dates={days as readonly string[]}
+            items={visible}
+            onTaskDrop={(droppedTaskId, dropDate, time) =>
+              void create({ taskId: droppedTaskId, date: dropDate, startTime: time })
+            }
+            onMove={(item, minutes) => void moveOrResize(item, minutes, minutes)}
+            onResize={(item, minutes) => void moveOrResize(item, 0, minutes)}
+            onEventDrop={(itemId, dropDate, time) => void moveToSlot(itemId, dropDate, time)}
+            onOpen={setSelectedItemId}
+          />
+        ) : view === "day" ? (
+          <TimeGrid
+            dates={[date]}
+            items={visible}
+            onTaskDrop={(droppedTaskId, dropDate, time) =>
+              void create({ taskId: droppedTaskId, date: dropDate, startTime: time })
+            }
+            onMove={(item, minutes) => void moveOrResize(item, minutes, minutes)}
+            onResize={(item, minutes) => void moveOrResize(item, 0, minutes)}
+            onEventDrop={(itemId, dropDate, time) => void moveToSlot(itemId, dropDate, time)}
+            onOpen={setSelectedItemId}
+          />
+        ) : (
+          <AgendaCalendar items={visible} onOpen={setSelectedItemId} />
+        )}
       </div>
     </section>
+  );
+}
+
+function MonthCalendar({
+  days,
+  items,
+  onSelect,
+  onOpen,
+}: {
+  days: ReturnType<typeof monthGrid>;
+  items: readonly CalendarItem[];
+  onSelect: (date: string) => void;
+  onOpen: (itemId: string) => void;
+}) {
+  return (
+    <div className="month-view" role="grid" aria-label="Ay görünümü">
+      {["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"].map((label) => (
+        <div key={label} className="month-weekday" role="columnheader">
+          {label}
+        </div>
+      ))}
+      {days.map((day) => {
+        const dayItems = items.filter(
+          (item) => item.startDate <= day.date && item.endDate >= day.date,
+        );
+        return (
+          <button
+            key={day.date}
+            role="gridcell"
+            aria-label={`${day.date}${day.isToday ? ", bugün" : ""}, ${dayItems.length} kayıt`}
+            aria-current={day.isToday ? "date" : undefined}
+            className={`month-day ${day.inPeriod ? "" : "outside"} ${day.isToday ? "today" : ""}`}
+            onClick={() => onSelect(day.date)}
+          >
+            <strong>{Number(day.date.slice(-2))}</strong>
+            {dayItems.slice(0, 3).map((item) => (
+              <span
+                key={`${item.id}:${item.recurrenceId ?? item.startDate}`}
+                className={`month-event category-${item.category}`}
+                role="button"
+                tabIndex={0}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onOpen(item.id);
+                }}
+                onKeyDown={(event) => {
+                  if (event.key !== "Enter" && event.key !== " ") return;
+                  event.preventDefault();
+                  event.stopPropagation();
+                  onOpen(item.id);
+                }}
+              >
+                {item.kind === "task_block" ? "Görev · " : ""}
+                {item.title}
+              </span>
+            ))}
+            {dayItems.length > 3 ? <small>+{dayItems.length - 3} daha</small> : null}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function TimeGrid({
+  dates,
+  items,
+  onTaskDrop,
+  onMove,
+  onResize,
+  onEventDrop,
+  onOpen,
+}: {
+  dates: readonly string[];
+  items: readonly CalendarItem[];
+  onTaskDrop: (taskId: string, date: string, time: string) => void;
+  onMove: (item: CalendarItem, minutes: number) => void;
+  onResize: (item: CalendarItem, minutes: number) => void;
+  onEventDrop: (itemId: string, date: string, time: string) => void;
+  onOpen: (itemId: string) => void;
+}) {
+  return (
+    <div
+      className="time-grid"
+      style={{ gridTemplateColumns: `64px repeat(${dates.length}, minmax(120px, 1fr))` }}
+    >
+      <div />
+      {dates.map((date) => (
+        <strong key={date} className="time-grid-header">
+          {date}
+        </strong>
+      ))}
+      <div className="all-day-label">Tüm gün</div>
+      {dates.map((date) => (
+        <div key={`all-${date}`} className="all-day-cell">
+          {items
+            .filter((item) => item.allDay && item.startDate <= date && item.endDate >= date)
+            .map((item) => (
+              <CalendarEvent
+                key={`${item.id}:${item.recurrenceId ?? item.startDate}`}
+                item={item}
+                onOpen={onOpen}
+              />
+            ))}
+        </div>
+      ))}
+      <div className="time-axis">
+        {Array.from({ length: 24 }, (_, hour) => (
+          <span key={hour} style={{ top: hour * 60 }}>
+            {String(hour).padStart(2, "0")}:00
+          </span>
+        ))}
+      </div>
+      {dates.map((date) => (
+        <div
+          key={`timed-${date}`}
+          className="time-column"
+          onDragOver={(event) => event.preventDefault()}
+          onDrop={(event) => {
+            const taskId = event.dataTransfer.getData("text/stone-task");
+            const itemId = event.dataTransfer.getData("text/stone-calendar");
+            if (!taskId && !itemId) return;
+            const bounds = event.currentTarget.getBoundingClientRect();
+            const minute = Math.max(
+              0,
+              Math.min(23 * 60 + 45, Math.round((event.clientY - bounds.top) / 15) * 15),
+            );
+            const time = `${String(Math.floor(minute / 60)).padStart(2, "0")}:${String(minute % 60).padStart(2, "0")}`;
+            if (taskId) onTaskDrop(taskId, date, time);
+            else onEventDrop(itemId, date, time);
+          }}
+        >
+          {Array.from({ length: 24 }, (_, hour) => (
+            <div key={hour} className="hour-line" style={{ top: hour * 60 }} />
+          ))}
+          {layoutTimedItems(items, date).map((position) => (
+            <div
+              key={`${position.item.id}:${position.item.recurrenceId ?? position.item.startDate}`}
+              className="positioned-event"
+              draggable
+              onDragStart={(event) =>
+                event.dataTransfer.setData("text/stone-calendar", position.item.id)
+              }
+              style={{
+                top: position.top,
+                height: Math.max(28, position.height),
+                left: `${(position.column / position.columns) * 100}%`,
+                width: `${100 / position.columns}%`,
+              }}
+            >
+              <CalendarEvent
+                item={position.item}
+                onMove={onMove}
+                onResize={onResize}
+                onOpen={onOpen}
+              />
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function AgendaCalendar({
+  items,
+  onOpen,
+}: {
+  items: readonly CalendarItem[];
+  onOpen: (itemId: string) => void;
+}) {
+  const groups = new Map<string, CalendarItem[]>();
+  for (const item of items)
+    groups.set(item.startDate, [...(groups.get(item.startDate) ?? []), item]);
+  return (
+    <div className="agenda-list" role="list" aria-label="Ajanda">
+      {items.length === 0 ? (
+        <EmptyState title="Ajanda boş" detail="Bu aralıkta kayıt yok." />
+      ) : null}
+      {[...groups].map(([date, values]) => (
+        <section key={date} aria-labelledby={`agenda-${date}`}>
+          <h3 id={`agenda-${date}`}>{date}</h3>
+          {values.map((item) => (
+            <CalendarEvent
+              key={`${item.id}:${item.recurrenceId ?? item.startDate}`}
+              item={item}
+              onOpen={onOpen}
+            />
+          ))}
+        </section>
+      ))}
+    </div>
+  );
+}
+
+function CalendarEvent({
+  item,
+  onMove,
+  onResize,
+  onOpen,
+}: {
+  item: CalendarItem;
+  onMove?: (item: CalendarItem, minutes: number) => void;
+  onResize?: (item: CalendarItem, minutes: number) => void;
+  onOpen?: (itemId: string) => void;
+}) {
+  const start = item.startAt ? instantToZonedWallTime(item.startAt, item.timezone).slice(11) : null;
+  const end = item.endAt ? instantToZonedWallTime(item.endAt, item.timezone).slice(11) : null;
+  return (
+    <article
+      role="listitem"
+      tabIndex={0}
+      aria-label={`${item.kind === "task_block" ? "Zaman bloğu" : "Etkinlik"} ${item.title}, ${item.startDate}`}
+      className={`calendar-event category-${item.category}`}
+      onClick={() => onOpen?.(item.id)}
+      onKeyDown={(event) => {
+        if (!onOpen || (event.key !== "Enter" && event.key !== " ")) return;
+        event.preventDefault();
+        onOpen(item.id);
+      }}
+    >
+      <span>
+        {item.kind === "task_block" ? "Zaman bloğu" : item.allDay ? "Tüm gün" : "Etkinlik"}
+      </span>
+      <strong>{item.title}</strong>
+      {!item.allDay ? (
+        <small>
+          {start}–{end} · {item.timezone}
+        </small>
+      ) : null}
+      {item.taskId ? <small>Bağlı görev · blok, görevden bağımsızdır</small> : null}
+      {onMove && onResize ? (
+        <div className="calendar-event-actions">
+          <button
+            aria-label={`${item.title} kaydını 15 dakika erkene taşı`}
+            onClick={() => onMove(item, -15)}
+          >
+            −15
+          </button>
+          <button
+            aria-label={`${item.title} kaydını 15 dakika ileri taşı`}
+            onClick={() => onMove(item, 15)}
+          >
+            +15
+          </button>
+          <button
+            aria-label={`${item.title} süresini 15 dakika kısalt`}
+            onClick={() => onResize(item, -15)}
+          >
+            Kısalt
+          </button>
+          <button
+            aria-label={`${item.title} süresini 15 dakika uzat`}
+            onClick={() => onResize(item, 15)}
+          >
+            Uzat
+          </button>
+        </div>
+      ) : null}
+    </article>
   );
 }
 
