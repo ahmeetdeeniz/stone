@@ -1,4 +1,4 @@
-import type { ExportedProjectFile } from "@stone/domain";
+import { validateCalendarItem, type CalendarItem, type ExportedProjectFile } from "@stone/domain";
 
 interface WorkspaceBundle {
   schema: 1 | 2;
@@ -72,6 +72,30 @@ export function parseWorkspaceBundle(source: string): readonly ExportedProjectFi
       encoding: value.encoding,
       mimeType: value.mimeType,
     };
+  });
+}
+
+export function parseCalendarWorkspaceFile(
+  source: string,
+  ownerId: string,
+): readonly CalendarItem[] {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(source);
+  } catch {
+    throw new Error("Calendar workspace data is not valid JSON.");
+  }
+  if (!isRecord(parsed) || parsed.schema !== 1 || !Array.isArray(parsed.items))
+    throw new Error("Calendar workspace schema is not supported.");
+  if (parsed.items.length > 10_000) throw new Error("Calendar workspace contains too many items.");
+  const ids = new Set<string>();
+  return parsed.items.map((value) => {
+    if (!isRecord(value) || value.ownerId !== ownerId)
+      throw new Error("Calendar workspace contains a foreign or invalid owner.");
+    const item = validateCalendarItem(value as unknown as CalendarItem);
+    if (ids.has(item.id)) throw new Error("Calendar workspace contains duplicate item IDs.");
+    ids.add(item.id);
+    return item;
   });
 }
 

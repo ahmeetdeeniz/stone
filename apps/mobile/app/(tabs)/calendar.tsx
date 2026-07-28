@@ -1,5 +1,5 @@
 import * as Crypto from "expo-crypto";
-import { useFocusEffect } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { zonedWallTimeToInstant, type CalendarItem } from "@stone/domain";
@@ -11,6 +11,7 @@ import { useAppServices } from "../../src/providers/app-provider";
 import { useAuth } from "../../src/providers/auth-provider";
 
 export default function CalendarScreen() {
+  const router = useRouter();
   const { user } = useAuth();
   const { calendar, deviceId } = useAppServices();
   const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().slice(0, 10));
@@ -150,21 +151,30 @@ export default function CalendarScreen() {
             />
           ) : (
             items.map((item) => (
-              <Surface key={item.id}>
-                <StoneText variant="caption">
-                  {item.kind === "task_block"
-                    ? "Zaman bloğu"
-                    : item.allDay
-                      ? "Tüm gün etkinliği"
-                      : "Etkinlik"}
-                </StoneText>
-                <StoneText variant="title3">{item.title}</StoneText>
-                <StoneText variant="bodySmall">
-                  {item.allDay
-                    ? `${item.startDate} – ${item.endDate}`
-                    : `${item.startAt?.slice(11, 16)} – ${item.endAt?.slice(11, 16)} · ${item.timezone}`}
-                </StoneText>
-              </Surface>
+              <Pressable
+                key={item.id}
+                accessibilityRole="button"
+                accessibilityLabel={`${item.title} etkinliğini düzenle`}
+                onPress={() =>
+                  router.push({ pathname: "/calendar/[id]" as never, params: { id: item.id } })
+                }
+              >
+                <Surface>
+                  <StoneText variant="caption">
+                    {item.kind === "task_block"
+                      ? "Zaman bloğu"
+                      : item.allDay
+                        ? "Tüm gün etkinliği"
+                        : "Etkinlik"}
+                  </StoneText>
+                  <StoneText variant="title3">{item.title}</StoneText>
+                  <StoneText variant="bodySmall">
+                    {item.allDay
+                      ? `${item.startDate} – ${item.endDate}`
+                      : `${item.startAt?.slice(11, 16)} – ${item.endAt?.slice(11, 16)} · ${item.timezone}`}
+                  </StoneText>
+                </Surface>
+              </Pressable>
             ))
           )}
         </ResponsiveContent>

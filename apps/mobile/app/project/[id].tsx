@@ -10,6 +10,7 @@ import type {
   ProjectTask,
   ProjectVersion,
   Task,
+  CalendarItem,
 } from "@stone/domain";
 import {
   projectPriorities,
@@ -32,11 +33,12 @@ export default function ProjectDetailScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
   const router = useRouter();
   const { user } = useAuth();
-  const { projectUseCases, taskUseCases, deviceId } = useAppServices();
+  const { projectUseCases, taskUseCases, calendar, deviceId } = useAppServices();
   const [project, setProject] = useState<Project | null>(null);
   const [versions, setVersions] = useState<readonly ProjectVersion[]>([]);
   const [tasks, setTasks] = useState<readonly ProjectTask[]>([]);
   const [planningTasks, setPlanningTasks] = useState<readonly Task[]>([]);
+  const [calendarItems, setCalendarItems] = useState<readonly CalendarItem[]>([]);
   const [blockers, setBlockers] = useState<readonly ProjectBlocker[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -63,17 +65,27 @@ export default function ProjectDetailScreen() {
       setError(null);
       const loaded = await projectUseCases.get(user.uid, id);
       if (!loaded) throw new Error("Proje bulunamadı.");
-      const [loadedVersions, loadedTasks, loadedPlanningTasks, loadedBlockers] = await Promise.all([
-        projectUseCases.versions(user.uid, id),
-        projectUseCases.tasks(user.uid, id),
-        taskUseCases.list(user.uid, { projectId: id }),
-        projectUseCases.blockers(user.uid, id),
-      ]);
+      const today = new Date().toISOString().slice(0, 10);
+      const horizon = new Date(`${today}T00:00:00Z`);
+      horizon.setUTCDate(horizon.getUTCDate() + 90);
+      const [loadedVersions, loadedTasks, loadedPlanningTasks, loadedBlockers, loadedCalendar] =
+        await Promise.all([
+          projectUseCases.versions(user.uid, id),
+          projectUseCases.tasks(user.uid, id),
+          taskUseCases.list(user.uid, { projectId: id }),
+          projectUseCases.blockers(user.uid, id),
+          calendar.list(user.uid, {
+            startDate: today,
+            endDate: horizon.toISOString().slice(0, 10),
+            projectId: id,
+          }),
+        ]);
       setProject(loaded);
       setVersions(loadedVersions);
       setTasks(loadedTasks);
       setPlanningTasks(loadedPlanningTasks);
       setBlockers(loadedBlockers);
+      setCalendarItems(loadedCalendar);
       setTitle(loaded.title);
       setStatus(loaded.status);
       setPriority(loaded.priority);
@@ -89,7 +101,7 @@ export default function ProjectDetailScreen() {
     } finally {
       setLoading(false);
     }
-  }, [id, projectUseCases, taskUseCases, user]);
+  }, [calendar, id, projectUseCases, taskUseCases, user]);
 
   useEffect(() => void load(), [load]);
 
@@ -230,6 +242,49 @@ export default function ProjectDetailScreen() {
         "Proje dışa aktarılamadı",
         caught instanceof Error ? caught.message : "Paylaşım başlatılamadı.",
       );
+    }
+  };
+
+  const createProjectEvent = async () => {
+    if (!user || !project) return;
+    const date = project.targetDate ?? new Date().toISOString().slice(0, 10);
+    const now = new Date().toISOString();
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+    try {
+      const item = await calendar.create({
+        schemaVersion: 1,
+        id: Crypto.randomUUID(),
+        ownerId: user.uid,
+        revision: 1,
+        createdAt: now,
+        updatedAt: now,
+        deletedAt: null,
+        updatedByDeviceId: deviceId,
+        kind: "event",
+        title: `${project.title} etkinliği`,
+        description: null,
+        allDay: true,
+        startDate: date,
+        endDate: date,
+        startAt: null,
+        endAt: null,
+        timezone,
+        location: null,
+        category: "purple",
+        projectId: project.id,
+        sourceDocumentId: project.canonicalDocumentId,
+        taskId: null,
+        planningNote: null,
+        recurrence: null,
+        recurrenceSeriesId: null,
+        recurrenceId: null,
+        overrides: [],
+        externalUid: null,
+        cancelledAt: null,
+      });
+      router.push({ pathname: "/calendar/[id]" as never, params: { id: item.id } });
+    } catch (caught) {
+      Alert.alert("Etkinlik oluşturulamadı", message(caught));
     }
   };
 
@@ -399,6 +454,37 @@ export default function ProjectDetailScreen() {
             )}
           </Section>
 
+          <Section title={`Takvim (${calendarItems.length})`}>
+            <StoneText variant="bodySmall">
+              Proje hedef tarihi Markdown metadata sinyalidir; aşağıdaki kayıtlar bağımsız etkinlik
+              veya görev zaman bloklarıdır.
+            </StoneText>
+            <StoneButton
+              label="Projeye bağlı etkinlik oluştur"
+              variant="secondary"
+              onPress={() => void createProjectEvent()}
+            />
+            {project.targetDate ? (
+              <StoneText variant="caption">Metadata hedefi · {project.targetDate}</StoneText>
+            ) : null}
+            {calendarItems.map((item) => (
+              <Pressable
+                key={item.id}
+                accessibilityRole="button"
+                accessibilityLabel={`${item.title} takvim kaydını aç`}
+                onPress={() =>
+                  router.push({ pathname: "/calendar/[id]" as never, params: { id: item.id } })
+                }
+                style={styles.task}
+              >
+                <StoneText>{item.title}</StoneText>
+                <StoneText variant="caption">
+                  {item.kind === "task_block" ? "Zaman bloğu" : "Etkinlik"} · {item.startDate}
+                </StoneText>
+              </Pressable>
+            ))}
+          </Section>
+
           <Section title="Blocker'lar">
             <StoneInput
               label="Yeni blocker"
@@ -512,6 +598,10 @@ function healthExplanation(project: Project): string {
   if (project.health === "attention")
     return "Yaklaşan hedef, eksik checklist veya uzun süredir güncellenmeme sinyali var.";
   return "Açık risk sinyali yok.";
+}
+
+function message(error: unknown): string {
+  return error instanceof Error ? error.message : "Tekrar deneyin.";
 }
 
 const styles = StyleSheet.create({

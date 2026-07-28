@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import type { CalendarItem } from "./entities.js";
 import {
   expandCalendarOccurrences,
+  editCalendarRecurrence,
+  deleteCalendarRecurrence,
   exportCalendarIcs,
   importCalendarIcs,
   instantToZonedWallTime,
@@ -136,7 +138,78 @@ describe("calendar recurrence", () => {
       values.map((value) => instantToZonedWallTime(value.item.startAt!, source.timezone)),
     ).toEqual(["2026-03-07T09:00", "2026-03-08T09:00", "2026-03-09T09:00", "2026-03-10T09:00"]);
   });
+
+  it("edits one occurrence without rewriting its series", () => {
+    const source = recurringEvent();
+    const result = editCalendarRecurrence(
+      source,
+      "2026-03-30",
+      "occurrence",
+      {
+        title: "One moved review",
+        startAt: "2026-03-30T12:00:00.000Z",
+        endAt: "2026-03-30T13:00:00.000Z",
+      },
+      "unused",
+    );
+    expect(result.future).toBeNull();
+    expect(result.current.startAt).toBe(source.startAt);
+    expect(
+      expandCalendarOccurrences(result.current, "2026-03-30", "2026-03-30")[0]?.item,
+    ).toMatchObject({
+      title: "One moved review",
+      startAt: "2026-03-30T12:00:00.000Z",
+    });
+  });
+
+  it("splits this-and-future edits with stable independent series", () => {
+    const source = recurringEvent();
+    const result = editCalendarRecurrence(
+      source,
+      "2026-03-31",
+      "future",
+      { title: "New series title" },
+      "series-future",
+    );
+    expect(result.current.recurrence?.untilDate).toBe("2026-03-30");
+    expect(result.future).toMatchObject({
+      id: "series-future",
+      recurrenceSeriesId: "series-future",
+      startDate: "2026-03-31",
+      title: "New series title",
+    });
+    expect(expandCalendarOccurrences(result.current, "2026-03-31", "2026-04-02")).toEqual([]);
+  });
+
+  it("deletes only one occurrence by exception", () => {
+    const result = deleteCalendarRecurrence(
+      recurringEvent(),
+      "2026-03-30",
+      "occurrence",
+      fixedNow,
+      "unused",
+    );
+    expect(result.current.deletedAt).toBeNull();
+    expect(
+      expandCalendarOccurrences(result.current, "2026-03-29", "2026-03-31").map(
+        (value) => value.occurrenceDate,
+      ),
+    ).toEqual(["2026-03-29", "2026-03-31"]);
+  });
 });
+
+function recurringEvent(): CalendarItem {
+  return event({
+    recurrence: {
+      frequency: "daily",
+      interval: 1,
+      unit: "day",
+      preferredDayOfMonth: null,
+      untilDate: "2026-04-10",
+    },
+    recurrenceSeriesId: "series-1",
+  });
+}
 
 describe("ICS subset", () => {
   it("round trips UTF-8 timed and all-day events", () => {

@@ -1,4 +1,4 @@
-import type { CalendarItem, CalendarOccurrence } from "./entities.js";
+import type { CalendarItem, CalendarOccurrence, CalendarRecurrenceEditScope } from "./entities.js";
 import {
   instantToZonedWallTime,
   validateCalendarItem,
@@ -36,6 +36,142 @@ export function expandCalendarOccurrences(
     date = nextOccurrenceDate(date, item.recurrence);
   }
   return output;
+}
+
+export interface CalendarOccurrenceChanges {
+  title?: string;
+  startAt?: string | null;
+  endAt?: string | null;
+  startDate?: string;
+  endDate?: string;
+  description?: string | null;
+  location?: string | null;
+  category?: CalendarItem["category"];
+}
+
+export interface CalendarSeriesMutation {
+  current: CalendarItem;
+  future: CalendarItem | null;
+}
+
+export function editCalendarRecurrence(
+  source: CalendarItem,
+  occurrenceDate: string,
+  scope: CalendarRecurrenceEditScope,
+  changes: CalendarOccurrenceChanges,
+  futureId: string,
+): CalendarSeriesMutation {
+  const item = validateCalendarItem(source);
+  requireOccurrence(item, occurrenceDate);
+  if (scope === "occurrence") {
+    return {
+      current: validateCalendarItem({
+        ...item,
+        overrides: upsertOverride(item, occurrenceDate, {
+          occurrenceDate,
+          cancelled: false,
+          title: changes.title ?? null,
+          startAt: changes.startAt ?? null,
+          endAt: changes.endAt ?? null,
+        }),
+      }),
+      future: null,
+    };
+  }
+  if (scope === "series") {
+    return {
+      current: validateCalendarItem({ ...item, ...changes }),
+      future: null,
+    };
+  }
+  if (occurrenceDate <= item.startDate)
+    return {
+      current: validateCalendarItem({ ...item, ...changes }),
+      future: null,
+    };
+  const previous = addDays(occurrenceDate, -1);
+  const retainedOverrides = item.overrides.filter((value) => value.occurrenceDate < occurrenceDate);
+  const futureOverrides = item.overrides.filter((value) => value.occurrenceDate >= occurrenceDate);
+  const current = validateCalendarItem({
+    ...item,
+    recurrence: item.recurrence ? { ...item.recurrence, untilDate: previous } : null,
+    overrides: retainedOverrides,
+  });
+  const durationDays = dateDistance(item.startDate, item.endDate);
+  const future = validateCalendarItem({
+    ...item,
+    ...changes,
+    id: futureId,
+    startDate: changes.startDate ?? occurrenceDate,
+    endDate: changes.endDate ?? addDays(occurrenceDate, durationDays),
+    recurrenceSeriesId: futureId,
+    recurrenceId: null,
+    overrides: futureOverrides,
+    revision: 1,
+    createdAt: item.updatedAt,
+    deletedAt: null,
+  });
+  return { current, future };
+}
+
+export function deleteCalendarRecurrence(
+  source: CalendarItem,
+  occurrenceDate: string,
+  scope: CalendarRecurrenceEditScope,
+  deletedAt: string,
+  futureId: string,
+): CalendarSeriesMutation {
+  const item = validateCalendarItem(source);
+  requireOccurrence(item, occurrenceDate);
+  if (scope === "occurrence") {
+    return {
+      current: validateCalendarItem({
+        ...item,
+        overrides: upsertOverride(item, occurrenceDate, {
+          occurrenceDate,
+          cancelled: true,
+          title: null,
+          startAt: null,
+          endAt: null,
+        }),
+      }),
+      future: null,
+    };
+  }
+  if (scope === "series" || occurrenceDate <= item.startDate) {
+    return {
+      current: validateCalendarItem({ ...item, deletedAt, cancelledAt: deletedAt }),
+      future: null,
+    };
+  }
+  const split = editCalendarRecurrence(item, occurrenceDate, "future", {}, futureId);
+  return {
+    current: split.current,
+    future: split.future
+      ? validateCalendarItem({
+          ...split.future,
+          deletedAt,
+          cancelledAt: deletedAt,
+        })
+      : null,
+  };
+}
+
+function requireOccurrence(item: CalendarItem, occurrenceDate: string): void {
+  if (!item.recurrence) throw new Error("Calendar item is not recurring.");
+  const match = expandCalendarOccurrences(item, occurrenceDate, occurrenceDate, 10_000);
+  if (match.length === 0) throw new Error("Calendar occurrence is outside the series.");
+}
+
+function upsertOverride(
+  item: CalendarItem,
+  occurrenceDate: string,
+  value: CalendarItem["overrides"][number],
+): readonly CalendarItem["overrides"][number][] {
+  return [
+    ...item.overrides.filter((override) => override.occurrenceDate !== occurrenceDate),
+    value,
+  ].sort((left, right) => left.occurrenceDate.localeCompare(right.occurrenceDate));
 }
 
 function shiftItem(

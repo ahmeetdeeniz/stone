@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { parseWorkspaceBundle, serializeWorkspaceBundle } from "./workspace-bundle";
+import {
+  parseCalendarWorkspaceFile,
+  parseWorkspaceBundle,
+  serializeWorkspaceBundle,
+} from "./workspace-bundle";
 
 describe("workspace export bundle", () => {
   it("round-trips Markdown, manifest JSON, and binary drawing previews", () => {
@@ -18,6 +22,49 @@ describe("workspace export bundle", () => {
       files[1],
       { ...files[2], encoding: "utf8", mimeType: "text/plain" },
     ]);
+  });
+
+  it("validates owner-scoped calendar restore data and duplicate identities", () => {
+    const item = {
+      schemaVersion: 1,
+      id: "event-1",
+      ownerId: "owner-1",
+      revision: 1,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      deletedAt: null,
+      updatedByDeviceId: "device-1",
+      kind: "event",
+      title: "Planning",
+      description: null,
+      allDay: true,
+      startDate: "2026-01-02",
+      endDate: "2026-01-02",
+      startAt: null,
+      endAt: null,
+      timezone: "Europe/Istanbul",
+      location: null,
+      category: "purple",
+      projectId: null,
+      sourceDocumentId: null,
+      taskId: null,
+      planningNote: null,
+      recurrence: null,
+      recurrenceSeriesId: null,
+      recurrenceId: null,
+      overrides: [],
+      externalUid: null,
+      cancelledAt: null,
+    };
+    expect(
+      parseCalendarWorkspaceFile(JSON.stringify({ schema: 1, items: [item] }), "owner-1"),
+    ).toHaveLength(1);
+    expect(() =>
+      parseCalendarWorkspaceFile(JSON.stringify({ schema: 1, items: [item, item] }), "owner-1"),
+    ).toThrow(/duplicate/u);
+    expect(() =>
+      parseCalendarWorkspaceFile(JSON.stringify({ schema: 1, items: [item] }), "owner-2"),
+    ).toThrow(/foreign/u);
   });
 
   it("writes schema v2 while continuing to import legacy v1 bundles", () => {

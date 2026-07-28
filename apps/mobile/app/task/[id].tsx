@@ -2,7 +2,12 @@ import * as Crypto from "expo-crypto";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, View } from "react-native";
-import type { Project, Task, TaskRecurrenceFrequency } from "@stone/domain";
+import {
+  zonedWallTimeToInstant,
+  type Project,
+  type Task,
+  type TaskRecurrenceFrequency,
+} from "@stone/domain";
 import { ResponsiveContent } from "../../src/components/responsive";
 import { ErrorState, LoadingState } from "../../src/components/states";
 import { Screen, StoneButton, StoneInput, StoneText, Surface } from "../../src/components/ui";
@@ -22,7 +27,7 @@ export default function TaskDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { user } = useAuth();
-  const { taskUseCases, projectUseCases, deviceId } = useAppServices();
+  const { taskUseCases, projectUseCases, calendar, deviceId } = useAppServices();
   const [task, setTask] = useState<Task | null>(null);
   const [subtasks, setSubtasks] = useState<readonly Task[]>([]);
   const [projects, setProjects] = useState<readonly Project[]>([]);
@@ -232,6 +237,52 @@ export default function TaskDetailScreen() {
       },
     ]);
 
+  const scheduleTask = async () => {
+    if (!user || !task) return;
+    const date = task.dueDate ?? new Date().toISOString().slice(0, 10);
+    const startTime = task.dueTime ?? "09:00";
+    const startMinutes = Number(startTime.slice(0, 2)) * 60 + Number(startTime.slice(3));
+    const endMinutes = Math.min(startMinutes + (task.estimatedMinutes ?? 60), 23 * 60 + 59);
+    const endTime = `${String(Math.floor(endMinutes / 60)).padStart(2, "0")}:${String(endMinutes % 60).padStart(2, "0")}`;
+    const now = new Date().toISOString();
+    try {
+      const block = await calendar.create({
+        schemaVersion: 1,
+        id: Crypto.randomUUID(),
+        ownerId: user.uid,
+        revision: 1,
+        createdAt: now,
+        updatedAt: now,
+        deletedAt: null,
+        updatedByDeviceId: deviceId,
+        kind: "task_block",
+        title: task.title,
+        description: task.description,
+        allDay: false,
+        startDate: date,
+        endDate: date,
+        startAt: zonedWallTimeToInstant(date, startTime, task.timezone, "earlier"),
+        endAt: zonedWallTimeToInstant(date, endTime, task.timezone, "later"),
+        timezone: task.timezone,
+        location: null,
+        category: "blue",
+        projectId: task.projectId,
+        sourceDocumentId: task.sourceDocumentId,
+        taskId: task.id,
+        planningNote: null,
+        recurrence: null,
+        recurrenceSeriesId: null,
+        recurrenceId: null,
+        overrides: [],
+        externalUid: null,
+        cancelledAt: null,
+      });
+      router.push({ pathname: "/calendar/[id]" as never, params: { id: block.id } });
+    } catch (caught) {
+      Alert.alert("Görev planlanamadı", message(caught));
+    }
+  };
+
   const recurrence = useMemo(() => task?.recurrence?.frequency ?? "none", [task]);
 
   if (error)
@@ -336,6 +387,14 @@ export default function TaskDetailScreen() {
             onPress={() => void save()}
             disabled={saving || !title.trim()}
           />
+          <StoneButton
+            label="Takvimde planla"
+            variant="secondary"
+            onPress={() => void scheduleTask()}
+          />
+          <StoneText variant="caption">
+            Zaman bloğu görev son tarihini veya tamamlanma durumunu değiştirmez.
+          </StoneText>
           <View style={styles.subtasks}>
             <StoneText variant="title3">Alt görevler</StoneText>
             <View style={styles.addSubtask}>

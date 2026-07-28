@@ -1,9 +1,13 @@
 import {
   matchesCalendarList,
+  editCalendarRecurrence,
+  deleteCalendarRecurrence,
   validateCalendarItem,
   type CalendarItem,
   type CalendarListOptions,
   type CalendarRepository,
+  type CalendarOccurrenceChanges,
+  type CalendarRecurrenceEditScope,
 } from "@stone/domain";
 import type { StoneDatabase } from "./database";
 import { enqueueOutbox } from "./sync";
@@ -89,6 +93,83 @@ export class SQLiteCalendarRepository implements CalendarRepository {
       current.revision,
       deviceId,
     );
+  }
+
+  public async editRecurrence(
+    ownerId: string,
+    id: string,
+    occurrenceDate: string,
+    scope: CalendarRecurrenceEditScope,
+    changes: CalendarOccurrenceChanges,
+    futureId: string,
+    deviceId: string,
+  ): Promise<{ current: CalendarItem; future: CalendarItem | null }> {
+    const source = await this.getById(ownerId, id);
+    if (!source) throw new Error("Calendar item not found.");
+    const timestamp = this.now();
+    const mutation = editCalendarRecurrence(source, occurrenceDate, scope, changes, futureId);
+    const current = validateCalendarItem({
+      ...mutation.current,
+      revision: source.revision + 1,
+      updatedAt: timestamp,
+      updatedByDeviceId: deviceId,
+    });
+    const future = mutation.future
+      ? validateCalendarItem({
+          ...mutation.future,
+          ownerId,
+          createdAt: timestamp,
+          updatedAt: timestamp,
+          updatedByDeviceId: deviceId,
+        })
+      : null;
+    await this.database.withTransactionAsync(async () => {
+      await write(this.database, current, "UPDATE");
+      await queue(this.database, current, source.revision);
+      if (future) {
+        await write(this.database, future, "INSERT");
+        await queue(this.database, future, 0);
+      }
+    });
+    return { current, future };
+  }
+
+  public async deleteRecurrence(
+    ownerId: string,
+    id: string,
+    occurrenceDate: string,
+    scope: CalendarRecurrenceEditScope,
+    futureId: string,
+    deviceId: string,
+  ): Promise<{ current: CalendarItem; future: CalendarItem | null }> {
+    const source = await this.getById(ownerId, id);
+    if (!source) throw new Error("Calendar item not found.");
+    const timestamp = this.now();
+    const mutation = deleteCalendarRecurrence(source, occurrenceDate, scope, timestamp, futureId);
+    const current = validateCalendarItem({
+      ...mutation.current,
+      revision: source.revision + 1,
+      updatedAt: timestamp,
+      updatedByDeviceId: deviceId,
+    });
+    const future = mutation.future
+      ? validateCalendarItem({
+          ...mutation.future,
+          ownerId,
+          createdAt: timestamp,
+          updatedAt: timestamp,
+          updatedByDeviceId: deviceId,
+        })
+      : null;
+    await this.database.withTransactionAsync(async () => {
+      await write(this.database, current, "UPDATE");
+      await queue(this.database, current, source.revision);
+      if (future) {
+        await write(this.database, future, "INSERT");
+        await queue(this.database, future, 0);
+      }
+    });
+    return { current, future };
   }
 }
 
