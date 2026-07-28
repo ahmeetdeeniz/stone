@@ -863,7 +863,8 @@ function normalizeSqlPayload(
     };
   }
   if (entityType === "calendar") {
-    const payload = typeof row.payload === "string" ? JSON.parse(row.payload) : row.payload;
+    const payload: unknown =
+      typeof row.payload === "string" ? (JSON.parse(row.payload) as unknown) : row.payload;
     if (!payload || typeof payload !== "object" || Array.isArray(payload))
       throw new Error("Invalid calendar sync payload.");
     return payload as Record<string, unknown>;

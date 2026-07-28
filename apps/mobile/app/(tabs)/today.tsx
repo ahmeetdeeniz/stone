@@ -2,7 +2,7 @@ import * as Crypto from "expo-crypto";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, View } from "react-native";
-import type { Task, TaskListOptions, TodayItem } from "@stone/domain";
+import type { CalendarItem, Task, TaskListOptions, TodayItem } from "@stone/domain";
 import { ResponsiveContent } from "../../src/components/responsive";
 import { EmptyState, ErrorState, LoadingState } from "../../src/components/states";
 import { Screen, StoneButton, StoneInput, StoneText, Surface } from "../../src/components/ui";
@@ -23,9 +23,10 @@ const FILTER_LABELS: Readonly<Record<ViewFilter, string>> = {
 export default function TodayScreen() {
   const router = useRouter();
   const { user } = useAuth();
-  const { taskUseCases, projectUseCases, deviceId } = useAppServices();
+  const { taskUseCases, projectUseCases, calendar, deviceId } = useAppServices();
   const [tasks, setTasks] = useState<readonly Task[]>([]);
   const [signals, setSignals] = useState<readonly TodayItem[]>([]);
+  const [calendarItems, setCalendarItems] = useState<readonly CalendarItem[]>([]);
   const [capture, setCapture] = useState("");
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<ViewFilter>("today");
@@ -44,18 +45,20 @@ export default function TodayScreen() {
           : filter === "all"
             ? { state: "open", search }
             : { state: "open", due: filter, today, search };
-      const [nextTasks, nextSignals] = await Promise.all([
+      const [nextTasks, nextSignals, nextCalendar] = await Promise.all([
         taskUseCases.list(user.uid, options),
         projectUseCases.today(user.uid, new Date().toISOString()),
+        calendar.list(user.uid, { startDate: today, endDate: today }),
       ]);
       setTasks(nextTasks);
       setSignals(nextSignals.filter((item) => item.kind !== "task"));
+      setCalendarItems(nextCalendar);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Planlama görünümü yüklenemedi.");
     } finally {
       setLoading(false);
     }
-  }, [filter, projectUseCases, search, taskUseCases, today, user]);
+  }, [calendar, filter, projectUseCases, search, taskUseCases, today, user]);
 
   useFocusEffect(useCallback(() => void load(), [load]));
 
@@ -162,6 +165,28 @@ export default function TodayScreen() {
               </Pressable>
             ))}
           </ScrollView>
+          {filter === "today" && calendarItems.length > 0 ? (
+            <View style={styles.signals}>
+              <StoneText variant="title3">Bugünün zaman çizelgesi</StoneText>
+              {calendarItems.map((item) => (
+                <Surface key={item.id}>
+                  <StoneText variant="caption">
+                    {item.kind === "task_block"
+                      ? "Planlanmış görev"
+                      : item.allDay
+                        ? "Tüm gün"
+                        : "Etkinlik"}
+                  </StoneText>
+                  <StoneText>{item.title}</StoneText>
+                  <StoneText variant="caption">
+                    {item.allDay
+                      ? item.startDate
+                      : `${item.startAt?.slice(11, 16)} – ${item.endAt?.slice(11, 16)} · ${item.timezone}`}
+                  </StoneText>
+                </Surface>
+              ))}
+            </View>
+          ) : null}
           {loading ? (
             <LoadingState label="Görevler yükleniyor" />
           ) : error ? (

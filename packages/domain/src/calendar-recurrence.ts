@@ -1,5 +1,9 @@
 import type { CalendarItem, CalendarOccurrence } from "./entities.js";
-import { validateCalendarItem } from "./calendar.js";
+import {
+  instantToZonedWallTime,
+  validateCalendarItem,
+  zonedWallTimeToInstant,
+} from "./calendar.js";
 import { nextOccurrenceDate, occurrenceId } from "./task-recurrence.js";
 
 export function expandCalendarOccurrences(
@@ -40,14 +44,16 @@ function shiftItem(
   durationDays: number,
   override: CalendarItem["overrides"][number] | undefined,
 ): CalendarItem {
-  const dayDelta = dateDistance(item.startDate, date);
   return {
     ...item,
     title: override?.title ?? item.title,
     startDate: date,
     endDate: addDays(date, durationDays),
-    startAt: override?.startAt ?? (item.startAt ? shiftInstant(item.startAt, dayDelta) : null),
-    endAt: override?.endAt ?? (item.endAt ? shiftInstant(item.endAt, dayDelta) : null),
+    startAt:
+      override?.startAt ?? (item.startAt ? shiftInstant(item.startAt, date, item.timezone) : null),
+    endAt:
+      override?.endAt ??
+      (item.endAt ? shiftInstant(item.endAt, addDays(date, durationDays), item.timezone) : null),
     recurrenceId: date,
   };
 }
@@ -78,6 +84,22 @@ function addDays(date: string, days: number): string {
   return value.toISOString().slice(0, 10);
 }
 
-function shiftInstant(value: string, days: number): string {
-  return new Date(Date.parse(value) + days * 86_400_000).toISOString();
+function shiftInstant(value: string, date: string, timezone: string): string {
+  const time = instantToZonedWallTime(value, timezone).slice(11, 16);
+  try {
+    return zonedWallTimeToInstant(date, time, timezone, "earlier");
+  } catch {
+    // A series that lands in a spring-forward gap advances to the first valid quarter-hour.
+    const [hour, minute] = time.split(":").map(Number) as [number, number];
+    for (let delta = 15; delta <= 180; delta += 15) {
+      const total = hour * 60 + minute + delta;
+      const next = `${String(Math.floor(total / 60) % 24).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
+      try {
+        return zonedWallTimeToInstant(date, next, timezone, "earlier");
+      } catch {
+        // Continue until the gap ends.
+      }
+    }
+    throw new Error("Recurring calendar time cannot be resolved.");
+  }
 }

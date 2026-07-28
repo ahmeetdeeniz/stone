@@ -115,6 +115,27 @@ describe("calendar recurrence", () => {
     ]);
     expect(values[1]?.item.title).toBe("Moved review");
   });
+
+  it("preserves New York wall time across DST", () => {
+    const source = event({
+      startDate: "2026-03-07",
+      endDate: "2026-03-07",
+      startAt: "2026-03-07T14:00:00.000Z",
+      endAt: "2026-03-07T15:00:00.000Z",
+      timezone: "America/New_York",
+      recurrence: {
+        frequency: "daily",
+        interval: 1,
+        unit: "day",
+        preferredDayOfMonth: null,
+        untilDate: "2026-03-10",
+      },
+    });
+    const values = expandCalendarOccurrences(source, "2026-03-07", "2026-03-10");
+    expect(
+      values.map((value) => instantToZonedWallTime(value.item.startAt!, source.timezone)),
+    ).toEqual(["2026-03-07T09:00", "2026-03-08T09:00", "2026-03-09T09:00", "2026-03-10T09:00"]);
+  });
 });
 
 describe("ICS subset", () => {

@@ -1248,6 +1248,56 @@ fn apply_remote_tasks(
     Ok(pulled)
 }
 
+fn apply_remote_calendar(
+    database: &Mutex<Database>,
+    remote_items: &[serde_json::Value],
+) -> Result<u32, String> {
+    let db = database.lock().map_err(|_| "Database lock failed.")?;
+    let mut pulled = 0;
+    for remote in remote_items {
+        let Some(fields) = remote.get("fields").and_then(|value| value.as_object()) else {
+            continue;
+        };
+        let payload = serde_json::Value::Object(
+            fields
+                .iter()
+                .map(|(key, value)| (key.clone(), decode_firestore_value(value)))
+                .collect(),
+        );
+        let id = json_text(&payload, "id")?;
+        let revision = payload
+            .get("revision")
+            .and_then(|value| value.as_i64())
+            .unwrap_or(0);
+        let pending: bool = db.connection.query_row(
+            "SELECT EXISTS(SELECT 1 FROM outbox WHERE entity_type='calendar' AND entity_id=?1 AND status='pending')",
+            [&id], |row| row.get(0),
+        ).map_err(|error| error.to_string())?;
+        let local: Option<i64> = db
+            .connection
+            .query_row(
+                "SELECT revision FROM calendar_items WHERE id=?1",
+                [&id],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(|error| error.to_string())?;
+        if pending || local.is_some_and(|value| value >= revision) {
+            continue;
+        }
+        let kind = json_text(&payload, "kind")?;
+        let start_date = json_text(&payload, "startDate")?;
+        let end_date = json_text(&payload, "endDate")?;
+        let updated_at = json_text(&payload, "updatedAt")?;
+        db.connection.execute(
+            "INSERT INTO calendar_items(id,payload,kind,start_date,end_date,task_id,project_id,revision,updated_at,deleted_at) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload,kind=excluded.kind,start_date=excluded.start_date,end_date=excluded.end_date,task_id=excluded.task_id,project_id=excluded.project_id,revision=excluded.revision,updated_at=excluded.updated_at,deleted_at=excluded.deleted_at",
+            params![id,payload.to_string(),kind,start_date,end_date,payload.get("taskId").and_then(|v|v.as_str()),payload.get("projectId").and_then(|v|v.as_str()),revision,updated_at,payload.get("deletedAt").and_then(|v|v.as_str())],
+        ).map_err(|error| error.to_string())?;
+        pulled += 1;
+    }
+    Ok(pulled)
+}
+
 fn firestore_timestamp(value: &serde_json::Value) -> String {
     value
         .get("fields")
@@ -1346,6 +1396,7 @@ async fn sync_now(
         let collection = match event.entity_type.as_str() {
             "document" => "documents",
             "task" => "tasks",
+            "calendar" => "calendar",
             _ => return Err("Desteklenmeyen desktop sync entity.".to_owned()),
         };
         let url = format!("https://firestore.googleapis.com/v1/projects/{project_id}/databases/(default)/documents/users/{}/{}/{}", session.uid, collection, event.entity_id);
@@ -1457,6 +1508,27 @@ async fn sync_now(
         pulled += apply_remote_tasks(&database, tasks)?;
     } else if task_response.status() != reqwest::StatusCode::NOT_FOUND {
         return Err(firebase_error(task_response).await);
+    }
+    let calendar_url = format!("https://firestore.googleapis.com/v1/projects/{project_id}/databases/(default)/documents/users/{}/calendar?pageSize=100", session.uid);
+    let calendar_response = client
+        .get(calendar_url)
+        .bearer_auth(&session.id_token)
+        .send()
+        .await
+        .map_err(|error| format!("Firebase connection failed: {error}"))?;
+    if calendar_response.status().is_success() {
+        let body = calendar_response
+            .json::<serde_json::Value>()
+            .await
+            .map_err(|error| error.to_string())?;
+        let items = body
+            .get("documents")
+            .and_then(|value| value.as_array())
+            .map(Vec::as_slice)
+            .unwrap_or(&[]);
+        pulled += apply_remote_calendar(&database, items)?;
+    } else if calendar_response.status() != reqwest::StatusCode::NOT_FOUND {
+        return Err(firebase_error(calendar_response).await);
     }
     Ok(SyncSummary {
         pushed,
