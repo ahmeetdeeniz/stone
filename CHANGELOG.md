@@ -8,8 +8,9 @@ tag, so no release date or semantic version is claimed.
 ### Added
 
 - Local-first calendar records and scheduled task blocks, timezone/DST-safe domain logic, bounded
-  recurrence/occurrence exceptions, mobile Agenda, Windows planning workspace, Firebase rules,
-  workspace/ICS export and revision-safe provider-neutral MCP tools.
+  recurrence/occurrence exceptions and explicit edit scopes, mobile Agenda/week navigation,
+  Windows month/week/day/Agenda with drag/move/resize, Firebase rules, workspace-calendar and
+  reviewed ICS import/export, and revision-safe provider-neutral MCP tools.
 
 - Local-first Tasks & Planning Core across mobile and Windows: standalone and Markdown-backed
   tasks, recurrence, subtasks, project links, Today/Upcoming/Overdue/Completed views, Firebase sync,
@@ -30,5 +31,6 @@ tag, so no release date or semantic version is claimed.
 - Physical Android/iPhone/tablet, private TestFlight, final visual/accessibility, and live
   credential-restart acceptance remain pending.
 - Desktop does not provide complete mobile project/drawing/recovery parity.
-- Task due times and events do not schedule native notifications. Advanced calendar interaction,
-  focus analytics and native widgets remain planned rather than implemented.
+- Task due times and events do not schedule native notifications. Full-workspace restore beyond
+  calendar data, Agenda virtualization, focus analytics and native widgets remain planned rather
+  than implemented.

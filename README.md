@@ -73,16 +73,19 @@ presented as product evidence.
 
 ### Calendar and Agenda
 
-- Mobile day Agenda and quick event creation; Windows calendar workspace with day navigation,
-  Agenda, date jump and task scheduling
+- Mobile Agenda/day experience with compact week navigation, full event editing, task scheduling,
+  project milestones, due-task signals, and reviewed `.ics` import/export
+- Windows month/week/day/Agenda views with all-day rows, overlap layout, current-time indicator,
+  date jump, local filtering, task drag/drop, and keyboard-accessible move/resize alternatives
 - One task can have multiple scheduled work blocks without changing its due date or completion;
   removing a block does not delete the task
 - UTC instants plus intended IANA timezone for timed events; date-only inclusive boundaries for
   all-day events; deterministic DST gap/repeated-hour handling
 - Bounded daily, weekday, weekly, monthly and custom recurrence with stable occurrence identities
   and exceptions in the shared domain
-- Workspace JSON and standards-conscious `.ics` import/export subset for basic VEVENT, all-day,
-  supported recurrence and cancellation dates
+- Explicit occurrence/future/series recurrence editing; workspace-calendar restore and a
+  standards-conscious `.ics` subset for basic VEVENT, all-day, supported recurrence and
+  cancellation dates
 - No native reminders, external calendar accounts, invitations, focus timer or widgets
 
 ### Desktop, GitHub, and MCP
@@ -92,18 +95,18 @@ presented as product evidence.
 - GitHub Device Flow, repository listing/linking, clone, pull, status, reviewed commit/push, and
   restore; destructive Git operations are intentionally excluded
 - Provider-neutral remote MCP service with OAuth, scoped tools, revisions, idempotency, audit
-  records and bounded task CRUD/Today/Overdue tools; deployment/provider publication is
-  operator-owned
+  records, bounded task CRUD/Today/Overdue, calendar/Agenda and safe recurrence-scope tools;
+  deployment/provider publication is operator-owned
 
 ## Platform and parity
 
-| Surface       | Implemented                                                 | Automated evidence                                       | Manual status / limits                                                      |
-| ------------- | ----------------------------------------------------------- | -------------------------------------------------------- | --------------------------------------------------------------------------- |
-| Windows 10/11 | Editor, local files, sync, project summaries, Today, GitHub | Tests, web build, Rust checks, prior NSIS install/launch | Final visual/accessibility pass and live credential restart recheck pending |
-| Android       | Full mobile workspace, projects, sync, ink                  | Expo Doctor/export and unit/integration/rules tests      | Signed APK on a physical device pending                                     |
-| iOS           | Same React Native mobile implementation                     | Expo Doctor/iOS export                                   | Native private TestFlight and physical iPhone validation pending            |
-| Tablet/stylus | Responsive ink implementation                               | Schema, gesture, persistence, and large-fixture tests    | Physical Android tablet/iPad stylus validation pending                      |
-| MCP           | Provider-neutral server contract                            | Typecheck, tests, verifier, build                        | Hosting, credentials, and provider connection are operator tasks            |
+| Surface       | Implemented                                        | Automated evidence                                       | Manual status / limits                                                      |
+| ------------- | -------------------------------------------------- | -------------------------------------------------------- | --------------------------------------------------------------------------- |
+| Windows 10/11 | Editor, local files, sync, calendar, Today, GitHub | Tests, web build, Rust checks, prior NSIS install/launch | Final visual/accessibility pass and live credential restart recheck pending |
+| Android       | Full mobile workspace, projects, sync, ink         | Expo Doctor/export and unit/integration/rules tests      | Signed APK on a physical device pending                                     |
+| iOS           | Same React Native mobile implementation            | Expo Doctor/iOS export                                   | Native private TestFlight and physical iPhone validation pending            |
+| Tablet/stylus | Responsive ink implementation                      | Schema, gesture, persistence, and large-fixture tests    | Physical Android tablet/iPad stylus validation pending                      |
+| MCP           | Provider-neutral server contract                   | Typecheck, tests, verifier, build                        | Hosting, credentials, and provider connection are operator tasks            |
 
 “Implemented” does not mean production-certified. Windows lacks mobile project editing/Kanban,
 drawing, trash, revision, and conflict UI parity. macOS/Linux desktop apps are not supported.
@@ -184,13 +187,13 @@ private notes in public issues.
   backend are not available.
 - MCP hosting and provider publication are not automatic.
 - Due times and calendar records do not schedule operating-system notifications.
-- Calendar recurrence editing UI, polished overlap/resize/drag interactions, focus
+- Full-workspace restore beyond the calendar segment, Agenda virtualization, focus
   timers/analytics and native widgets remain incomplete.
 
 ## Roadmap
 
-Possible post-preview directions include richer calendar interaction, reminder notifications, a
-focus timer, Android/iOS widgets, improved tablet layouts, and richer revision restore. They are not
+Possible post-preview directions include reminder notifications, a focus timer, Android/iOS
+widgets, improved tablet layouts, Agenda virtualization, and richer revision restore. They are not
 implemented commitments.
 
 ## Contributing, support, and license
