@@ -34,18 +34,21 @@ export default function GithubPanel() {
   const [selectedPaths, setSelectedPaths] = useState<Set<string>>(new Set());
   const [commitMessage, setCommitMessage] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
+  const [storedConnectionFailed, setStoredConnectionFailed] = useState(false);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     void desktopApi
       .githubStatus()
       .then((currentAccount) => {
+        setStoredConnectionFailed(false);
         setAccount(currentAccount);
         if (currentAccount) void loadPage(1);
       })
-      .catch((error: unknown) =>
-        setNotice(`Kayıtlı GitHub bağlantısı doğrulanamadı: ${toMessage(error)}`),
-      );
+      .catch((error: unknown) => {
+        setStoredConnectionFailed(true);
+        setNotice(`Kayıtlı GitHub bağlantısı doğrulanamadı: ${toMessage(error)}`);
+      });
     void desktopApi
       .githubListLinks()
       .then(setLinks)
@@ -117,6 +120,7 @@ export default function GithubPanel() {
     setKnownRepos(new Map());
     setSelected(new Set());
     setDevice(null);
+    setStoredConnectionFailed(false);
     setNotice("GitHub bağlantısı kaldırıldı.");
   }
 
@@ -294,6 +298,11 @@ export default function GithubPanel() {
         >
           {connecting ? "GitHub bekleniyor…" : "GitHub hesabını bağla"}
         </button>
+        {storedConnectionFailed && (
+          <button className="secondary-button" onClick={() => void disconnect()}>
+            Geçersiz kayıtlı bağlantıyı temizle
+          </button>
+        )}
         {gitError && <p className="error-text">{gitError}</p>}
         {notice && <p className="hint">{notice}</p>}
       </section>

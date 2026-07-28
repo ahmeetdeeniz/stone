@@ -3,6 +3,12 @@ import { EditorView, highlightActiveLine } from "@codemirror/view";
 import { createEditorState } from "@stone/editor";
 import { normalizeMarkdown } from "@stone/markdown";
 import { listen } from "@tauri-apps/api/event";
+import {
+  projectPriorityLabels,
+  projectStatusLabels,
+  type ProjectPriority,
+  type ProjectStatus,
+} from "@stone/domain";
 import GithubPanel from "./GithubPanel";
 import noteIcon from "../../../Icons/note-pencil.png";
 import projectIcon from "../../../Icons/projector-screen-chart.png";
@@ -687,10 +693,13 @@ function ProjectOverview({
         >
           <div className="project-card-heading">
             <strong>{project.title}</strong>
-            <span className="status-badge">{project.status}</span>
+            <span className="status-badge">
+              {projectStatusLabels[project.status as ProjectStatus] ?? project.status}
+            </span>
           </div>
           <span>
-            {project.completedTasks}/{project.totalTasks} görev · {project.priority} öncelik
+            {project.completedTasks}/{project.totalTasks} görev ·{" "}
+            {projectPriorityLabels[project.priority as ProjectPriority] ?? project.priority} öncelik
           </span>
           <progress
             max={Math.max(1, project.totalTasks)}
