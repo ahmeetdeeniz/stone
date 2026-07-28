@@ -8,9 +8,9 @@ import { AppProvider } from "../src/providers/app-provider";
 import { useTheme } from "../src/design/theme";
 
 function RootNavigator() {
-  const loaded = useStoneFonts();
+  const { ready } = useStoneFonts();
   const { mode } = useTheme();
-  if (!loaded) return <LoadingState label="Stone yükleniyor" />;
+  if (!ready) return <LoadingState label="Stone yükleniyor" />;
   return (
     <>
       <StatusBar style={mode === "dark" ? "light" : "dark"} />
