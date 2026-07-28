@@ -682,6 +682,7 @@ function StoneShell({ session, onSignedOut }: { session: AuthSession; onSignedOu
           <TodayOverview
             items={todayItems}
             tasks={tasks}
+            calendarItems={calendarItems}
             recentNotes={recentNotes}
             onOpen={openDocument}
             onOpenTasks={() => setSection("tasks")}
@@ -2009,12 +2010,14 @@ function CalendarEvent({
 function TodayOverview({
   items,
   tasks,
+  calendarItems,
   recentNotes,
   onOpen,
   onOpenTasks,
 }: {
   items: readonly DesktopTodayItem[];
   tasks: readonly DesktopTask[];
+  calendarItems: readonly CalendarItem[];
   recentNotes: readonly DesktopDocument[];
   onOpen: (documentId: string) => void;
   onOpenTasks: () => void;
@@ -2023,6 +2026,19 @@ function TodayOverview({
   const dueTasks = tasks
     .filter((task) => task.state === "open" && task.dueDate && task.dueDate <= today)
     .slice(0, 8);
+  const timeline = buildAgendaItems(calendarItems, [], [], today, today);
+  const scheduledTaskIds = new Set(
+    timeline.filter((item) => item.kind === "task_block").map((item) => item.taskId),
+  );
+  const unscheduled = tasks
+    .filter(
+      (task) =>
+        task.state === "open" &&
+        task.priority === "high" &&
+        !scheduledTaskIds.has(task.id) &&
+        !dueTasks.some((dueTask) => dueTask.id === task.id),
+    )
+    .slice(0, 8);
   return (
     <section className="today-workspace">
       <div className="today-heading">
@@ -2030,6 +2046,20 @@ function TodayOverview({
         <h2 className="brand-heading">Sıradaki önemli şeyler</h2>
         <p className="muted">Blocker, yaklaşan hedef ve sonraki işlerin sakin özeti.</p>
       </div>
+      {timeline.length > 0 ? (
+        <div className="today-section" aria-label="Bugünün zaman çizelgesi">
+          <h3>Bugünün zaman çizelgesi</h3>
+          <div className="today-list">
+            {timeline.map((item) => (
+              <article key={item.id} className="calendar-event">
+                <span>{agendaKindLabel(item.kind)}</span>
+                <strong>{item.title}</strong>
+                <small>{item.sortTime ?? "Tüm gün"}</small>
+              </article>
+            ))}
+          </div>
+        </div>
+      ) : null}
       <div className="today-columns">
         <section className="today-card">
           <h3>Görevler</h3>
@@ -2054,6 +2084,17 @@ function TodayOverview({
               ))}
             </div>
           )}
+          {unscheduled.length > 0 ? (
+            <div className="today-list">
+              <h4>Plansız yüksek öncelik</h4>
+              {unscheduled.map((task) => (
+                <button key={task.id} onClick={onOpenTasks}>
+                  <strong>{task.title}</strong>
+                  <span>Takvimde planla</span>
+                </button>
+              ))}
+            </div>
+          ) : null}
         </section>
         <section className="today-card">
           <h3>Proje odağı</h3>

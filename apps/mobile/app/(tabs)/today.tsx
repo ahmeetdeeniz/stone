@@ -2,7 +2,13 @@ import * as Crypto from "expo-crypto";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, View } from "react-native";
-import type { CalendarItem, Task, TaskListOptions, TodayItem } from "@stone/domain";
+import {
+  buildAgendaItems,
+  type AgendaItem,
+  type Task,
+  type TaskListOptions,
+  type TodayItem,
+} from "@stone/domain";
 import { ResponsiveContent } from "../../src/components/responsive";
 import { EmptyState, ErrorState, LoadingState } from "../../src/components/states";
 import { Screen, StoneButton, StoneInput, StoneText, Surface } from "../../src/components/ui";
@@ -26,7 +32,7 @@ export default function TodayScreen() {
   const { taskUseCases, projectUseCases, calendar, deviceId } = useAppServices();
   const [tasks, setTasks] = useState<readonly Task[]>([]);
   const [signals, setSignals] = useState<readonly TodayItem[]>([]);
-  const [calendarItems, setCalendarItems] = useState<readonly CalendarItem[]>([]);
+  const [agendaItems, setAgendaItems] = useState<readonly AgendaItem[]>([]);
   const [capture, setCapture] = useState("");
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<ViewFilter>("today");
@@ -52,7 +58,7 @@ export default function TodayScreen() {
       ]);
       setTasks(nextTasks);
       setSignals(nextSignals.filter((item) => item.kind !== "task"));
-      setCalendarItems(nextCalendar);
+      setAgendaItems(buildAgendaItems(nextCalendar, [], [], today, today));
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Planlama görünümü yüklenemedi.");
     } finally {
@@ -165,23 +171,16 @@ export default function TodayScreen() {
               </Pressable>
             ))}
           </ScrollView>
-          {filter === "today" && calendarItems.length > 0 ? (
+          {filter === "today" && agendaItems.length > 0 ? (
             <View style={styles.signals}>
               <StoneText variant="title3">Bugünün zaman çizelgesi</StoneText>
-              {calendarItems.map((item) => (
+              {agendaItems.map((item) => (
                 <Surface key={item.id}>
-                  <StoneText variant="caption">
-                    {item.kind === "task_block"
-                      ? "Planlanmış görev"
-                      : item.allDay
-                        ? "Tüm gün"
-                        : "Etkinlik"}
-                  </StoneText>
+                  <StoneText variant="caption">{agendaLabel(item.kind)}</StoneText>
                   <StoneText>{item.title}</StoneText>
                   <StoneText variant="caption">
-                    {item.allDay
-                      ? item.startDate
-                      : `${item.startAt?.slice(11, 16)} – ${item.endAt?.slice(11, 16)} · ${item.timezone}`}
+                    {item.sortTime ?? "Tüm gün"}
+                    {item.completed ? " · Tamamlandı" : ""}
                   </StoneText>
                 </Surface>
               ))}
@@ -237,6 +236,15 @@ export default function TodayScreen() {
       </ScrollView>
     </Screen>
   );
+}
+
+function agendaLabel(kind: AgendaItem["kind"]): string {
+  return {
+    event: "Etkinlik",
+    task_block: "Planlanmış görev bloğu",
+    task_due: "Görev son tarihi",
+    project_milestone: "Proje hedef tarihi",
+  }[kind];
 }
 
 function TaskRow({
