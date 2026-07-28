@@ -1,4 +1,4 @@
-import { instantToZonedWallTime, type CalendarItem } from "@stone/domain";
+import { instantToZonedWallTime, zonedWallTimeToInstant, type CalendarItem } from "@stone/domain";
 
 export interface CalendarDay {
   date: string;
@@ -86,6 +86,43 @@ export function layoutTimedItems(
     column: value.column,
     columns: value.columns,
   }));
+}
+
+export function shiftTimedCalendarItem(
+  item: CalendarItem,
+  startDeltaMinutes: number,
+  endDeltaMinutes: number,
+): CalendarItem {
+  if (!item.startAt || !item.endAt) throw new Error("Timed calendar item is required.");
+  const startAt = new Date(Date.parse(item.startAt) + startDeltaMinutes * 60_000).toISOString();
+  const endAt = new Date(Date.parse(item.endAt) + endDeltaMinutes * 60_000).toISOString();
+  if (Date.parse(endAt) <= Date.parse(startAt))
+    throw new Error("Calendar end must follow its start.");
+  return {
+    ...item,
+    startAt,
+    endAt,
+    startDate: instantToZonedWallTime(startAt, item.timezone).slice(0, 10),
+    endDate: instantToZonedWallTime(endAt, item.timezone).slice(0, 10),
+  };
+}
+
+export function moveTimedCalendarItemToSlot(
+  item: CalendarItem,
+  targetDate: string,
+  targetTime: string,
+): CalendarItem {
+  if (!item.startAt || !item.endAt) throw new Error("Timed calendar item is required.");
+  const duration = Date.parse(item.endAt) - Date.parse(item.startAt);
+  const startAt = zonedWallTimeToInstant(targetDate, targetTime, item.timezone, "earlier");
+  const endAt = new Date(Date.parse(startAt) + duration).toISOString();
+  return {
+    ...item,
+    startDate: targetDate,
+    endDate: instantToZonedWallTime(endAt, item.timezone).slice(0, 10),
+    startAt,
+    endAt,
+  };
 }
 
 function wallMinutes(

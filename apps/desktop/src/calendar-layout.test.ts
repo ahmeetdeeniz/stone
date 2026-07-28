@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { CalendarItem } from "@stone/domain";
-import { layoutTimedItems, monthGrid, weekDates } from "./calendar-layout";
+import {
+  layoutTimedItems,
+  monthGrid,
+  moveTimedCalendarItemToSlot,
+  shiftTimedCalendarItem,
+  weekDates,
+} from "./calendar-layout";
 
 function item(id: string, start: string, end: string): CalendarItem {
   return {
@@ -65,5 +71,25 @@ describe("desktop calendar layout", () => {
     );
     expect(values.map((value) => value.column)).toEqual([0, 1, 0]);
     expect(values[0]?.columns).toBe(2);
+  });
+  it("moves an overnight item while preserving duration and local dates", () => {
+    const source = item("overnight", "2026-03-02T21:30:00.000Z", "2026-03-03T00:30:00.000Z");
+    const moved = moveTimedCalendarItemToSlot(source, "2026-03-05", "23:00");
+    expect(moved).toMatchObject({
+      startDate: "2026-03-05",
+      endDate: "2026-03-06",
+      startAt: "2026-03-05T23:00:00.000Z",
+      endAt: "2026-03-06T02:00:00.000Z",
+    });
+  });
+  it("moves and resizes in deterministic 15-minute increments", () => {
+    const shifted = shiftTimedCalendarItem(
+      item("shift", "2026-03-02T09:00:00.000Z", "2026-03-02T10:00:00.000Z"),
+      15,
+      30,
+    );
+    expect(shifted.startAt).toBe("2026-03-02T09:15:00.000Z");
+    expect(shifted.endAt).toBe("2026-03-02T10:30:00.000Z");
+    expect(() => shiftTimedCalendarItem(shifted, 0, -90)).toThrow(/end/u);
   });
 });

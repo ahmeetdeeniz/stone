@@ -5,6 +5,8 @@ import { normalizeMarkdown } from "@stone/markdown";
 import { listen } from "@tauri-apps/api/event";
 import {
   buildAgendaItems,
+  deleteCalendarRecurrence,
+  editCalendarRecurrence,
   expandCalendarOccurrences,
   filterCalendarItems,
   instantToZonedWallTime,
@@ -15,6 +17,7 @@ import {
   type ProjectStatus,
   type AgendaItem,
   type CalendarItem,
+  type CalendarRecurrenceEditScope,
 } from "@stone/domain";
 import GithubPanel from "./GithubPanel";
 import {
@@ -25,7 +28,13 @@ import {
 } from "./project-summary";
 import { transitionSaveState, type SaveState } from "./save-state";
 import { restoreDesktopSession } from "./session-restore";
-import { layoutTimedItems, monthGrid, weekDates } from "./calendar-layout";
+import {
+  layoutTimedItems,
+  monthGrid,
+  moveTimedCalendarItemToSlot,
+  shiftTimedCalendarItem,
+  weekDates,
+} from "./calendar-layout";
 import {
   desktopApi,
   isTauri,
@@ -1120,6 +1129,8 @@ function CalendarWorkspace({
   const [startTime, setStartTime] = useState("09:00");
   const [endTime, setEndTime] = useState("10:00");
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+  const [selectedOccurrenceDate, setSelectedOccurrenceDate] = useState<string | null>(null);
+  const [recurrenceScope, setRecurrenceScope] = useState<CalendarRecurrenceEditScope>("occurrence");
   const [editTitle, setEditTitle] = useState("");
   const [editDescription, setEditDescription] = useState("");
   const [editPlanningNote, setEditPlanningNote] = useState("");
@@ -1185,6 +1196,12 @@ function CalendarWorkspace({
     setEditDescription(selectedItem?.description ?? "");
     setEditPlanningNote(selectedItem?.planningNote ?? "");
   }, [selectedItem]);
+
+  function openCalendarItem(itemId: string, occurrenceDate?: string | null) {
+    setSelectedItemId(itemId);
+    setSelectedOccurrenceDate(occurrenceDate ?? null);
+    setRecurrenceScope("occurrence");
+  }
 
   useEffect(() => {
     void desktopApi
@@ -1255,35 +1272,60 @@ function CalendarWorkspace({
   }
   async function moveOrResize(item: CalendarItem, startDelta: number, endDelta: number) {
     if (!item.startAt || !item.endAt) return;
-    const start = new Date(Date.parse(item.startAt) + startDelta * 60_000).toISOString();
-    const end = new Date(Date.parse(item.endAt) + endDelta * 60_000).toISOString();
-    if (Date.parse(end) <= Date.parse(start)) {
-      onMessage("Bitiş başlangıçtan sonra olmalıdır.");
-      return;
-    }
     try {
-      const saved = await desktopApi.saveCalendarItem({ ...item, startAt: start, endAt: end });
+      const shifted = shiftTimedCalendarItem(item, startDelta, endDelta);
+      const source = items.find((value) => value.id === item.id) ?? item;
+      const next =
+        source.recurrence && item.recurrenceId
+          ? editCalendarRecurrence(
+              source,
+              item.recurrenceId,
+              "occurrence",
+              { startAt: shifted.startAt, endAt: shifted.endAt },
+              crypto.randomUUID(),
+            ).current
+          : { ...source, ...shifted };
+      const saved = await desktopApi.saveCalendarItem(next);
       onChange(items.map((value) => (value.id === saved.id ? saved : value)));
-      onMessage("Takvim kaydı yerel olarak güncellendi.");
+      onMessage(
+        source.recurrence && item.recurrenceId
+          ? "Yalnızca bu tekrar örneği yerel olarak güncellendi."
+          : "Takvim kaydı yerel olarak güncellendi.",
+      );
     } catch (caught) {
       onMessage(toMessage(caught));
     }
   }
-  async function moveToSlot(itemId: string, targetDate: string, targetTime: string) {
-    const item = items.find((value) => value.id === itemId);
-    if (!item?.startAt || !item.endAt) return;
+  async function moveToSlot(
+    itemId: string,
+    occurrenceDate: string | null,
+    targetDate: string,
+    targetTime: string,
+  ) {
+    const source = items.find((value) => value.id === itemId);
+    const item =
+      source && occurrenceDate
+        ? expandCalendarOccurrences(source, occurrenceDate, occurrenceDate)[0]?.item
+        : source;
+    if (!source || !item?.startAt || !item.endAt) return;
     try {
-      const duration = Date.parse(item.endAt) - Date.parse(item.startAt);
-      const startAt = zonedWallTimeToInstant(targetDate, targetTime, item.timezone, "earlier");
-      const endAt = new Date(Date.parse(startAt) + duration).toISOString();
-      const endDate = instantToZonedWallTime(endAt, item.timezone).slice(0, 10);
-      const saved = await desktopApi.saveCalendarItem({
-        ...item,
-        startDate: targetDate,
-        endDate,
-        startAt,
-        endAt,
-      });
+      const moved = moveTimedCalendarItemToSlot(item, targetDate, targetTime);
+      const next =
+        source.recurrence && occurrenceDate
+          ? editCalendarRecurrence(
+              source,
+              occurrenceDate,
+              "occurrence",
+              {
+                startDate: moved.startDate,
+                endDate: moved.endDate,
+                startAt: moved.startAt,
+                endAt: moved.endAt,
+              },
+              crypto.randomUUID(),
+            ).current
+          : { ...source, ...moved };
+      const saved = await desktopApi.saveCalendarItem(next);
       onChange(items.map((value) => (value.id === saved.id ? saved : value)));
       onMessage("Takvim kaydı yeni zamanına taşındı.");
     } catch (caught) {
@@ -1293,13 +1335,34 @@ function CalendarWorkspace({
   async function saveSelected() {
     if (!selectedItem || !editTitle.trim()) return;
     try {
-      const saved = await desktopApi.saveCalendarItem({
-        ...selectedItem,
+      const changes = {
         title: editTitle.trim(),
         description: editDescription.trim() || null,
-        planningNote: editPlanningNote.trim() || null,
-      });
-      onChange(items.map((item) => (item.id === saved.id ? saved : item)));
+      };
+      const mutation =
+        selectedItem.recurrence && selectedOccurrenceDate
+          ? editCalendarRecurrence(
+              selectedItem,
+              selectedOccurrenceDate,
+              recurrenceScope,
+              changes,
+              crypto.randomUUID(),
+            )
+          : {
+              current: {
+                ...selectedItem,
+                ...changes,
+                planningNote: editPlanningNote.trim() || null,
+              },
+              future: null,
+            };
+      const future = mutation.future ? await desktopApi.saveCalendarItem(mutation.future) : null;
+      const saved = await desktopApi.saveCalendarItem(mutation.current);
+      onChange([
+        ...items.map((item) => (item.id === saved.id ? saved : item)),
+        ...(future ? [future] : []),
+      ]);
+      if (future) openCalendarItem(future.id, future.startDate);
       onMessage("Etkinlik ayrıntıları kaydedildi.");
     } catch (caught) {
       onMessage(toMessage(caught));
@@ -1321,7 +1384,7 @@ function CalendarWorkspace({
         recurrenceId: null,
       });
       onChange([...items, saved]);
-      setSelectedItemId(saved.id);
+      openCalendarItem(saved.id);
       onMessage("Takvim kaydı açıkça çoğaltıldı.");
     } catch (caught) {
       onMessage(toMessage(caught));
@@ -1330,9 +1393,26 @@ function CalendarWorkspace({
   async function deleteSelected() {
     if (!selectedItem) return;
     try {
-      const deleted = await desktopApi.deleteCalendarItem(selectedItem.id);
-      onChange(items.map((item) => (item.id === deleted.id ? deleted : item)));
+      if (selectedItem.recurrence && selectedOccurrenceDate) {
+        const mutation = deleteCalendarRecurrence(
+          selectedItem,
+          selectedOccurrenceDate,
+          recurrenceScope,
+          new Date().toISOString(),
+          crypto.randomUUID(),
+        );
+        const future = mutation.future ? await desktopApi.saveCalendarItem(mutation.future) : null;
+        const current = await desktopApi.saveCalendarItem(mutation.current);
+        onChange([
+          ...items.map((item) => (item.id === current.id ? current : item)),
+          ...(future ? [future] : []),
+        ]);
+      } else {
+        const deleted = await desktopApi.deleteCalendarItem(selectedItem.id);
+        onChange(items.map((item) => (item.id === deleted.id ? deleted : item)));
+      }
       setSelectedItemId(null);
+      setSelectedOccurrenceDate(null);
       onMessage(
         selectedItem.kind === "task_block"
           ? "Zaman bloğu kaldırıldı; görev korunuyor."
@@ -1525,6 +1605,21 @@ function CalendarWorkspace({
                   onChange={(event) => setEditPlanningNote(event.target.value)}
                 />
               </label>
+              {selectedItem.recurrence && selectedOccurrenceDate ? (
+                <label>
+                  Tekrarlanan kayıt kapsamı
+                  <select
+                    value={recurrenceScope}
+                    onChange={(event) =>
+                      setRecurrenceScope(event.target.value as CalendarRecurrenceEditScope)
+                    }
+                  >
+                    <option value="occurrence">Yalnızca bu örnek</option>
+                    <option value="future">Bu ve sonraki örnekler</option>
+                    <option value="series">Tüm seri</option>
+                  </select>
+                </label>
+              ) : null}
               <div className="calendar-event-actions">
                 <button onClick={() => void saveSelected()}>Kaydet</button>
                 <button onClick={() => void duplicateSelected()}>Çoğalt</button>
@@ -1540,7 +1635,7 @@ function CalendarWorkspace({
             days={days as ReturnType<typeof monthGrid>}
             items={visible}
             onSelect={setDate}
-            onOpen={setSelectedItemId}
+            onOpen={openCalendarItem}
           />
         ) : view === "week" ? (
           <TimeGrid
@@ -1551,8 +1646,10 @@ function CalendarWorkspace({
             }
             onMove={(item, minutes) => void moveOrResize(item, minutes, minutes)}
             onResize={(item, minutes) => void moveOrResize(item, 0, minutes)}
-            onEventDrop={(itemId, dropDate, time) => void moveToSlot(itemId, dropDate, time)}
-            onOpen={setSelectedItemId}
+            onEventDrop={(itemId, occurrenceDate, dropDate, time) =>
+              void moveToSlot(itemId, occurrenceDate, dropDate, time)
+            }
+            onOpen={openCalendarItem}
           />
         ) : view === "day" ? (
           <TimeGrid
@@ -1563,11 +1660,13 @@ function CalendarWorkspace({
             }
             onMove={(item, minutes) => void moveOrResize(item, minutes, minutes)}
             onResize={(item, minutes) => void moveOrResize(item, 0, minutes)}
-            onEventDrop={(itemId, dropDate, time) => void moveToSlot(itemId, dropDate, time)}
-            onOpen={setSelectedItemId}
+            onEventDrop={(itemId, occurrenceDate, dropDate, time) =>
+              void moveToSlot(itemId, occurrenceDate, dropDate, time)
+            }
+            onOpen={openCalendarItem}
           />
         ) : (
-          <AgendaCalendar items={agendaItems} onOpen={setSelectedItemId} />
+          <AgendaCalendar items={agendaItems} onOpen={openCalendarItem} />
         )}
       </div>
     </section>
@@ -1583,7 +1682,7 @@ function MonthCalendar({
   days: ReturnType<typeof monthGrid>;
   items: readonly CalendarItem[];
   onSelect: (date: string) => void;
-  onOpen: (itemId: string) => void;
+  onOpen: (itemId: string, occurrenceDate?: string | null) => void;
 }) {
   return (
     <div className="month-view" role="grid" aria-label="Ay görünümü">
@@ -1614,13 +1713,13 @@ function MonthCalendar({
                 tabIndex={0}
                 onClick={(event) => {
                   event.stopPropagation();
-                  onOpen(item.id);
+                  onOpen(item.id, item.recurrenceId);
                 }}
                 onKeyDown={(event) => {
                   if (event.key !== "Enter" && event.key !== " ") return;
                   event.preventDefault();
                   event.stopPropagation();
-                  onOpen(item.id);
+                  onOpen(item.id, item.recurrenceId);
                 }}
               >
                 {item.kind === "task_block" ? "Görev · " : ""}
@@ -1649,8 +1748,8 @@ function TimeGrid({
   onTaskDrop: (taskId: string, date: string, time: string) => void;
   onMove: (item: CalendarItem, minutes: number) => void;
   onResize: (item: CalendarItem, minutes: number) => void;
-  onEventDrop: (itemId: string, date: string, time: string) => void;
-  onOpen: (itemId: string) => void;
+  onEventDrop: (itemId: string, occurrenceDate: string | null, date: string, time: string) => void;
+  onOpen: (itemId: string, occurrenceDate?: string | null) => void;
 }) {
   return (
     <div
@@ -1692,6 +1791,8 @@ function TimeGrid({
           onDrop={(event) => {
             const taskId = event.dataTransfer.getData("text/stone-task");
             const itemId = event.dataTransfer.getData("text/stone-calendar");
+            const occurrenceDate =
+              event.dataTransfer.getData("text/stone-calendar-occurrence") || null;
             if (!taskId && !itemId) return;
             const bounds = event.currentTarget.getBoundingClientRect();
             const minute = Math.max(
@@ -1700,7 +1801,7 @@ function TimeGrid({
             );
             const time = `${String(Math.floor(minute / 60)).padStart(2, "0")}:${String(minute % 60).padStart(2, "0")}`;
             if (taskId) onTaskDrop(taskId, date, time);
-            else onEventDrop(itemId, date, time);
+            else onEventDrop(itemId, occurrenceDate, date, time);
           }}
         >
           {Array.from({ length: 24 }, (_, hour) => (
@@ -1711,9 +1812,14 @@ function TimeGrid({
               key={`${position.item.id}:${position.item.recurrenceId ?? position.item.startDate}`}
               className="positioned-event"
               draggable
-              onDragStart={(event) =>
-                event.dataTransfer.setData("text/stone-calendar", position.item.id)
-              }
+              onDragStart={(event) => {
+                event.dataTransfer.setData("text/stone-calendar", position.item.id);
+                if (position.item.recurrenceId)
+                  event.dataTransfer.setData(
+                    "text/stone-calendar-occurrence",
+                    position.item.recurrenceId,
+                  );
+              }}
               style={{
                 top: position.top,
                 height: Math.max(28, position.height),
@@ -1740,7 +1846,7 @@ function AgendaCalendar({
   onOpen,
 }: {
   items: readonly AgendaItem[];
-  onOpen: (itemId: string) => void;
+  onOpen: (itemId: string, occurrenceDate?: string | null) => void;
 }) {
   const groups = new Map<string, AgendaItem[]>();
   for (const item of items) groups.set(item.date, [...(groups.get(item.date) ?? []), item]);
@@ -1759,11 +1865,11 @@ function AgendaCalendar({
               tabIndex={item.calendarItemId ? 0 : undefined}
               className="calendar-event"
               aria-label={`${agendaKindLabel(item.kind)}: ${item.title}, ${item.date}`}
-              onClick={() => item.calendarItemId && onOpen(item.calendarItemId)}
+              onClick={() => item.calendarItemId && onOpen(item.calendarItemId, item.date)}
               onKeyDown={(event) => {
                 if (!item.calendarItemId || (event.key !== "Enter" && event.key !== " ")) return;
                 event.preventDefault();
-                onOpen(item.calendarItemId);
+                onOpen(item.calendarItemId, item.date);
               }}
             >
               <span>{agendaKindLabel(item.kind)}</span>
@@ -1798,7 +1904,7 @@ function CalendarEvent({
   item: CalendarItem;
   onMove?: (item: CalendarItem, minutes: number) => void;
   onResize?: (item: CalendarItem, minutes: number) => void;
-  onOpen?: (itemId: string) => void;
+  onOpen?: (itemId: string, occurrenceDate?: string | null) => void;
 }) {
   const start = item.startAt ? instantToZonedWallTime(item.startAt, item.timezone).slice(11) : null;
   const end = item.endAt ? instantToZonedWallTime(item.endAt, item.timezone).slice(11) : null;
@@ -1808,11 +1914,11 @@ function CalendarEvent({
       tabIndex={0}
       aria-label={`${item.kind === "task_block" ? "Zaman bloğu" : "Etkinlik"} ${item.title}, ${item.startDate}`}
       className={`calendar-event category-${item.category}`}
-      onClick={() => onOpen?.(item.id)}
+      onClick={() => onOpen?.(item.id, item.recurrenceId)}
       onKeyDown={(event) => {
         if (!onOpen || (event.key !== "Enter" && event.key !== " ")) return;
         event.preventDefault();
-        onOpen(item.id);
+        onOpen(item.id, item.recurrenceId);
       }}
     >
       <span>
