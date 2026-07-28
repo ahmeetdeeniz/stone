@@ -20,6 +20,10 @@ interface ExportDrawingRow {
   preview_path: string;
 }
 
+interface ExportJsonRow {
+  readonly [key: string]: string | number | null;
+}
+
 export async function exportWorkspace(
   database: StoneDatabase,
   ownerId: string,
@@ -33,7 +37,7 @@ export async function exportWorkspace(
     content: normalizeMarkdown(row.markdown),
   }));
   const manifest = {
-    schema: 1,
+    schema: 2,
     ownerId,
     exportedAt: new Date().toISOString(),
     documents: rows.map((row) => ({
@@ -66,9 +70,23 @@ export async function exportWorkspace(
         mimeType: "image/png",
       });
   }
+  const tasks = await database.getAllAsync<ExportJsonRow>(
+    "SELECT id, schema_version, title, description, state, completed_at, due_date, due_time, timezone, priority, sort_order, tags, project_id, source_document_id, source_block_id, parent_task_id, estimated_minutes, recurrence, recurrence_series_id, occurrence_date, revision, created_at, updated_at, deleted_at, updated_by_device_id FROM tasks WHERE owner_id = ? ORDER BY created_at, id",
+    ownerId,
+  );
+  const occurrences = await database.getAllAsync<ExportJsonRow>(
+    "SELECT id, task_id, series_id, scheduled_date, completed_at, task_snapshot FROM task_occurrences WHERE owner_id = ? ORDER BY scheduled_date, id",
+    ownerId,
+  );
+  const taskExport: ExportedProjectFile = {
+    path: "tasks.json",
+    content: JSON.stringify({ schema: 1, tasks, occurrences }, null, 2),
+    mimeType: "application/json",
+  };
   return [
     ...documents,
     ...assets,
+    taskExport,
     {
       path: "manifest.json",
       content: JSON.stringify(
@@ -79,6 +97,7 @@ export async function exportWorkspace(
             source: `assets/drawings/${drawing.id}.stoneink`,
             preview: `assets/drawings/${drawing.id}.png`,
           })),
+          tasks: "tasks.json",
         },
         null,
         2,

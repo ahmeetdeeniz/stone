@@ -76,6 +76,36 @@ export interface VersionRecord {
   [key: string]: unknown;
 }
 
+export interface TaskRecord {
+  id: string;
+  ownerId: string;
+  schemaVersion: 1;
+  title: string;
+  description: string | null;
+  state: "open" | "completed" | "cancelled";
+  completedAt: string | null;
+  dueDate: string | null;
+  dueTime: string | null;
+  timezone: string;
+  priority: "none" | "low" | "medium" | "high";
+  sortOrder: number;
+  tags: string[];
+  projectId: string | null;
+  sourceDocumentId: string | null;
+  sourceBlockId: string | null;
+  parentTaskId: string | null;
+  estimatedMinutes: number | null;
+  recurrence: Record<string, unknown> | null;
+  recurrenceSeriesId: string | null;
+  occurrenceDate: string | null;
+  revision: number;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt: string | null;
+  updatedByDeviceId: string;
+  [key: string]: unknown;
+}
+
 export interface Page<T> {
   items: readonly T[];
   nextPageToken: string | null;
@@ -102,6 +132,18 @@ export interface ListProjectsOptions {
 
 export interface ListVersionsOptions {
   projectId?: string | undefined;
+  cursorKey?: string | undefined;
+  pageToken?: string | undefined;
+  limit: number;
+}
+
+export interface ListTasksOptions {
+  state?: TaskRecord["state"] | undefined;
+  projectId?: string | undefined;
+  dueBefore?: string | undefined;
+  dueAfter?: string | undefined;
+  search?: string | undefined;
+  includeDeleted?: boolean | undefined;
   cursorKey?: string | undefined;
   pageToken?: string | undefined;
   limit: number;
@@ -159,6 +201,17 @@ export interface VersionWriteInput {
   mutate: (current: VersionRecord | null) => VersionRecord;
 }
 
+export interface TaskWriteInput {
+  ownerId: string;
+  taskId: string;
+  expectedRevision: number;
+  idempotencyKey: string;
+  tool: string;
+  confirmation: Record<string, unknown> | null;
+  inputSummary: Record<string, unknown>;
+  mutate: (current: TaskRecord | null) => TaskRecord;
+}
+
 export interface WriteResult<T> {
   entity: T;
   replayed: boolean;
@@ -172,9 +225,12 @@ export interface StoneStore {
   getProject(ownerId: string, id: string): Promise<ProjectRecord | null>;
   listProjects(ownerId: string, options: ListProjectsOptions): Promise<Page<ProjectRecord>>;
   listVersions(ownerId: string, options: ListVersionsOptions): Promise<Page<VersionRecord>>;
+  getTask(ownerId: string, id: string): Promise<TaskRecord | null>;
+  listTasks(ownerId: string, options: ListTasksOptions): Promise<Page<TaskRecord>>;
   writeDocument(input: DocumentWriteInput): Promise<WriteResult<DocumentRecord>>;
   writeProject(input: ProjectWriteInput): Promise<WriteResult<ProjectRecord>>;
   writeVersion(input: VersionWriteInput): Promise<WriteResult<VersionRecord>>;
+  writeTask(input: TaskWriteInput): Promise<WriteResult<TaskRecord>>;
   listAudit(ownerId: string, limit: number): Promise<readonly AuditEntry[]>;
 }
 

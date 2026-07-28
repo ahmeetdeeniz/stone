@@ -9,6 +9,8 @@ export class SQLitePrivacyRepository {
         "documents_fts",
         "document_drafts",
         "tasks_index",
+        "task_occurrences",
+        "tasks",
         "project_blockers",
         "projects",
         "versions",

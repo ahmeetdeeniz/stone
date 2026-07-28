@@ -10,10 +10,13 @@ import {
   type ListDocumentsOptions,
   type ListProjectsOptions,
   type ListVersionsOptions,
+  type ListTasksOptions,
   type Page,
   type ProjectRecord,
   type ProjectWriteInput,
   type StoneStore,
+  type TaskRecord,
+  type TaskWriteInput,
   type StoredIdempotencyResult,
   type VersionRecord,
   type VersionWriteInput,
@@ -113,6 +116,32 @@ export class FirestoreStoneStore implements StoneStore {
     );
   }
 
+  public async getTask(ownerId: string, id: string): Promise<TaskRecord | null> {
+    const snapshot = await this.entityRef(ownerId, "tasks", id).get();
+    return snapshot.exists ? toTask(snapshot.data()) : null;
+  }
+
+  public async listTasks(ownerId: string, options: ListTasksOptions): Promise<Page<TaskRecord>> {
+    const cursorKey = options.cursorKey ?? "tasks";
+    const query: Query = this.database
+      .collection(`users/${ownerId}/tasks`)
+      .where("ownerId", "==", ownerId)
+      .orderBy("updatedAt", "desc");
+    return this.scan(query, ownerId, cursorKey, options.pageToken, options.limit, toTask, (item) =>
+      Boolean(
+        (options.includeDeleted || !item.deletedAt) &&
+        (!options.state || item.state === options.state) &&
+        (!options.projectId || item.projectId === options.projectId) &&
+        (!options.dueBefore || (item.dueDate && item.dueDate <= options.dueBefore)) &&
+        (!options.dueAfter || (item.dueDate && item.dueDate >= options.dueAfter)) &&
+        (!options.search ||
+          `${item.title}\n${item.description ?? ""}\n${item.tags.join(" ")}`
+            .toLocaleLowerCase()
+            .includes(options.search.toLocaleLowerCase())),
+      ),
+    );
+  }
+
   public writeDocument(input: DocumentWriteInput): Promise<WriteResult<DocumentRecord>> {
     return this.writeEntity("documents", input.documentId, input, input.mutate);
   }
@@ -125,6 +154,10 @@ export class FirestoreStoneStore implements StoneStore {
     return this.writeEntity("versions", input.versionId, input, input.mutate);
   }
 
+  public writeTask(input: TaskWriteInput): Promise<WriteResult<TaskRecord>> {
+    return this.writeEntity("tasks", input.taskId, input, input.mutate);
+  }
+
   public async listAudit(ownerId: string, limit: number): Promise<readonly AuditEntry[]> {
     const snapshot = await this.database
       .collection(`users/${ownerId}/auditLogs`)
@@ -135,7 +168,7 @@ export class FirestoreStoneStore implements StoneStore {
   }
 
   private async writeEntity<
-    T extends DocumentRecord | ProjectRecord | VersionRecord,
+    T extends DocumentRecord | ProjectRecord | VersionRecord | TaskRecord,
     I extends {
       ownerId: string;
       expectedRevision: number;
@@ -146,7 +179,7 @@ export class FirestoreStoneStore implements StoneStore {
       mutate: (current: T | null) => T;
     },
   >(
-    collection: "documents" | "projects" | "versions",
+    collection: "documents" | "projects" | "versions" | "tasks",
     id: string,
     input: I,
     mutate: (current: T | null) => T,
@@ -289,6 +322,7 @@ export class MemoryStoneStore implements StoneStore {
   private readonly documents = new Map<string, DocumentRecord>();
   private readonly projects = new Map<string, ProjectRecord>();
   private readonly versions = new Map<string, VersionRecord>();
+  private readonly tasks = new Map<string, TaskRecord>();
   private readonly idempotency = new Map<string, WriteResult<unknown>>();
   private readonly cursors = new CursorCodec("memory-store-cursor-secret");
 
@@ -302,6 +336,10 @@ export class MemoryStoneStore implements StoneStore {
 
   public seedVersion(version: VersionRecord): void {
     this.versions.set(key(version.ownerId, version.id), structuredClone(version));
+  }
+
+  public seedTask(task: TaskRecord): void {
+    this.tasks.set(key(task.ownerId, task.id), structuredClone(task));
   }
 
   public async getDocument(ownerId: string, id: string): Promise<DocumentRecord | null> {
@@ -371,6 +409,41 @@ export class MemoryStoneStore implements StoneStore {
     );
   }
 
+  public async getTask(ownerId: string, id: string): Promise<TaskRecord | null> {
+    return clone(this.tasks.get(key(ownerId, id)) ?? null);
+  }
+
+  public async listTasks(ownerId: string, options: ListTasksOptions): Promise<Page<TaskRecord>> {
+    const search = options.search?.toLocaleLowerCase();
+    const values = [...this.tasks.values()]
+      .filter((item) => item.ownerId === ownerId)
+      .filter((item) => options.includeDeleted || !item.deletedAt)
+      .filter((item) => !options.state || item.state === options.state)
+      .filter((item) => !options.projectId || item.projectId === options.projectId)
+      .filter(
+        (item) => !options.dueBefore || Boolean(item.dueDate && item.dueDate <= options.dueBefore),
+      )
+      .filter(
+        (item) => !options.dueAfter || Boolean(item.dueDate && item.dueDate >= options.dueAfter),
+      )
+      .filter(
+        (item) =>
+          !search ||
+          `${item.title}\n${item.description ?? ""}\n${item.tags.join(" ")}`
+            .toLocaleLowerCase()
+            .includes(search),
+      )
+      .sort(sortUpdated);
+    return page(
+      values,
+      ownerId,
+      options.cursorKey ?? "tasks",
+      options.pageToken,
+      options.limit,
+      this.cursors,
+    );
+  }
+
   public writeDocument(input: DocumentWriteInput): Promise<WriteResult<DocumentRecord>> {
     return this.write(this.documents, input.documentId, input);
   }
@@ -383,6 +456,10 @@ export class MemoryStoneStore implements StoneStore {
     return this.write(this.versions, input.versionId, input);
   }
 
+  public writeTask(input: TaskWriteInput): Promise<WriteResult<TaskRecord>> {
+    return this.write(this.tasks, input.taskId, input);
+  }
+
   public async listAudit(ownerId: string, limit: number): Promise<readonly AuditEntry[]> {
     return this.audits
       .filter((entry) => entry.ownerId === ownerId)
@@ -390,10 +467,10 @@ export class MemoryStoneStore implements StoneStore {
       .reverse();
   }
 
-  private async write<T extends DocumentRecord | ProjectRecord | VersionRecord>(
+  private async write<T extends DocumentRecord | ProjectRecord | VersionRecord | TaskRecord>(
     values: Map<string, T>,
     id: string,
-    input: DocumentWriteInput | ProjectWriteInput | VersionWriteInput,
+    input: DocumentWriteInput | ProjectWriteInput | VersionWriteInput | TaskWriteInput,
   ): Promise<WriteResult<T>> {
     const idempotencyKey = `${input.ownerId}:${input.idempotencyKey}`;
     const replay = this.idempotency.get(idempotencyKey) as WriteResult<T> | undefined;
@@ -474,6 +551,10 @@ function toProject(value: FirebaseValue | undefined): ProjectRecord {
 
 function toVersion(value: FirebaseValue | undefined): VersionRecord {
   return value as VersionRecord;
+}
+
+function toTask(value: FirebaseValue | undefined): TaskRecord {
+  return value as TaskRecord;
 }
 
 type FirebaseValue = Record<string, unknown>;

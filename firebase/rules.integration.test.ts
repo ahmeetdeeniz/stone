@@ -133,4 +133,52 @@ describe("Firestore owner isolation rules", () => {
     const version = owner.doc("users/owner/versions/version-1");
     await assertFails(version.set({ id: "version-1", ownerId: "owner", revision: 1 }));
   });
+
+  it("isolates versioned task records by owner and rejects malformed fields", async () => {
+    const owner = environment.authenticatedContext("owner").firestore();
+    const other = environment.authenticatedContext("other").firestore();
+    const reference = owner.doc("users/owner/tasks/task-1");
+    const task = {
+      id: "task-1",
+      ownerId: "owner",
+      schemaVersion: 1,
+      title: "Ship Stone",
+      description: null,
+      state: "open",
+      completedAt: null,
+      dueDate: "2026-08-01",
+      dueTime: "09:00",
+      timezone: "Europe/Istanbul",
+      priority: "high",
+      sortOrder: 0,
+      tags: ["release"],
+      projectId: null,
+      sourceDocumentId: null,
+      sourceBlockId: null,
+      parentTaskId: null,
+      estimatedMinutes: 30,
+      recurrence: null,
+      recurrenceSeriesId: null,
+      occurrenceDate: null,
+      revision: 1,
+      createdAt: "2026-07-28T00:00:00.000Z",
+      updatedAt: "2026-07-28T00:00:00.000Z",
+      deletedAt: null,
+      updatedByDeviceId: "device",
+      idempotencyKey: "device:task:task-1:1",
+      lastEventId: "device:task:task-1:1",
+    };
+    await assertSucceeds(reference.set(task));
+    await assertFails(other.doc(reference.path).get());
+    await assertSucceeds(
+      reference.update({
+        ...task,
+        revision: 2,
+        state: "completed",
+        completedAt: "2026-07-28T01:00:00.000Z",
+      }),
+    );
+    await assertFails(reference.update({ ...task, revision: 3, priority: "critical" }));
+    await assertFails(other.doc("users/other/tasks/task-2").set({ ...task, id: "task-2" }));
+  });
 });

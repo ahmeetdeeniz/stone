@@ -112,6 +112,48 @@ service cloud.firestore {
         && request.resource.data.lastEventId is string;
     }
 
+    function validTask(uid, taskId) {
+      return signedIn(uid)
+        && request.resource.data.keys().hasOnly([
+          'id', 'ownerId', 'schemaVersion', 'title', 'description', 'state', 'completedAt',
+          'dueDate', 'dueTime', 'timezone', 'priority', 'sortOrder', 'tags', 'projectId',
+          'sourceDocumentId', 'sourceBlockId', 'parentTaskId', 'estimatedMinutes', 'recurrence',
+          'recurrenceSeriesId', 'occurrenceDate', 'revision', 'createdAt', 'updatedAt', 'deletedAt',
+          'updatedByDeviceId', 'idempotencyKey', 'lastEventId'
+        ])
+        && request.resource.data.id == taskId
+        && request.resource.data.ownerId == uid
+        && request.resource.data.schemaVersion == 1
+        && request.resource.data.title is string
+        && request.resource.data.title.size() > 0
+        && request.resource.data.title.size() <= 512
+        && nullableString(request.resource.data.description)
+        && request.resource.data.state in ['open', 'completed', 'cancelled']
+        && nullableString(request.resource.data.completedAt)
+        && nullableString(request.resource.data.dueDate)
+        && nullableString(request.resource.data.dueTime)
+        && request.resource.data.timezone is string
+        && request.resource.data.priority in ['none', 'low', 'medium', 'high']
+        && request.resource.data.sortOrder is number
+        && request.resource.data.tags is list
+        && request.resource.data.tags.size() <= 100
+        && nullableString(request.resource.data.projectId)
+        && nullableString(request.resource.data.sourceDocumentId)
+        && nullableString(request.resource.data.sourceBlockId)
+        && nullableString(request.resource.data.parentTaskId)
+        && (request.resource.data.estimatedMinutes == null || request.resource.data.estimatedMinutes is int)
+        && (request.resource.data.recurrence == null || request.resource.data.recurrence is map)
+        && nullableString(request.resource.data.recurrenceSeriesId)
+        && nullableString(request.resource.data.occurrenceDate)
+        && request.resource.data.revision is int
+        && request.resource.data.createdAt is string
+        && request.resource.data.updatedAt is string
+        && nullableString(request.resource.data.deletedAt)
+        && request.resource.data.updatedByDeviceId is string
+        && request.resource.data.idempotencyKey is string
+        && request.resource.data.lastEventId is string;
+    }
+
     function validDevice(uid, deviceId) {
       return signedIn(uid)
         && request.resource.data.keys().hasOnly([
@@ -219,6 +261,13 @@ service cloud.firestore {
         allow read: if signedIn(uid);
         allow create: if validVersion(uid, versionId) && ownerCreate(uid);
         allow update: if validVersion(uid, versionId) && ownerUpdate(uid);
+        allow delete: if signedIn(uid) && resource.data.ownerId == uid;
+      }
+
+      match /tasks/{taskId} {
+        allow read: if signedIn(uid);
+        allow create: if validTask(uid, taskId) && ownerCreate(uid);
+        allow update: if validTask(uid, taskId) && ownerUpdate(uid);
         allow delete: if signedIn(uid) && resource.data.ownerId == uid;
       }
 

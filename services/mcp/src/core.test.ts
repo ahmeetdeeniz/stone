@@ -114,4 +114,43 @@ describe("Stone MCP core", () => {
     });
     expect(completed.entity.markdown).toContain("[x]");
   });
+
+  it("provides owner-scoped revision-safe standalone task tools", async () => {
+    const store = new MemoryStoneStore();
+    const service = new StoneMcpService(store, {
+      idFactory: () => "standalone-1",
+      now: () => new Date("2026-07-28T09:00:00.000Z"),
+    });
+    const created = await service.createStandaloneTask(ownerA, {
+      title: "Plan V2",
+      dueDate: "2026-07-28",
+      dueTime: "12:00",
+      timezone: "Europe/Istanbul",
+      priority: "high",
+      tags: ["v2"],
+      expectedRevision: 0,
+      idempotencyKey: "standalone-create-1",
+    });
+    expect(created.entity).toMatchObject({ id: "standalone-1", state: "open", revision: 1 });
+    await expect(service.getTask(ownerB, "standalone-1")).rejects.toThrow("Task not found");
+    expect((await service.getTodayTasks(ownerA, "2026-07-28")).items).toHaveLength(1);
+
+    const completed = await service.setStandaloneTaskState(
+      ownerA,
+      "standalone-1",
+      { expectedRevision: 1, idempotencyKey: "standalone-complete-1" },
+      "completed",
+    );
+    expect(completed.entity).toMatchObject({
+      state: "completed",
+      completedAt: "2026-07-28T09:00:00.000Z",
+      revision: 2,
+    });
+    await expect(
+      service.deleteStandaloneTask(ownerA, "standalone-1", {
+        expectedRevision: 1,
+        idempotencyKey: "standalone-delete-stale",
+      }),
+    ).rejects.toBeInstanceOf(McpRevisionConflictError);
+  });
 });

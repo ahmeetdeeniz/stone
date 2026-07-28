@@ -1,7 +1,7 @@
 import type { ExportedProjectFile } from "@stone/domain";
 
 interface WorkspaceBundle {
-  schema: 1;
+  schema: 1 | 2;
   format: "stone-workspace";
   files: readonly WorkspaceBundleFile[];
 }
@@ -30,7 +30,7 @@ export function serializeWorkspaceBundle(files: readonly ExportedProjectFile[]):
       mimeType: file.mimeType ?? (path.endsWith(".md") ? "text/markdown" : "text/plain"),
     };
   });
-  const bundle: WorkspaceBundle = { schema: 1, format: "stone-workspace", files: normalized };
+  const bundle: WorkspaceBundle = { schema: 2, format: "stone-workspace", files: normalized };
   return `${JSON.stringify(bundle, null, 2)}\n`;
 }
 
@@ -41,7 +41,11 @@ export function parseWorkspaceBundle(source: string): readonly ExportedProjectFi
   } catch {
     throw new Error("Workspace export is not valid JSON.");
   }
-  if (!isRecord(parsed) || parsed.schema !== 1 || parsed.format !== "stone-workspace") {
+  if (
+    !isRecord(parsed) ||
+    (parsed.schema !== 1 && parsed.schema !== 2) ||
+    parsed.format !== "stone-workspace"
+  ) {
     throw new Error("Workspace export schema is not supported.");
   }
   if (!Array.isArray(parsed.files)) throw new Error("Workspace export files are missing.");

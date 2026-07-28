@@ -10,6 +10,7 @@ import { StorageError } from "@stone/domain";
 import { normalizeMarkdown } from "@stone/markdown";
 import type { StoneDatabase } from "./database";
 import { enqueueOutbox } from "./sync";
+import { reindexMarkdownTasks } from "./tasks";
 
 interface DocumentRow {
   id: string;
@@ -69,6 +70,7 @@ export class SQLiteNoteRepository implements NoteRepository {
         );
         await this.insertRevision(document.id, document.revision, markdown, document.updatedAt);
         await this.replaceSearchIndex({ ...document, markdown });
+        await reindexMarkdownTasks(this.database, { ...document, markdown });
         await enqueueOutbox(this.database, {
           ownerId: document.ownerId,
           entityType: "document",
@@ -291,6 +293,7 @@ export class SQLiteNoteRepository implements NoteRepository {
         );
         await this.insertRevision(id, next.revision, next.markdown, now);
         await this.replaceSearchIndex(next);
+        await reindexMarkdownTasks(this.database, next);
         await enqueueOutbox(this.database, {
           ownerId,
           entityType: "document",

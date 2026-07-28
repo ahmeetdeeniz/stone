@@ -107,6 +107,52 @@ export function createMcpServer(service: StoneMcpService): McpServer {
     async (input, extra) => result(await service.getTodayTasks(context(extra), input.date)),
   );
   server.registerTool(
+    "list_today_tasks",
+    {
+      title: "List today's tasks",
+      description: "List standalone and Markdown-backed due or overdue tasks for an ISO date.",
+      inputSchema: { date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u) },
+      annotations: readMeta,
+    },
+    async (input, extra) => result(await service.getTodayTasks(context(extra), input.date)),
+  );
+  server.registerTool(
+    "list_tasks",
+    {
+      title: "List tasks",
+      description: "List the authenticated user's standalone Stone tasks.",
+      inputSchema: {
+        state: z.enum(["open", "completed", "cancelled"]).optional(),
+        projectId: z.string().max(200).optional(),
+        search: z.string().max(200).optional(),
+        ...page,
+      },
+      annotations: readMeta,
+    },
+    async (input, extra) => result(await service.listTasks(context(extra), input)),
+  );
+  server.registerTool(
+    "get_task",
+    {
+      title: "Get task",
+      description: "Read one authenticated user's standalone Stone task.",
+      inputSchema: { taskId: z.string().min(1).max(200) },
+      annotations: readMeta,
+    },
+    async (input, extra) => result(await service.getTask(context(extra), input.taskId)),
+  );
+  server.registerTool(
+    "list_overdue_tasks",
+    {
+      title: "List overdue tasks",
+      description: "List open standalone tasks due before an ISO date.",
+      inputSchema: { date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u), ...page },
+      annotations: readMeta,
+    },
+    async (input, extra) =>
+      result(await service.listOverdueTasks(context(extra), input.date, input)),
+  );
+  server.registerTool(
     "list_blockers",
     {
       title: "List blockers",
@@ -158,7 +204,7 @@ export function createMcpServer(service: StoneMcpService): McpServer {
     async (input, extra) => result(await service.appendToNote(context(extra), input.noteId, input)),
   );
   server.registerTool(
-    "create_task",
+    "create_markdown_task",
     {
       title: "Create task",
       description:
@@ -177,7 +223,7 @@ export function createMcpServer(service: StoneMcpService): McpServer {
     async (input, extra) => result(await service.createTask(context(extra), input.noteId, input)),
   );
   server.registerTool(
-    "complete_task",
+    "complete_markdown_task",
     {
       title: "Complete task",
       description: "Set one Stone task's completion state with revision protection.",
@@ -191,6 +237,101 @@ export function createMcpServer(service: StoneMcpService): McpServer {
     },
     async (input, extra) =>
       result(await service.completeTask(context(extra), input.noteId, input.taskId, input)),
+  );
+  server.registerTool(
+    "create_task",
+    {
+      title: "Create standalone task",
+      description: "Create a local-first standalone Stone task with validated planning metadata.",
+      inputSchema: {
+        title: z.string().min(1).max(512),
+        description: z.string().max(32000).optional(),
+        dueDate: z
+          .string()
+          .regex(/^\d{4}-\d{2}-\d{2}$/u)
+          .optional(),
+        dueTime: z
+          .string()
+          .regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/u)
+          .optional(),
+        timezone: z.string().max(100).optional(),
+        priority: z.enum(["none", "low", "medium", "high"]).optional(),
+        projectId: z.string().max(200).optional(),
+        parentTaskId: z.string().max(200).optional(),
+        tags: z.array(z.string().min(1).max(64)).max(100).optional(),
+        estimatedMinutes: z.number().int().min(1).max(100000).optional(),
+        ...write,
+      },
+      annotations: writeMeta,
+    },
+    async (input, extra) => result(await service.createStandaloneTask(context(extra), input)),
+  );
+  server.registerTool(
+    "update_task",
+    {
+      title: "Update task",
+      description: "Update bounded planning fields with expected-revision protection.",
+      inputSchema: {
+        taskId: z.string().min(1).max(200),
+        title: z.string().min(1).max(512).optional(),
+        description: z.string().max(32000).nullable().optional(),
+        dueDate: z
+          .string()
+          .regex(/^\d{4}-\d{2}-\d{2}$/u)
+          .nullable()
+          .optional(),
+        dueTime: z
+          .string()
+          .regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/u)
+          .nullable()
+          .optional(),
+        timezone: z.string().max(100).optional(),
+        priority: z.enum(["none", "low", "medium", "high"]).optional(),
+        projectId: z.string().max(200).nullable().optional(),
+        parentTaskId: z.string().max(200).nullable().optional(),
+        tags: z.array(z.string().min(1).max(64)).max(100).optional(),
+        estimatedMinutes: z.number().int().min(1).max(100000).nullable().optional(),
+        ...write,
+      },
+      annotations: writeMeta,
+    },
+    async (input, extra) =>
+      result(await service.updateStandaloneTask(context(extra), input.taskId, input)),
+  );
+  server.registerTool(
+    "complete_task",
+    {
+      title: "Complete task",
+      description: "Complete one standalone task with expected-revision protection.",
+      inputSchema: { taskId: z.string().min(1).max(200), ...write },
+      annotations: writeMeta,
+    },
+    async (input, extra) =>
+      result(
+        await service.setStandaloneTaskState(context(extra), input.taskId, input, "completed"),
+      ),
+  );
+  server.registerTool(
+    "reopen_task",
+    {
+      title: "Reopen task",
+      description: "Reopen one standalone task with expected-revision protection.",
+      inputSchema: { taskId: z.string().min(1).max(200), ...write },
+      annotations: writeMeta,
+    },
+    async (input, extra) =>
+      result(await service.setStandaloneTaskState(context(extra), input.taskId, input, "open")),
+  );
+  server.registerTool(
+    "delete_task",
+    {
+      title: "Delete task",
+      description: "Soft-delete one standalone task; the operation remains recoverable.",
+      inputSchema: { taskId: z.string().min(1).max(200), ...write },
+      annotations: writeMeta,
+    },
+    async (input, extra) =>
+      result(await service.deleteStandaloneTask(context(extra), input.taskId, input)),
   );
   server.registerTool(
     "set_next_action",

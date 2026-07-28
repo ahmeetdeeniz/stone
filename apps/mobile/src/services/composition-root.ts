@@ -2,6 +2,7 @@ import {
   NoteUseCases,
   ProjectUseCases,
   SettingsUseCases,
+  TaskUseCases,
   type SettingsRepository,
   type ExportedProjectFile,
 } from "@stone/domain";
@@ -16,6 +17,7 @@ import { SyncEngine, type SyncRunResult } from "@stone/sync";
 import { SQLitePrivacyRepository } from "../infrastructure/storage/privacy";
 import { exportWorkspace } from "../infrastructure/storage/workspace-export";
 import { SQLiteDrawingRepository } from "../infrastructure/storage/drawings";
+import { SQLiteTaskRepository } from "../infrastructure/storage/tasks";
 
 export interface AppServices {
   database: StoneDatabase;
@@ -25,6 +27,8 @@ export interface AppServices {
   noteUseCases: NoteUseCases;
   projects: SQLiteProjectRepository;
   projectUseCases: ProjectUseCases;
+  tasks: SQLiteTaskRepository;
+  taskUseCases: TaskUseCases;
   drawings: SQLiteDrawingRepository;
   device: SQLiteDeviceRepository;
   deviceId: string;
@@ -43,6 +47,8 @@ export async function createAppServices(): Promise<AppServices> {
   const noteUseCases = new NoteUseCases(notes);
   const projects = new SQLiteProjectRepository(database);
   const projectUseCases = new ProjectUseCases(projects);
+  const tasks = new SQLiteTaskRepository(database);
+  const taskUseCases = new TaskUseCases(tasks);
   const drawings = new SQLiteDrawingRepository(database);
   const device = new SQLiteDeviceRepository(database);
   const deviceIdentity = await createDeviceIdentity();
@@ -79,6 +85,8 @@ export async function createAppServices(): Promise<AppServices> {
     noteUseCases,
     projects,
     projectUseCases,
+    tasks,
+    taskUseCases,
     drawings,
     device,
     deviceId: deviceIdentity.id,

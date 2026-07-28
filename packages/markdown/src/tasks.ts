@@ -19,6 +19,7 @@ export function extractMarkdownTasks(markdown: string): readonly MarkdownTaskIte
   const lines = markdown.split("\n");
   let offset = 0;
   let fence: { marker: "`" | "~"; size: number } | null = null;
+  const textOccurrences = new Map<string, number>();
 
   for (let index = 0; index < lines.length; index += 1) {
     const line = lines[index]!;
@@ -37,6 +38,9 @@ export function extractMarkdownTasks(markdown: string): readonly MarkdownTaskIte
         const rawText = match[3]!;
         const idMatch = BLOCK_ID.exec(rawText);
         const text = (idMatch ? rawText.slice(0, idMatch.index) : rawText).trimEnd();
+        const identityText = text.trim().toLocaleLowerCase();
+        const occurrence = (textOccurrences.get(identityText) ?? 0) + 1;
+        textOccurrences.set(identityText, occurrence);
         const checkboxIndex = line.indexOf("[");
         tasks.push({
           blockId: idMatch?.[1]?.toLowerCase() ?? null,
@@ -48,7 +52,7 @@ export function extractMarkdownTasks(markdown: string): readonly MarkdownTaskIte
           checkboxFrom: offset + checkboxIndex,
           checkboxTo: offset + checkboxIndex + 3,
           indentation: match[1]!.length,
-          fingerprint: taskFingerprint(lines, index, text),
+          fingerprint: taskFingerprint(text, match[1]!.length, occurrence),
         });
       }
     }
@@ -78,14 +82,10 @@ export function materializeTaskBlockId(
   return `${markdown.slice(0, task.to)} ^${blockId}${markdown.slice(task.to)}`;
 }
 
-function taskFingerprint(lines: readonly string[], index: number, text: string): string {
-  const previous = normalizedNeighbor(lines[index - 1] ?? "");
-  const next = normalizedNeighbor(lines[index + 1] ?? "");
-  return fnv1a(`${text.trim().toLocaleLowerCase()}\n${previous}\n${next}`);
-}
-
-function normalizedNeighbor(value: string): string {
-  return value.trim().replace(/\s+/gu, " ").slice(0, 160);
+function taskFingerprint(text: string, indentation: number, occurrence: number): string {
+  return fnv1a(
+    `${text.trim().replace(/\s+/gu, " ").toLocaleLowerCase()}\n${indentation}\n${occurrence}`,
+  );
 }
 
 function fnv1a(value: string): string {

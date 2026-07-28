@@ -15,6 +15,7 @@ import {
   type DocumentRecord,
   type ProjectRecord,
   type StoneStore,
+  type TaskRecord,
   type VersionRecord,
   type WriteResult,
 } from "./contracts.js";
@@ -44,6 +45,32 @@ export interface WriteOptions {
   expectedRevision: number;
   idempotencyKey: string;
   confirmation?: { confirmed: boolean; reason?: string | undefined } | undefined;
+}
+
+export interface TaskCreateInput extends WriteOptions {
+  title: string;
+  description?: string | undefined;
+  dueDate?: string | undefined;
+  dueTime?: string | undefined;
+  timezone?: string | undefined;
+  priority?: TaskRecord["priority"] | undefined;
+  projectId?: string | undefined;
+  parentTaskId?: string | undefined;
+  tags?: readonly string[] | undefined;
+  estimatedMinutes?: number | undefined;
+}
+
+export interface TaskUpdateInput extends WriteOptions {
+  title?: string | undefined;
+  description?: string | null | undefined;
+  dueDate?: string | null | undefined;
+  dueTime?: string | null | undefined;
+  timezone?: string | undefined;
+  priority?: TaskRecord["priority"] | undefined;
+  projectId?: string | null | undefined;
+  parentTaskId?: string | null | undefined;
+  tags?: string[] | undefined;
+  estimatedMinutes?: number | null | undefined;
 }
 
 export interface StoneMcpServiceOptions {
@@ -159,8 +186,15 @@ export class StoneMcpService {
   public async getTodayTasks(context: AuthContext, date: string) {
     requireScope(context, "stone.read.tasks");
     if (!/^\d{4}-\d{2}-\d{2}$/u.test(date)) throw new McpInputError("date must be an ISO date.");
-    const documents = await this.store.listDocuments(context.userId, { limit: 100 });
-    const items = documents.items.flatMap((document) =>
+    const [tasks, documents] = await Promise.all([
+      this.store.listTasks(context.userId, {
+        state: "open",
+        dueBefore: date,
+        limit: MAX_RESULTS,
+      }),
+      this.store.listDocuments(context.userId, { limit: 100 }),
+    ]);
+    const markdownItems = documents.items.flatMap((document) =>
       extractTasks(document.markdown)
         .filter(
           (task) =>
@@ -171,7 +205,49 @@ export class StoneMcpService {
         )
         .map((task) => taskSummary(document, task)),
     );
-    return { date, items: items.slice(0, MAX_RESULTS) };
+    return {
+      date,
+      items: [...tasks.items.map(taskSummaryRecord), ...markdownItems].slice(0, MAX_RESULTS),
+      nextPageToken: tasks.nextPageToken,
+    };
+  }
+
+  public async listTasks(
+    context: AuthContext,
+    options: ReadOptions & {
+      state?: TaskRecord["state"] | undefined;
+      projectId?: string | undefined;
+      search?: string | undefined;
+    } = {},
+  ) {
+    requireScope(context, "stone.read.tasks");
+    const page = await this.store.listTasks(context.userId, {
+      state: options.state,
+      projectId: options.projectId,
+      search: options.search,
+      cursorKey: `tasks:${options.state ?? ""}:${options.projectId ?? ""}:${options.search ?? ""}`,
+      pageToken: options.pageToken,
+      limit: boundedLimit(options.limit),
+    });
+    return { items: page.items.map(taskSummaryRecord), nextPageToken: page.nextPageToken };
+  }
+
+  public async getTask(context: AuthContext, taskId: string) {
+    requireScope(context, "stone.read.tasks");
+    return taskSummaryRecord(await this.getTaskRecord(context, taskId));
+  }
+
+  public async listOverdueTasks(context: AuthContext, date: string, options: ReadOptions = {}) {
+    requireScope(context, "stone.read.tasks");
+    assertIsoDate(date, "date");
+    const page = await this.store.listTasks(context.userId, {
+      state: "open",
+      dueBefore: previousDate(date),
+      cursorKey: `overdue:${date}`,
+      pageToken: options.pageToken,
+      limit: boundedLimit(options.limit),
+    });
+    return { date, items: page.items.map(taskSummaryRecord), nextPageToken: page.nextPageToken };
   }
 
   public async listBlockers(context: AuthContext, options: ReadOptions = {}) {
@@ -288,6 +364,105 @@ export class StoneMcpService {
     }).then((result) => ({
       ...result,
       taskId: extractTasks(result.entity.markdown).at(-1)?.id ?? "",
+    }));
+  }
+
+  public async createStandaloneTask(context: AuthContext, input: TaskCreateInput) {
+    requireScope(context, "stone.write.tasks");
+    validateCreate(input);
+    validateTaskInput(input);
+    const id = this.idFactory();
+    const now = this.now().toISOString();
+    return this.store.writeTask({
+      ownerId: context.userId,
+      taskId: id,
+      expectedRevision: 0,
+      idempotencyKey: input.idempotencyKey,
+      tool: "create_task",
+      confirmation: input.confirmation ?? null,
+      inputSummary: { ...safeInput(input), title: input.title, projectId: input.projectId ?? null },
+      mutate: () => ({
+        id,
+        ownerId: context.userId,
+        schemaVersion: 1,
+        title: boundedText(input.title, 512, "title"),
+        description: input.description
+          ? boundedText(input.description, 32_000, "description")
+          : null,
+        state: "open",
+        completedAt: null,
+        dueDate: input.dueDate ?? null,
+        dueTime: input.dueTime ?? null,
+        timezone: input.timezone ?? "UTC",
+        priority: input.priority ?? "none",
+        sortOrder: 0,
+        tags: [...new Set(input.tags ?? [])],
+        projectId: input.projectId ?? null,
+        sourceDocumentId: null,
+        sourceBlockId: null,
+        parentTaskId: input.parentTaskId ?? null,
+        estimatedMinutes: input.estimatedMinutes ?? null,
+        recurrence: null,
+        recurrenceSeriesId: null,
+        occurrenceDate: null,
+        revision: 1,
+        createdAt: now,
+        updatedAt: now,
+        deletedAt: null,
+        updatedByDeviceId: this.device(context),
+      }),
+    });
+  }
+
+  public async updateStandaloneTask(context: AuthContext, taskId: string, input: TaskUpdateInput) {
+    requireScope(context, "stone.write.tasks");
+    const task = await this.getTaskRecord(context, taskId);
+    validateWrite(input);
+    validateTaskInput({ ...task, ...pickTaskChanges(input) });
+    return this.writeTask(context, taskId, input, "update_task", () => ({
+      ...task,
+      ...pickTaskChanges(input),
+      revision: task.revision + 1,
+      updatedAt: this.now().toISOString(),
+      updatedByDeviceId: this.device(context),
+    }));
+  }
+
+  public async setStandaloneTaskState(
+    context: AuthContext,
+    taskId: string,
+    input: WriteOptions,
+    state: "open" | "completed",
+  ) {
+    requireScope(context, "stone.write.tasks");
+    const task = await this.getTaskRecord(context, taskId);
+    validateWrite(input);
+    return this.writeTask(
+      context,
+      taskId,
+      input,
+      state === "completed" ? "complete_task" : "reopen_task",
+      () => ({
+        ...task,
+        state,
+        completedAt: state === "completed" ? this.now().toISOString() : null,
+        revision: task.revision + 1,
+        updatedAt: this.now().toISOString(),
+        updatedByDeviceId: this.device(context),
+      }),
+    );
+  }
+
+  public async deleteStandaloneTask(context: AuthContext, taskId: string, input: WriteOptions) {
+    requireScope(context, "stone.write.tasks");
+    const task = await this.getTaskRecord(context, taskId);
+    validateWrite(input);
+    return this.writeTask(context, taskId, input, "delete_task", () => ({
+      ...task,
+      deletedAt: this.now().toISOString(),
+      revision: task.revision + 1,
+      updatedAt: this.now().toISOString(),
+      updatedByDeviceId: this.device(context),
     }));
   }
 
@@ -502,6 +677,12 @@ export class StoneMcpService {
     return project;
   }
 
+  private async getTaskRecord(context: AuthContext, id: string): Promise<TaskRecord> {
+    const task = await this.store.getTask(context.userId, boundedText(id, 200, "id"));
+    if (!task || task.deletedAt) throw new McpNotFoundError("Task not found.");
+    return task;
+  }
+
   private writeDocument(
     context: AuthContext,
     id: string,
@@ -540,6 +721,25 @@ export class StoneMcpService {
     });
   }
 
+  private writeTask(
+    context: AuthContext,
+    id: string,
+    input: WriteOptions,
+    tool: string,
+    mutate: (current: TaskRecord | null) => TaskRecord,
+  ): Promise<WriteResult<TaskRecord>> {
+    return this.store.writeTask({
+      ownerId: context.userId,
+      taskId: id,
+      expectedRevision: input.expectedRevision,
+      idempotencyKey: input.idempotencyKey,
+      tool,
+      confirmation: input.confirmation ?? null,
+      inputSummary: { ...safeInput(input), userId: context.userId },
+      mutate,
+    });
+  }
+
   private device(context: AuthContext): string {
     return `${MCP_DEVICE_PREFIX}${context.clientId}`.slice(0, 120);
   }
@@ -562,6 +762,73 @@ function safeInput(input: WriteOptions): Record<string, unknown> {
     idempotencyKey: input.idempotencyKey.slice(0, 80),
     confirmation: input.confirmation ?? null,
   };
+}
+
+function validateTaskInput(input: {
+  title: string;
+  dueDate?: string | null | undefined;
+  dueTime?: string | null | undefined;
+  timezone?: string | undefined;
+  priority?: TaskRecord["priority"] | undefined;
+  tags?: readonly string[] | undefined;
+  estimatedMinutes?: number | null | undefined;
+}): void {
+  boundedText(input.title, 512, "title");
+  if (input.dueDate) assertIsoDate(input.dueDate, "dueDate");
+  if (input.dueTime && !/^(?:[01]\d|2[0-3]):[0-5]\d$/u.test(input.dueTime))
+    throw new McpInputError("dueTime must be HH:mm.");
+  if (input.timezone) {
+    try {
+      new Intl.DateTimeFormat("en-US", { timeZone: input.timezone }).format(new Date(0));
+    } catch {
+      throw new McpInputError("timezone must be a valid IANA timezone.");
+    }
+  }
+  if (input.priority && !["none", "low", "medium", "high"].includes(input.priority))
+    throw new McpInputError("priority is invalid.");
+  if ((input.tags?.length ?? 0) > 100 || input.tags?.some((tag) => !tag.trim() || tag.length > 64))
+    throw new McpInputError("tags are invalid.");
+  if (
+    input.estimatedMinutes !== undefined &&
+    input.estimatedMinutes !== null &&
+    (!Number.isInteger(input.estimatedMinutes) ||
+      input.estimatedMinutes < 1 ||
+      input.estimatedMinutes > 100_000)
+  )
+    throw new McpInputError("estimatedMinutes is invalid.");
+}
+
+function assertIsoDate(value: string, name: string): void {
+  if (
+    !/^\d{4}-\d{2}-\d{2}$/u.test(value) ||
+    new Date(`${value}T00:00:00.000Z`).toISOString().slice(0, 10) !== value
+  )
+    throw new McpInputError(`${name} must be an ISO date.`);
+}
+
+function previousDate(value: string): string {
+  const date = new Date(`${value}T00:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() - 1);
+  return date.toISOString().slice(0, 10);
+}
+
+function pickTaskChanges(input: TaskUpdateInput): Partial<TaskRecord> {
+  const result: Partial<TaskRecord> = {};
+  for (const key of [
+    "title",
+    "description",
+    "dueDate",
+    "dueTime",
+    "timezone",
+    "priority",
+    "projectId",
+    "parentTaskId",
+    "tags",
+    "estimatedMinutes",
+  ] as const) {
+    if (input[key] !== undefined) Object.assign(result, { [key]: input[key] });
+  }
+  return result;
 }
 
 function boundedText(value: string, maxLength: number, name: string): string {
@@ -654,5 +921,30 @@ function taskSummary(document: DocumentRecord, task: MarkdownTask) {
     blocked: task.metadata?.blocked === true,
     blocker: task.metadata?.blocker ?? null,
     canceled: task.canceled,
+  };
+}
+
+function taskSummaryRecord(task: TaskRecord) {
+  return {
+    id: task.id,
+    title: task.title,
+    description: task.description,
+    state: task.state,
+    completedAt: task.completedAt,
+    dueDate: task.dueDate,
+    dueTime: task.dueTime,
+    timezone: task.timezone,
+    priority: task.priority,
+    tags: task.tags,
+    projectId: task.projectId,
+    sourceDocumentId: task.sourceDocumentId,
+    sourceBlockId: task.sourceBlockId,
+    parentTaskId: task.parentTaskId,
+    estimatedMinutes: task.estimatedMinutes,
+    recurrence: task.recurrence,
+    recurrenceSeriesId: task.recurrenceSeriesId,
+    occurrenceDate: task.occurrenceDate,
+    revision: task.revision,
+    updatedAt: task.updatedAt,
   };
 }

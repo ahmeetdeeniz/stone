@@ -175,6 +175,9 @@ export class SQLiteSyncStore implements SyncLocalStore {
         case "version":
           await this.applyVersion(change);
           break;
+        case "task":
+          await this.applyTask(change);
+          break;
         case "device":
           await this.applyDevice(change);
           break;
@@ -483,6 +486,40 @@ export class SQLiteSyncStore implements SyncLocalStore {
     );
   }
 
+  private async applyTask(change: RemoteChange): Promise<void> {
+    const p = change.payload;
+    await this.database.runAsync(
+      "INSERT INTO tasks (id, owner_id, schema_version, title, description, state, completed_at, due_date, due_time, timezone, priority, sort_order, tags, project_id, source_document_id, source_block_id, source_fingerprint, parent_task_id, estimated_minutes, recurrence, recurrence_series_id, occurrence_date, revision, created_at, updated_at, deleted_at, updated_by_device_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET schema_version=excluded.schema_version, title=excluded.title, description=excluded.description, state=excluded.state, completed_at=excluded.completed_at, due_date=excluded.due_date, due_time=excluded.due_time, timezone=excluded.timezone, priority=excluded.priority, sort_order=excluded.sort_order, tags=excluded.tags, project_id=excluded.project_id, source_document_id=excluded.source_document_id, source_block_id=excluded.source_block_id, parent_task_id=excluded.parent_task_id, estimated_minutes=excluded.estimated_minutes, recurrence=excluded.recurrence, recurrence_series_id=excluded.recurrence_series_id, occurrence_date=excluded.occurrence_date, revision=excluded.revision, created_at=excluded.created_at, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, updated_by_device_id=excluded.updated_by_device_id",
+      bindValue(p.id),
+      bindValue(p.ownerId),
+      bindValue(p.schemaVersion),
+      bindValue(p.title),
+      bindValue(p.description),
+      bindValue(p.state),
+      bindValue(p.completedAt),
+      bindValue(p.dueDate),
+      bindValue(p.dueTime),
+      bindValue(p.timezone),
+      bindValue(p.priority),
+      bindValue(p.sortOrder),
+      JSON.stringify(p.tags ?? []),
+      bindValue(p.projectId),
+      bindValue(p.sourceDocumentId),
+      bindValue(p.sourceBlockId),
+      null,
+      bindValue(p.parentTaskId),
+      bindValue(p.estimatedMinutes),
+      p.recurrence ? JSON.stringify(p.recurrence) : null,
+      bindValue(p.recurrenceSeriesId),
+      bindValue(p.occurrenceDate),
+      bindValue(p.revision),
+      bindValue(p.createdAt),
+      bindValue(p.updatedAt),
+      bindValue(p.deletedAt),
+      bindValue(p.updatedByDeviceId),
+    );
+  }
+
   private async applyDevice(change: RemoteChange): Promise<void> {
     const p = change.payload;
     await this.database.runAsync(
@@ -621,6 +658,8 @@ export class SQLiteSyncStore implements SyncLocalStore {
         return this.applyProject(change);
       case "version":
         return this.applyVersion(change);
+      case "task":
+        return this.applyTask(change);
       case "device":
         return this.applyDevice(change);
       case "settings":
@@ -684,6 +723,8 @@ function tableForEntity(entityType: SyncEntityType): string {
       return "projects";
     case "version":
       return "versions";
+    case "task":
+      return "tasks";
     case "device":
       return "devices";
     case "settings":
@@ -754,6 +795,36 @@ function normalizeSqlPayload(
       totalTasks: row.total_tasks,
       revision: row.revision,
       createdAt: row.created_at,
+      deletedAt: row.deleted_at,
+      updatedByDeviceId: row.updated_by_device_id,
+    };
+  }
+  if (entityType === "task") {
+    return {
+      id: row.id,
+      ownerId: row.owner_id,
+      schemaVersion: row.schema_version,
+      title: row.title,
+      description: row.description,
+      state: row.state,
+      completedAt: row.completed_at,
+      dueDate: row.due_date,
+      dueTime: row.due_time,
+      timezone: row.timezone,
+      priority: row.priority,
+      sortOrder: row.sort_order,
+      tags: parseJsonArray(row.tags),
+      projectId: row.project_id,
+      sourceDocumentId: row.source_document_id,
+      sourceBlockId: row.source_block_id,
+      parentTaskId: row.parent_task_id,
+      estimatedMinutes: row.estimated_minutes,
+      recurrence: typeof row.recurrence === "string" ? JSON.parse(row.recurrence) : row.recurrence,
+      recurrenceSeriesId: row.recurrence_series_id,
+      occurrenceDate: row.occurrence_date,
+      revision: row.revision,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
       deletedAt: row.deleted_at,
       updatedByDeviceId: row.updated_by_device_id,
     };

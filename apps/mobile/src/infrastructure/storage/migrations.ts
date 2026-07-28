@@ -112,4 +112,17 @@ export const migrations: readonly Migration[] = [
       "CREATE INDEX IF NOT EXISTS drawing_revisions_drawing_idx ON drawing_revisions (drawing_id, revision DESC)",
     ],
   },
+  {
+    version: 7,
+    statements: [
+      "CREATE TABLE IF NOT EXISTS tasks (id TEXT PRIMARY KEY NOT NULL, owner_id TEXT NOT NULL, schema_version INTEGER NOT NULL DEFAULT 1, title TEXT NOT NULL, description TEXT, state TEXT NOT NULL, completed_at TEXT, due_date TEXT, due_time TEXT, timezone TEXT NOT NULL, priority TEXT NOT NULL, sort_order REAL NOT NULL DEFAULT 0, tags TEXT NOT NULL DEFAULT '[]', project_id TEXT, source_document_id TEXT, source_block_id TEXT, source_fingerprint TEXT, parent_task_id TEXT, estimated_minutes INTEGER, recurrence TEXT, recurrence_series_id TEXT, occurrence_date TEXT, revision INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, deleted_at TEXT, updated_by_device_id TEXT NOT NULL)",
+      "CREATE TABLE IF NOT EXISTS task_occurrences (id TEXT PRIMARY KEY NOT NULL, owner_id TEXT NOT NULL, task_id TEXT NOT NULL, series_id TEXT NOT NULL, scheduled_date TEXT NOT NULL, completed_at TEXT NOT NULL, task_snapshot TEXT NOT NULL)",
+      "CREATE UNIQUE INDEX IF NOT EXISTS tasks_source_block_idx ON tasks (owner_id, source_document_id, source_block_id) WHERE source_block_id IS NOT NULL",
+      "CREATE INDEX IF NOT EXISTS tasks_owner_state_due_idx ON tasks (owner_id, state, deleted_at, due_date, due_time)",
+      "CREATE INDEX IF NOT EXISTS tasks_owner_project_idx ON tasks (owner_id, project_id, state, deleted_at)",
+      "CREATE INDEX IF NOT EXISTS tasks_parent_order_idx ON tasks (owner_id, parent_task_id, sort_order)",
+      "CREATE INDEX IF NOT EXISTS tasks_owner_updated_idx ON tasks (owner_id, deleted_at, updated_at DESC)",
+      "CREATE INDEX IF NOT EXISTS task_occurrences_series_idx ON task_occurrences (owner_id, series_id, scheduled_date DESC)",
+    ],
+  },
 ];

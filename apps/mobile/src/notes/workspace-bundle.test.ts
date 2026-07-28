@@ -20,6 +20,18 @@ describe("workspace export bundle", () => {
     ]);
   });
 
+  it("writes schema v2 while continuing to import legacy v1 bundles", () => {
+    const serialized = serializeWorkspaceBundle([
+      { path: "tasks.json", content: '{"schema":1,"tasks":[],"occurrences":[]}' },
+    ]);
+    expect(JSON.parse(serialized)).toMatchObject({ schema: 2, format: "stone-workspace" });
+    expect(
+      parseWorkspaceBundle(
+        '{"schema":1,"format":"stone-workspace","files":[{"path":"Notes/old.md","content":"# Old","encoding":"utf8","mimeType":"text/markdown"}]}',
+      ),
+    ).toHaveLength(1);
+  });
+
   it("rejects traversal, duplicate paths, invalid binary content, and unknown schemas", () => {
     expect(() => serializeWorkspaceBundle([{ path: "../secret", content: "" }])).toThrow(
       "unsafe path",
@@ -34,7 +46,7 @@ describe("workspace export bundle", () => {
       serializeWorkspaceBundle([{ path: "a.png", content: "***", encoding: "base64" }]),
     ).toThrow("invalid base64");
     expect(() =>
-      parseWorkspaceBundle('{"schema":2,"format":"stone-workspace","files":[]}'),
+      parseWorkspaceBundle('{"schema":3,"format":"stone-workspace","files":[]}'),
     ).toThrow("schema is not supported");
   });
 });
