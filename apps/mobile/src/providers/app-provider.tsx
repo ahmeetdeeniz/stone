@@ -14,6 +14,7 @@ import { createAppServices, type AppServices } from "../services/composition-roo
 import { AuthProvider } from "./auth-provider";
 import { registerBackgroundSync } from "../services/background-sync";
 import { WidgetLifecycle } from "../widgets/widget-lifecycle";
+import { NativeDeepLinkRouter } from "../widgets/native-deep-links";
 
 export function AppProvider({ children }: PropsWithChildren) {
   const [services, setServices] = useState<AppServices | null>(null);
@@ -43,6 +44,7 @@ export function AppProvider({ children }: PropsWithChildren) {
         <AppServicesContext.Provider value={services}>
           <AuthProvider onUserChanged={bindDeviceOwner} onSyncRequested={syncOwner}>
             <WidgetLifecycle />
+            <NativeDeepLinkRouter />
             {children}
           </AuthProvider>
         </AppServicesContext.Provider>

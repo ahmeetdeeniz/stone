@@ -240,8 +240,9 @@ export interface TaskRepository {
     id: string,
     completedAt: string,
     deviceId: string,
+    expectedRevision?: number,
   ): Promise<{ task: Task; nextTask: Task | null }>;
-  reopen(ownerId: string, id: string, deviceId: string): Promise<Task>;
+  reopen(ownerId: string, id: string, deviceId: string, expectedRevision?: number): Promise<Task>;
   softDelete(ownerId: string, id: string, deviceId: string): Promise<Task>;
   reorder(
     ownerId: string,

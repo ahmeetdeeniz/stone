@@ -32,6 +32,7 @@ pnpm test:rules
 pnpm test:storage-rules
 pnpm verify:clean-workspace
 pnpm verify:native-dependencies
+pnpm verify:widgets
 pnpm verify:desktop
 pnpm verify:github
 pnpm verify:mcp
@@ -56,6 +57,10 @@ The rules tests require Java. Firebase Emulator Suite may download emulator bina
 
 Do not combine client configuration with service credentials. Never commit local env files,
 Firebase native files, a service account, OAuth secret/token, signing material, or real user data.
+
+Native widget builds may override `STONE_IOS_BUNDLE_IDENTIFIER`, `STONE_ANDROID_PACKAGE`, and
+`STONE_IOS_APP_GROUP`. The iOS widget extension defaults to `<bundle identifier>.widgets`; no Team
+ID is stored in the repository. See [Native widgets](NATIVE-WIDGETS.md).
 
 ## Start surfaces
 

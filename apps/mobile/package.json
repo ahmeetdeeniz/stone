@@ -26,6 +26,7 @@
     "@stone/i18n": "workspace:*",
     "@stone/ink": "workspace:*",
     "@stone/markdown": "workspace:*",
+    "@stone/native-widgets": "workspace:*",
     "@stone/sync": "workspace:*",
     "@stone/widgets": "workspace:*",
     "expo": "^54.0.0",

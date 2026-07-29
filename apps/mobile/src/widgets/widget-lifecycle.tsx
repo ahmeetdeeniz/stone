@@ -40,5 +40,13 @@ export function WidgetLifecycle() {
     return () => subscription.remove();
   }, [refresh]);
 
+  useEffect(() => {
+    if (!user) return;
+    const timer = setInterval(() => {
+      if (AppState.currentState === "active") void refresh();
+    }, 60_000);
+    return () => clearInterval(timer);
+  }, [refresh, user]);
+
   return null;
 }

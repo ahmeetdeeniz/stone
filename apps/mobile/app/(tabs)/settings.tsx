@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "expo-router";
-import { Alert, StyleSheet, View } from "react-native";
+import { Alert, PermissionsAndroid, Platform, StyleSheet, View } from "react-native";
 import { ResponsiveContent } from "../../src/components/responsive";
 import { Screen, StoneButton, StoneText } from "../../src/components/ui";
 import { spacing } from "../../src/design/tokens";
@@ -83,6 +83,23 @@ export default function SettingsScreen() {
     setWidgetPrivacy(value);
     await writeWidgetPrivacy(value);
     if (user) await refreshNativeWidgets(services, user.uid, locale, value);
+  };
+  const requestFocusNotification = async () => {
+    if (Platform.OS !== "android" || Platform.Version < 33) return;
+    const result = await PermissionsAndroid.request(
+      PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
+      {
+        title: t("widgets.notificationPermission"),
+        message: t("widgets.notificationDescription"),
+        buttonPositive: t("common.confirm"),
+        buttonNegative: t("common.cancel"),
+      },
+    );
+    Alert.alert(
+      result === PermissionsAndroid.RESULTS.GRANTED
+        ? t("widgets.notificationEnabled")
+        : t("widgets.notificationDenied"),
+    );
   };
   const signOut = async () => {
     if (!service) return;
@@ -264,6 +281,13 @@ export default function SettingsScreen() {
               />
             ))}
           </View>
+          {Platform.OS === "android" && Platform.Version >= 33 ? (
+            <StoneButton
+              label={t("widgets.enableNotification")}
+              variant="secondary"
+              onPress={() => void requestFocusNotification()}
+            />
+          ) : null}
         </View>
         <View style={[styles.section, { borderColor: colors.border }]}>
           <StoneText variant="title3">{t("settings.account")}</StoneText>

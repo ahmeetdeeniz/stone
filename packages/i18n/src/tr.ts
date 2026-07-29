@@ -833,6 +833,13 @@ export const tr = {
   "widgets.privacy.counts_only": "Yalnızca sayılar",
   "widgets.privacy.titles": "Başlıkları göster",
   "widgets.privacy.titles_and_context": "Başlıklar ve bağlam",
+  "widgets.enableNotification": "Etkin odak bildirimini aç",
+  "widgets.notificationPermission": "Odak kontrollerine izin verilsin mi?",
+  "widgets.notificationDescription":
+    "Stone, yerel odak oturumu etkinken isteğe bağlı kontroller gösterebilir.",
+  "widgets.notificationEnabled": "Etkin odak bildirimleri açıldı.",
+  "widgets.notificationDenied":
+    "Bildirim izni verilmedi. Odak takibi normal biçimde çalışmaya devam eder.",
   "relative.today": "Bugün",
   "relative.tomorrow": "Yarın",
   "relative.yesterday": "Dün",

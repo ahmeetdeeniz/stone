@@ -43,6 +43,9 @@ function readFirebasePublicConfig(filePath: string): FirebasePublicConfig | unde
 }
 
 export default ({ config }: ConfigContext): ExpoConfig => {
+  const iosBundleIdentifier =
+    process.env.STONE_IOS_BUNDLE_IDENTIFIER ?? config.ios?.bundleIdentifier;
+  const androidPackage = process.env.STONE_ANDROID_PACKAGE ?? config.android?.package;
   const googleServicesFile = process.env.GOOGLE_SERVICES_JSON
     ? path.resolve(process.env.GOOGLE_SERVICES_JSON)
     : path.join(__dirname, "google-services.json");
@@ -52,7 +55,19 @@ export default ({ config }: ConfigContext): ExpoConfig => {
   const firebasePublicConfig = readFirebasePublicConfig(googleServicesFile);
   return {
     ...config,
-    plugins: [...(config.plugins ?? []), "expo-background-task"],
+    plugins: [
+      ...(config.plugins ?? []),
+      "expo-background-task",
+      [
+        "@stone/native-widgets",
+        {
+          ...(iosBundleIdentifier ? { iosBundleIdentifier } : {}),
+          ...(process.env.STONE_IOS_APP_GROUP
+            ? { appGroupIdentifier: process.env.STONE_IOS_APP_GROUP }
+            : {}),
+        },
+      ],
+    ],
     extra: {
       ...config.extra,
       ...firebasePublicConfig,
@@ -61,6 +76,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     slug: config.slug ?? "stone",
     android: {
       ...config.android,
+      ...(androidPackage ? { package: androidPackage } : {}),
       ...(fs.existsSync(googleServicesFile)
         ? {
             googleServicesFile: process.env.GOOGLE_SERVICES_JSON
@@ -71,6 +87,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     },
     ios: {
       ...config.ios,
+      ...(iosBundleIdentifier ? { bundleIdentifier: iosBundleIdentifier } : {}),
       ...(fs.existsSync(iosFirebaseFile)
         ? {
             googleServicesFile: process.env.GOOGLE_SERVICE_INFO_PLIST

@@ -50,8 +50,14 @@ yollarını, repository adlarını veya içe aktarılan veriyi çevirmez ya da y
 - **MCP:** OAuth, scope, revision, idempotency ve audit kayıtları olan provider-neutral servis.
 
 Windows henüz mobil proje düzenleme/Kanban, çizim, çöp, revision ve conflict UI parity’sine sahip
-değildir. macOS/Linux masaüstü uygulamaları desteklenmez. Native hatırlatıcı, harici takvim hesabı,
-davet, native odak bildirimi ve widget bu sürümde yoktur.
+değildir. macOS/Linux masaüstü uygulamaları desteklenmez. Native hatırlatıcı, harici takvim hesabı
+ve davet bu sürümde yoktur.
+
+Android Glance ve iOS WidgetKit için Bugünün Görevleri, Ajanda, Odak ve Hızlı Yakalama widget’ları
+bulunur. iOS ayrıca local ActivityKit tabanlı Kilit Ekranı Live Activity ve Dynamic Island
+sunumlarını; Android ise izin kontrollü sürekli odak bildirimini içerir. Varsayılan gizlilik yalnızca
+sayıları gösterir, native katman Firebase’e erişmez. Bunlar Expo Go yerine Development/Release Build
+gerektirir; fiziksel cihaz ve iOS archive kabulü henüz beklemededir.
 
 ## Hızlı başlangıç
 

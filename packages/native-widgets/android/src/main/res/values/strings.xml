@@ -1,0 +1,28 @@
+<resources>
+  <string name="stone_widget_today">Today</string>
+  <string name="stone_widget_agenda">Agenda</string>
+  <string name="stone_widget_focus">Focus</string>
+  <string name="stone_widget_quick_capture">Quick capture</string>
+  <string name="stone_widget_unavailable">Open Stone to refresh</string>
+  <string name="stone_widget_stale">Last saved data</string>
+  <string name="stone_widget_tasks_remaining">%1$d remaining</string>
+  <string name="stone_widget_counts_private">Titles hidden</string>
+  <string name="stone_widget_all_day">All day</string>
+  <string name="stone_widget_no_agenda">Nothing scheduled</string>
+  <string name="stone_widget_no_focus">No active focus</string>
+  <string name="stone_widget_running">Running</string>
+  <string name="stone_widget_paused">Paused</string>
+  <string name="stone_widget_focus_phase">Focus phase</string>
+  <string name="stone_widget_short_break">Short break</string>
+  <string name="stone_widget_long_break">Long break</string>
+  <string name="stone_widget_pause">Pause</string>
+  <string name="stone_widget_resume">Resume</string>
+  <string name="stone_widget_finish">Finish</string>
+  <string name="stone_widget_start_focus">Start 25 min</string>
+  <string name="stone_widget_new_task">New task</string>
+  <string name="stone_widget_new_note">New note</string>
+  <string name="stone_widget_new_event">New event</string>
+  <string name="stone_widget_open">Open Stone</string>
+  <string name="stone_focus_channel">Active focus</string>
+  <string name="stone_focus_channel_description">Optional controls for the current local focus session</string>
+</resources>

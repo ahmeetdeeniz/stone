@@ -33,3 +33,11 @@ bundles.
 
 Stone uses transport security and owner-scoped rules but does not provide end-to-end encryption or
 encrypted exports. Firebase project administrators can access project data.
+
+## Native widget boundary
+
+Native widgets read only a bounded, versioned projection in app-private storage/App Group
+UserDefaults. The projection excludes note Markdown, credentials, tokens, API/encryption keys, and
+passwords. Widget extensions do not link Firebase or perform network polling. Counts-only display
+is the default; logout/account deletion clears snapshots, pending actions, focus notifications, and
+local Live Activities.

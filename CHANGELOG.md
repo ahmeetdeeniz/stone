@@ -5,6 +5,11 @@ tag, so no release date or semantic version is claimed.
 
 ## Unreleased
 
+- Added local-first Android Glance and iOS WidgetKit Today, Agenda, Focus, and Quick Capture
+  widgets, an optional Android focus notification, and iOS Live Activity/Dynamic Island sources.
+- Added bounded versioned snapshot/action bridges, validated deep links, revision-safe actions,
+  counts-only default privacy, and native English/Turkish resources.
+
 ### Added
 
 - Local-first stopwatch, countdown and Pomodoro focus tracking across mobile and Windows, durable
@@ -41,6 +46,5 @@ tag, so no release date or semantic version is claimed.
 - Physical Android/iPhone/tablet, private TestFlight, final visual/accessibility, and live
   credential-restart acceptance remain pending.
 - Desktop does not provide complete mobile project/drawing/recovery parity.
-- Task due times, events, and focus completion do not schedule native notifications.
-  Full-workspace restore beyond supported workspace data, Agenda virtualization, and native
-  widgets remain planned rather than implemented.
+- Task due times and events do not schedule native reminder notifications. Full-workspace restore
+  beyond supported workspace data and Agenda virtualization remain planned rather than implemented.

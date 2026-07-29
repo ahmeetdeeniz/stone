@@ -3,6 +3,7 @@ import {
   pauseFocusSession,
   resumeFocusSession,
   finishFocusSession,
+  expandCalendarOccurrences,
   startFocusSession,
   type FocusSession,
   type Task,
@@ -40,10 +41,8 @@ export async function buildWidgetSnapshot(
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
   const rangeStart = new Date(now);
   rangeStart.setUTCDate(rangeStart.getUTCDate() - 7);
-  const [tasks, agenda, active, goal, recentFocus] = await Promise.all([
-    services.tasks
-      .list(ownerId, { state: "open", limit: 100 })
-      .then((items) => items.filter((task) => task.dueDate && task.dueDate <= date).slice(0, 8)),
+  const [allTasks, calendarItems, active, goal, recentFocus] = await Promise.all([
+    services.tasks.list(ownerId, { state: "open", limit: 100 }),
     services.calendar.list(ownerId, {
       startDate: date,
       endDate: nextDate.toISOString().slice(0, 10),
@@ -57,6 +56,28 @@ export async function buildWidgetSnapshot(
       limit: 2_000,
     }),
   ]);
+  const tasks = allTasks.filter((task) => task.dueDate && task.dueDate <= date).slice(0, 8);
+  const agenda = calendarItems.flatMap((item) =>
+    expandCalendarOccurrences(item, date, nextDate.toISOString().slice(0, 10), 32).map(
+      (occurrence) => occurrence.item,
+    ),
+  );
+  const deadlines = allTasks
+    .filter(
+      (task) =>
+        task.dueDate !== null &&
+        task.dueDate >= date &&
+        task.dueDate <= nextDate.toISOString().slice(0, 10),
+    )
+    .map((task) => ({
+      id: task.id,
+      kind: "deadline" as const,
+      title: task.title,
+      startAt: null,
+      endAt: null,
+      allDay: task.dueTime === null,
+      projectName: null,
+    }));
   const focus = active[0] ?? null;
   const progress = goal ? focusGoalProgress(recentFocus, goal, date) : null;
   const generatedAt = now.toISOString();
@@ -71,15 +92,18 @@ export async function buildWidgetSnapshot(
     authenticated: true,
     todayRemainingCount: tasks.length,
     todayTasks: tasks.slice(0, 8).map(taskSummary),
-    agenda: agenda.slice(0, 8).map((item) => ({
-      id: item.id,
-      kind: item.kind === "task_block" ? "task_block" : "event",
-      title: item.title,
-      startAt: item.startAt,
-      endAt: item.endAt,
-      allDay: item.allDay,
-      projectName: null,
-    })),
+    agenda: [
+      ...agenda.map((item) => ({
+        id: item.id,
+        kind: item.kind === "task_block" ? ("task_block" as const) : ("event" as const),
+        title: item.title,
+        startAt: item.startAt,
+        endAt: item.endAt,
+        allDay: item.allDay,
+        projectName: null,
+      })),
+      ...deadlines,
+    ].slice(0, 8),
     focus: focus ? focusSummary(focus) : null,
     dailyGoalSeconds: progress?.dailyTargetSeconds ?? 0,
     dailyFocusedSeconds: progress?.dailySeconds ?? 0,
@@ -134,8 +158,20 @@ async function executeAction(
     if (task.revision !== action.expectedRevision)
       throw new Error("Widget task revision conflict.");
     if (action.type === "complete_task")
-      await services.taskUseCases.complete(ownerId, task.id, now, services.deviceId);
-    else await services.taskUseCases.reopen(ownerId, task.id, services.deviceId);
+      await services.taskUseCases.complete(
+        ownerId,
+        task.id,
+        now,
+        services.deviceId,
+        action.expectedRevision,
+      );
+    else
+      await services.taskUseCases.reopen(
+        ownerId,
+        task.id,
+        services.deviceId,
+        action.expectedRevision,
+      );
     return;
   }
   if (action.type === "start_focus") {
@@ -191,7 +227,8 @@ function focusSummary(session: FocusSession) {
     plannedDurationSeconds: session.plannedDurationSeconds,
     accumulatedPausedSeconds: session.accumulatedPausedSeconds,
     pausedAt: session.status === "paused" ? (session.pauses.at(-1)?.startedAt ?? null) : null,
-    contextTitle: session.note,
+    // Session notes are Markdown content, not a safe lock-screen/widget summary.
+    contextTitle: null,
     revision: session.revision,
   };
 }

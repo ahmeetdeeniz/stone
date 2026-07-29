@@ -830,6 +830,13 @@ export const en = {
   "widgets.privacy.counts_only": "Counts only",
   "widgets.privacy.titles": "Show titles",
   "widgets.privacy.titles_and_context": "Titles and context",
+  "widgets.enableNotification": "Enable active-focus notification",
+  "widgets.notificationPermission": "Allow focus controls?",
+  "widgets.notificationDescription":
+    "Stone can show optional controls while a local focus session is active.",
+  "widgets.notificationEnabled": "Active-focus notifications are enabled.",
+  "widgets.notificationDenied":
+    "Notification permission was not granted. Focus tracking still works normally.",
   "relative.today": "Today",
   "relative.tomorrow": "Tomorrow",
   "relative.yesterday": "Yesterday",

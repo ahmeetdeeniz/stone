@@ -1,0 +1,28 @@
+<resources>
+  <string name="stone_widget_today">Bugün</string>
+  <string name="stone_widget_agenda">Ajanda</string>
+  <string name="stone_widget_focus">Odak</string>
+  <string name="stone_widget_quick_capture">Hızlı yakalama</string>
+  <string name="stone_widget_unavailable">Yenilemek için Stone’u açın</string>
+  <string name="stone_widget_stale">Son kaydedilen veri</string>
+  <string name="stone_widget_tasks_remaining">%1$d kaldı</string>
+  <string name="stone_widget_counts_private">Başlıklar gizli</string>
+  <string name="stone_widget_all_day">Tüm gün</string>
+  <string name="stone_widget_no_agenda">Planlanmış öğe yok</string>
+  <string name="stone_widget_no_focus">Etkin odak yok</string>
+  <string name="stone_widget_running">Çalışıyor</string>
+  <string name="stone_widget_paused">Duraklatıldı</string>
+  <string name="stone_widget_focus_phase">Odak aşaması</string>
+  <string name="stone_widget_short_break">Kısa mola</string>
+  <string name="stone_widget_long_break">Uzun mola</string>
+  <string name="stone_widget_pause">Duraklat</string>
+  <string name="stone_widget_resume">Sürdür</string>
+  <string name="stone_widget_finish">Bitir</string>
+  <string name="stone_widget_start_focus">25 dk başlat</string>
+  <string name="stone_widget_new_task">Yeni görev</string>
+  <string name="stone_widget_new_note">Yeni not</string>
+  <string name="stone_widget_new_event">Yeni etkinlik</string>
+  <string name="stone_widget_open">Stone’u aç</string>
+  <string name="stone_focus_channel">Etkin odak</string>
+  <string name="stone_focus_channel_description">Geçerli yerel odak oturumu için isteğe bağlı kontroller</string>
+</resources>

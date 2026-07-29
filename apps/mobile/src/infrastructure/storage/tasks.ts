@@ -107,8 +107,11 @@ export class SQLiteTaskRepository implements TaskRepository {
     id: string,
     completedAt: string,
     deviceId: string,
+    expectedRevision?: number,
   ): Promise<{ task: Task; nextTask: Task | null }> {
     const current = await this.require(ownerId, id);
+    if (expectedRevision !== undefined && current.revision !== expectedRevision)
+      throw new Error("Task revision conflict.");
     if (current.state === "completed") {
       const candidate = createNextRecurringTask(current, completedAt);
       const existingNext = candidate ? await this.getById(ownerId, candidate.id) : null;
@@ -149,8 +152,15 @@ export class SQLiteTaskRepository implements TaskRepository {
     return { task: completed, nextTask };
   }
 
-  public async reopen(ownerId: string, id: string, deviceId: string): Promise<Task> {
+  public async reopen(
+    ownerId: string,
+    id: string,
+    deviceId: string,
+    expectedRevision?: number,
+  ): Promise<Task> {
     const current = await this.require(ownerId, id);
+    if (expectedRevision !== undefined && current.revision !== expectedRevision)
+      throw new Error("Task revision conflict.");
     if (current.state === "open") return current;
     return this.save(
       ownerId,

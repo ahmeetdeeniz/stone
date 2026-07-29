@@ -36,6 +36,10 @@ assert(
   "@react-native-firebase/storage must be a mobile workspace dependency.",
 );
 assert(
+  mobilePackage.dependencies?.["@stone/native-widgets"] === "workspace:*",
+  "Stone native widgets must be a mobile workspace dependency.",
+);
+assert(
   easConfig.build?.development?.developmentClient === true,
   "Development Client is not enabled.",
 );
@@ -62,6 +66,16 @@ assert(
 const expoModules = runAutolinking(["resolve", "--platform", "android", "--json"]);
 const documentPicker = expoModules.modules?.find(
   (module) => module.packageName === "expo-document-picker",
+);
+const stoneWidgets = expoModules.modules?.find(
+  (module) => module.packageName === "@stone/native-widgets",
+);
+assert(stoneWidgets, "Expo autolinking did not resolve @stone/native-widgets.");
+assert(
+  stoneWidgets.projects?.some((project) =>
+    project.modules?.includes("expo.modules.stonewidgets.StoneWidgetsModule"),
+  ),
+  "Expo autolinking did not include StoneWidgetsModule.",
 );
 assert(documentPicker, "Expo autolinking did not resolve expo-document-picker.");
 assert(
@@ -109,6 +123,7 @@ verifyGeneratedAndroidAutolinking();
 console.log("Native dependency wiring verified for apps/mobile Android autolinking.");
 console.log("- expo-document-picker -> expo.modules.documentpicker.DocumentPickerModule");
 console.log("- react-native-webview -> RNCWebViewPackage / RNCWebViewModule");
+console.log("- @stone/native-widgets -> StoneWidgetsModule");
 console.log("- Expo prebuild -> generated Android autolinking hooks");
 
 function verifyGeneratedAndroidAutolinking() {

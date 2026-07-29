@@ -89,6 +89,7 @@ export type StoneDeepLink =
   | { route: "calendar_event"; id: string };
 
 export function parseWidgetSnapshot(value: unknown): WidgetSnapshot {
+  assertNoCredentialFields(value);
   const record = object(value, "snapshot");
   exactVersion(record, WIDGET_SNAPSHOT_VERSION, "snapshot");
   const tasks = array(record.todayTasks, "todayTasks", MAX_WIDGET_TASKS).map(parseTask);
@@ -117,6 +118,22 @@ export function parseWidgetSnapshot(value: unknown): WidgetSnapshot {
   if (!snapshot.authenticated && (tasks.length || agenda.length || snapshot.focus))
     throw new Error("Logged-out widget snapshot cannot contain private records.");
   return snapshot;
+}
+
+const FORBIDDEN_WIDGET_FIELD =
+  /^(?:access|refresh|firebase|github)?token$|^(?:api|encryption)?key$|^(?:credential|password|markdown|notebody)$/iu;
+
+function assertNoCredentialFields(value: unknown, depth = 0): void {
+  if (depth > 6 || value === null || typeof value !== "object") return;
+  if (Array.isArray(value)) {
+    for (const item of value) assertNoCredentialFields(item, depth + 1);
+    return;
+  }
+  for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+    if (FORBIDDEN_WIDGET_FIELD.test(key.replaceAll("_", "")))
+      throw new Error("Widget snapshots cannot contain credentials or note bodies.");
+    assertNoCredentialFields(child, depth + 1);
+  }
 }
 
 export function safeWidgetSnapshot(

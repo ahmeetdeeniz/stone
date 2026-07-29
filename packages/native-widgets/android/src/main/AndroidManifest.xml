@@ -1,0 +1,30 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+  <application>
+    <receiver android:name=".TodayTasksWidgetReceiver" android:exported="false">
+      <intent-filter>
+        <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+      </intent-filter>
+      <meta-data android:name="android.appwidget.provider" android:resource="@xml/stone_today_widget_info" />
+    </receiver>
+    <receiver android:name=".AgendaWidgetReceiver" android:exported="false">
+      <intent-filter>
+        <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+      </intent-filter>
+      <meta-data android:name="android.appwidget.provider" android:resource="@xml/stone_agenda_widget_info" />
+    </receiver>
+    <receiver android:name=".FocusWidgetReceiver" android:exported="false">
+      <intent-filter>
+        <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+      </intent-filter>
+      <meta-data android:name="android.appwidget.provider" android:resource="@xml/stone_focus_widget_info" />
+    </receiver>
+    <receiver android:name=".QuickCaptureWidgetReceiver" android:exported="false">
+      <intent-filter>
+        <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+      </intent-filter>
+      <meta-data android:name="android.appwidget.provider" android:resource="@xml/stone_capture_widget_info" />
+    </receiver>
+    <receiver android:name=".FocusNotificationActionReceiver" android:exported="false" />
+  </application>
+</manifest>

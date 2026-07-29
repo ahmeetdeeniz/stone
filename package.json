@@ -35,6 +35,7 @@
     "verify:clean-workspace": "node scripts/verify-clean-workspace.mjs",
     "editor:bundle": "pnpm --filter @stone/editor run build:web",
     "verify:native-dependencies": "node scripts/verify-native-dependencies.mjs",
+    "verify:widgets": "node scripts/verify-native-widgets.mjs",
     "mcp:typecheck": "pnpm --filter @stone/mcp run typecheck",
     "mcp:build": "pnpm --filter @stone/mcp run build",
     "mcp:start": "pnpm --filter @stone/mcp run start",

@@ -16,6 +16,14 @@ const uiRoots = [
   resolve(repositoryRoot, "apps/mobile/src/drawings"),
   resolve(repositoryRoot, "apps/mobile/src/editor/EditorWebView.tsx"),
 ];
+const androidWidgetResources = {
+  en: resolve(repositoryRoot, "packages/native-widgets/android/src/main/res/values/strings.xml"),
+  tr: resolve(repositoryRoot, "packages/native-widgets/android/src/main/res/values-tr/strings.xml"),
+};
+const iosWidgetResources = resolve(
+  repositoryRoot,
+  "packages/native-widgets/ios/Extension/StoneWidgetStore.swift",
+);
 
 // Product/technology names and compact symbolic controls are intentionally not translated.
 const staticUiAllowlist = new Set([
@@ -159,6 +167,24 @@ export function verifyI18n() {
     for (const path of filesUnder(root))
       for (const finding of hardcodedUiStrings(path))
         errors.push(`${finding.path}:${finding.line}: hardcoded UI string "${finding.value}"`);
+  const androidNames = (path) =>
+    [...readFileSync(path, "utf8").matchAll(/<string name="([^"]+)"/gu)]
+      .map((match) => match[1])
+      .sort();
+  if (
+    androidNames(androidWidgetResources.en).join(",") !==
+    androidNames(androidWidgetResources.tr).join(",")
+  )
+    errors.push("native Android widget resource mismatch");
+  const swift = readFileSync(iosWidgetResources, "utf8");
+  const iosNames = (name) => {
+    const block = swift.match(
+      new RegExp(`let ${name}: \\[String: String\\] = \\[([\\s\\S]*?)\\n    \\]`, "u"),
+    )?.[1];
+    return block ? [...block.matchAll(/"([^"]+)":/gu)].map((match) => match[1]).sort() : [];
+  };
+  if (iosNames("en").join(",") !== iosNames("tr").join(","))
+    errors.push("native iOS widget resource mismatch");
   return errors;
 }
 
@@ -168,6 +194,6 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     console.error(`i18n verification failed:\n${errors.map((error) => `- ${error}`).join("\n")}`);
     process.exitCode = 1;
   } else {
-    console.log("i18n resources and selected UI boundaries verified.");
+    console.log("i18n resources, native widget parity and selected UI boundaries verified.");
   }
 }

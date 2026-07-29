@@ -48,14 +48,25 @@ export class TaskUseCases {
     return this.repository.save(ownerId, validateTask(task), expectedRevision, deviceId);
   }
 
-  public complete(ownerId: string, id: string, completedAt: string, deviceId: string) {
+  public complete(
+    ownerId: string,
+    id: string,
+    completedAt: string,
+    deviceId: string,
+    expectedRevision?: number,
+  ) {
     if (!Number.isFinite(Date.parse(completedAt)))
       throw new ValidationError("Completion timestamp is invalid.");
-    return this.repository.complete(ownerId, id, completedAt, deviceId);
+    return this.repository.complete(ownerId, id, completedAt, deviceId, expectedRevision);
   }
 
-  public reopen(ownerId: string, id: string, deviceId: string): Promise<Task> {
-    return this.repository.reopen(ownerId, id, deviceId);
+  public reopen(
+    ownerId: string,
+    id: string,
+    deviceId: string,
+    expectedRevision?: number,
+  ): Promise<Task> {
+    return this.repository.reopen(ownerId, id, deviceId, expectedRevision);
   }
 
   public delete(ownerId: string, id: string, deviceId: string): Promise<Task> {

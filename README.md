@@ -100,7 +100,7 @@ presented as product evidence.
 - Explicit occurrence/future/series recurrence editing; workspace-calendar restore and a
   standards-conscious `.ics` subset for basic VEVENT, all-day, supported recurrence and
   cancellation dates
-- No native reminders, external calendar accounts, invitations, or widgets
+- No native reminders, external calendar accounts, or invitations
 
 ### Focus and productivity
 
@@ -109,7 +109,16 @@ presented as product evidence.
   revision-safe sync without per-second database writes
 - Offline daily/weekly goals and timezone-aware daily, weekly, 7/30-day, task, project, category,
   and time-of-day aggregation with overlap/conflict exclusion
-- In-app completion feedback is available; native background notifications are not claimed
+- In-app completion feedback plus an optional, permission-aware Android ongoing notification
+
+### Native widgets and live focus
+
+- Today Tasks, Agenda, Focus, and Quick Capture widgets on Android Glance and iOS WidgetKit
+- iOS lock-screen Live Activity and Dynamic Island focus presentations; local ActivityKit only
+- Versioned, bounded app-private snapshots/actions with counts-only privacy by default and no
+  Firebase access from widget code
+- Development/release builds are required; physical-device and iOS archive acceptance is pending
+  ([architecture and setup](public-docs/NATIVE-WIDGETS.md))
 
 ### Desktop, GitHub, and MCP
 
@@ -212,12 +221,12 @@ private notes in public issues.
 - MCP hosting and provider publication are not automatic.
 - Due times and calendar records do not schedule operating-system notifications.
 - Full-workspace restore beyond the calendar segment, Agenda virtualization, focus
-  timers/analytics and native widgets remain incomplete.
+  physical-device acceptance for native widgets and Live Activities remains pending.
 
 ## Roadmap
 
-Possible post-preview directions include reminder notifications, a focus timer, Android/iOS
-widgets, improved tablet layouts, Agenda virtualization, and richer revision restore. They are not
+Possible post-preview directions include reminder notifications, Android/iOS
+improved tablet layouts, Agenda virtualization, and richer revision restore. They are not
 implemented commitments.
 
 ## Contributing, support, and license

@@ -1,0 +1,10 @@
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+  android:description="@string/stone_widget_quick_capture"
+  android:initialLayout="@layout/glance_default_loading_layout"
+  android:minWidth="180dp"
+  android:minHeight="70dp"
+  android:resizeMode="horizontal|vertical"
+  android:targetCellWidth="3"
+  android:targetCellHeight="1"
+  android:updatePeriodMillis="0"
+  android:widgetCategory="home_screen" />

@@ -83,9 +83,12 @@ function action(overrides: Partial<WidgetAction> = {}): WidgetAction {
 describe("widget snapshot", () => {
   it("validates bounded safe snapshots and rejects secrets/corruption", () => {
     expect(parseWidgetSnapshot(snapshot())).toEqual(snapshot());
-    expect(() =>
-      parseWidgetSnapshot({ ...snapshot(), schemaVersion: 99, firebaseToken: "secret" }),
-    ).toThrow("schema version");
+    expect(() => parseWidgetSnapshot({ ...snapshot(), schemaVersion: 99 })).toThrow(
+      "schema version",
+    );
+    expect(() => parseWidgetSnapshot({ ...snapshot(), firebaseToken: "secret" })).toThrow(
+      "credentials",
+    );
     expect(safeWidgetSnapshot({ broken: true }, "2026-07-29T13:00:00.000Z")).toEqual({
       snapshot: null,
       stale: true,

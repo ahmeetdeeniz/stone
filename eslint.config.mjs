@@ -14,6 +14,7 @@ export default tseslint.config(
       "eslint.config.mjs",
       "vitest*.config.ts",
       "packages/editor/scripts/**",
+      "packages/native-widgets/*.js",
       "scripts/**",
       "firebase/**",
     ],

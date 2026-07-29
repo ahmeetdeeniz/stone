@@ -1,0 +1,17 @@
+{
+  "name": "@stone/native-widgets",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "main": "index.js",
+  "files": [
+    "android",
+    "ios",
+    "expo-module.config.json",
+    "app.plugin.js",
+    "index.js"
+  ],
+  "peerDependencies": {
+    "expo": ">=54"
+  }
+}
