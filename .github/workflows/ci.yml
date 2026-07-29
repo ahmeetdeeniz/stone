@@ -34,7 +34,54 @@ jobs:
       - run: pnpm verify:native-dependencies
       - run: pnpm verify:widgets
       - name: Install pinned Android NDK
-        run: sdkmanager "ndk;27.1.12297006"
+        env:
+          NDK_VERSION: 27.1.12297006
+        run: |
+          set -euo pipefail
+
+          SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
+          if [ -z "$SDK_ROOT" ]; then
+            echo "::error::ANDROID_SDK_ROOT and ANDROID_HOME are both unavailable."
+            exit 1
+          fi
+
+          SDKMANAGER="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$SDKMANAGER" ]; then
+            mapfile -t SDKMANAGER_CANDIDATES < <(
+              find "$SDK_ROOT/cmdline-tools" \
+                -mindepth 3 \
+                -maxdepth 3 \
+                -type f \
+                -path '*/bin/sdkmanager' \
+                -perm -u+x \
+                -print |
+                sort -V
+            )
+            if [ "${#SDKMANAGER_CANDIDATES[@]}" -eq 0 ]; then
+              echo "::error::sdkmanager was not found under $SDK_ROOT/cmdline-tools."
+              find "$SDK_ROOT/cmdline-tools" \
+                -maxdepth 4 \
+                -type f \
+                -name sdkmanager \
+                -print || true
+              exit 1
+            fi
+            SDKMANAGER="${SDKMANAGER_CANDIDATES[-1]}"
+          fi
+
+          export ANDROID_SDK_ROOT="$SDK_ROOT"
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+          echo "sdkmanager=$SDKMANAGER"
+          "$SDKMANAGER" --version
+          "$SDKMANAGER" --sdk_root="$ANDROID_SDK_ROOT" "ndk;$NDK_VERSION"
+
+          NDK_DIRECTORY="$ANDROID_SDK_ROOT/ndk/$NDK_VERSION"
+          if [ ! -d "$NDK_DIRECTORY" ]; then
+            echo "::error::Pinned Android NDK was not installed at $NDK_DIRECTORY."
+            exit 1
+          fi
+          echo "Installed Android NDK $NDK_VERSION at $NDK_DIRECTORY"
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> "$GITHUB_ENV"
       - name: Verify Android widget native compilation
         run: pnpm verify:android-widget-compile
       - run: pnpm verify:desktop
