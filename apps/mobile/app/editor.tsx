@@ -256,7 +256,7 @@ export default function EditorScreen() {
                   variant="quiet"
                   onPress={() =>
                     router.push({
-                      pathname: "/(tabs)/focus" as never,
+                      pathname: "/(tabs)/focus",
                       params: { documentId: note.id, projectId: note.projectId ?? undefined },
                     })
                   }

@@ -5,6 +5,7 @@
   "license": "MIT",
   "main": "expo-router/entry",
   "scripts": {
+    "pretypecheck": "node ../../scripts/generate-mobile-routes.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "start": "expo start --dev-client",
     "doctor": "expo-doctor",

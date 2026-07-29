@@ -38,30 +38,30 @@ function route(router: ReturnType<typeof useRouter>, link: StoneDeepLink): void 
       router.replace("/(tabs)/today");
       return;
     case "focus":
-      router.replace("/(tabs)/focus" as never);
+      router.replace("/(tabs)/focus");
       return;
     case "new_task":
-      router.replace({ pathname: "/task/[id]", params: { id: "new" } } as never);
+      router.replace({ pathname: "/task/[id]", params: { id: "new" } });
       return;
     case "new_note":
       router.replace("/(tabs)/notes");
       return;
     case "new_event":
-      router.replace({ pathname: "/calendar/[id]", params: { id: "new" } } as never);
+      router.replace({ pathname: "/calendar/[id]", params: { id: "new" } });
       return;
     case "task":
-      router.replace({ pathname: "/task/[id]", params: { id: link.id } } as never);
+      router.replace({ pathname: "/task/[id]", params: { id: link.id } });
       return;
     case "project":
-      router.replace({ pathname: "/project/[id]", params: { id: link.id } } as never);
+      router.replace({ pathname: "/project/[id]", params: { id: link.id } });
       return;
     case "calendar_date":
       router.replace({
         pathname: "/(tabs)/calendar",
         params: { date: link.date },
-      } as never);
+      });
       return;
     case "calendar_event":
-      router.replace({ pathname: "/calendar/[id]", params: { id: link.id } } as never);
+      router.replace({ pathname: "/calendar/[id]", params: { id: link.id } });
   }
 }

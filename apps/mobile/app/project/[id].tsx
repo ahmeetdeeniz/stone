@@ -289,7 +289,7 @@ export default function ProjectDetailScreen() {
         externalUid: null,
         cancelledAt: null,
       });
-      router.push({ pathname: "/calendar/[id]" as never, params: { id: item.id } });
+      router.push({ pathname: "/calendar/[id]", params: { id: item.id } });
     } catch (caught) {
       Alert.alert(t("projects.eventCreateFailed"), message(caught, t("app.unknownError")));
     }
@@ -319,7 +319,7 @@ export default function ProjectDetailScreen() {
               variant="secondary"
               onPress={() =>
                 router.push({
-                  pathname: "/(tabs)/focus" as never,
+                  pathname: "/(tabs)/focus",
                   params: { projectId: project.id },
                 })
               }
@@ -469,9 +469,7 @@ export default function ProjectDetailScreen() {
                   key={task.id}
                   accessibilityRole="button"
                   accessibilityLabel={t("tasks.editA11y", { title: task.title })}
-                  onPress={() =>
-                    router.push({ pathname: "/task/[id]" as never, params: { id: task.id } })
-                  }
+                  onPress={() => router.push({ pathname: "/task/[id]", params: { id: task.id } })}
                   style={styles.task}
                 >
                   <StoneText variant="body">
@@ -511,9 +509,7 @@ export default function ProjectDetailScreen() {
                 key={item.id}
                 accessibilityRole="button"
                 accessibilityLabel={`${item.title} · ${t("common.open")}`}
-                onPress={() =>
-                  router.push({ pathname: "/calendar/[id]" as never, params: { id: item.id } })
-                }
+                onPress={() => router.push({ pathname: "/calendar/[id]", params: { id: item.id } })}
                 style={styles.task}
               >
                 <StoneText>{item.title}</StoneText>

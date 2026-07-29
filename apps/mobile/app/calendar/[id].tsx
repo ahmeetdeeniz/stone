@@ -337,9 +337,7 @@ export default function CalendarDetailScreen() {
             <StoneButton
               label={t("calendar.openTask")}
               variant="secondary"
-              onPress={() =>
-                router.push({ pathname: "/task/[id]" as never, params: { id: item.taskId! } })
-              }
+              onPress={() => router.push({ pathname: "/task/[id]", params: { id: item.taskId! } })}
             />
           ) : null}
           {item.sourceDocumentId ? (
@@ -356,7 +354,7 @@ export default function CalendarDetailScreen() {
             variant="secondary"
             onPress={() =>
               router.push({
-                pathname: "/(tabs)/focus" as never,
+                pathname: "/(tabs)/focus",
                 params: {
                   calendarItemId: item.id,
                   taskId: item.taskId ?? undefined,

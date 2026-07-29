@@ -287,7 +287,7 @@ export default function CalendarScreen() {
                 onPress={() =>
                   item.calendarItemId &&
                   router.push({
-                    pathname: "/calendar/[id]" as never,
+                    pathname: "/calendar/[id]",
                     params: { id: item.calendarItemId },
                   })
                 }

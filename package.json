@@ -8,6 +8,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "pnpm typecheck && eslint .",
+    "generate:mobile-routes": "node scripts/generate-mobile-routes.mjs",
     "typecheck": "pnpm --recursive --if-present typecheck",
     "test": "vitest run",
     "test:integration": "vitest run --config vitest.integration.config.ts",

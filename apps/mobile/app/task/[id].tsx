@@ -280,7 +280,7 @@ export default function TaskDetailScreen() {
         externalUid: null,
         cancelledAt: null,
       });
-      router.push({ pathname: "/calendar/[id]" as never, params: { id: block.id } });
+      router.push({ pathname: "/calendar/[id]", params: { id: block.id } });
     } catch (caught) {
       Alert.alert(t("tasks.scheduleFailed"), message(caught, t("app.unknownError")));
     }
@@ -398,7 +398,7 @@ export default function TaskDetailScreen() {
             variant="secondary"
             onPress={() =>
               router.push({
-                pathname: "/(tabs)/focus" as never,
+                pathname: "/(tabs)/focus",
                 params: { taskId: task.id, projectId: task.projectId ?? undefined },
               })
             }

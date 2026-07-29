@@ -198,9 +198,7 @@ export default function TodayScreen() {
                   key={task.id}
                   task={task}
                   onToggle={() => void toggle(task)}
-                  onOpen={() =>
-                    router.push({ pathname: "/task/[id]" as never, params: { id: task.id } })
-                  }
+                  onOpen={() => router.push({ pathname: "/task/[id]", params: { id: task.id } })}
                 />
               ))}
             </View>
