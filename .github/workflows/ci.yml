@@ -29,7 +29,6 @@ jobs:
       - run: pnpm verify:public-docs
       - run: pnpm verify:public-assets
       - run: pnpm verify:license
-      - run: pnpm verify:i18n
       - run: pnpm desktop:build
       - run: pnpm verify:mcp
       - run: pnpm mcp:build

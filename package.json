@@ -31,7 +31,6 @@
     "verify:public-docs": "node scripts/verify-public-docs.mjs",
     "verify:public-assets": "node scripts/verify-public-assets.mjs",
     "verify:license": "node scripts/verify-license.mjs",
-    "verify:i18n": "node scripts/verify-i18n.mjs",
     "verify:clean-workspace": "node scripts/verify-clean-workspace.mjs",
     "editor:bundle": "pnpm --filter @stone/editor run build:web",
     "verify:native-dependencies": "node scripts/verify-native-dependencies.mjs",

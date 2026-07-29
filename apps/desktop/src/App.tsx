@@ -1685,7 +1685,7 @@ function CalendarWorkspace({
           {t("tasks.today")}
         </button>
         <input
-          aria-label={t("desktop.goToDate")}
+          aria-label="Tarihe git"
           type="date"
           value={date}
           onChange={(event) => setDate(event.target.value)}

@@ -32,35 +32,12 @@ export function translate(
   locale: Locale,
   key: TranslationKey,
   parameters: TranslationParameters = {},
-  localizedResource: Readonly<Partial<Record<TranslationKey, string>>> = resources[locale],
 ): string {
-  const template = localizedResource[key] ?? en[key];
+  const template = resources[locale][key] ?? en[key];
   return template.replace(/\{\{([a-zA-Z][a-zA-Z0-9_]*)\}\}/gu, (_, name: string) => {
     const value = parameters[name];
     return value === undefined ? `{{${name}}}` : String(value);
   });
-}
-
-export async function loadLocalePreference(
-  read: () => string | null | Promise<string | null>,
-): Promise<LocalePreference> {
-  try {
-    return parseLocalePreference(await read());
-  } catch {
-    return "system";
-  }
-}
-
-export async function saveLocalePreference(
-  preference: LocalePreference,
-  write: (value: LocalePreference) => void | Promise<void>,
-): Promise<boolean> {
-  try {
-    await write(preference);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 export function translatePlural(
@@ -117,40 +94,6 @@ export function formatNumber(locale: Locale, value: number): string {
   const formatter = new Intl.NumberFormat(locale);
   formatterCache.set(key, formatter);
   return formatter.format(value);
-}
-
-export function formatPercentage(locale: Locale, value: number): string {
-  return new Intl.NumberFormat(locale, { style: "percent", maximumFractionDigits: 1 }).format(
-    value,
-  );
-}
-
-export function formatFileSize(locale: Locale, bytes: number): string {
-  const safeBytes = Math.max(0, bytes);
-  const units = ["B", "KB", "MB", "GB"] as const;
-  const unitIndex = Math.min(
-    units.length - 1,
-    safeBytes === 0 ? 0 : Math.floor(Math.log(safeBytes) / Math.log(1024)),
-  );
-  const value = safeBytes / 1024 ** unitIndex;
-  return `${new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(value)} ${units[unitIndex]}`;
-}
-
-export function formatRelativeDate(locale: Locale, date: string, today: string): string {
-  const day = 86_400_000;
-  const difference = Math.round(
-    (Date.parse(`${date}T12:00:00Z`) - Date.parse(`${today}T12:00:00Z`)) / day,
-  );
-  if (difference === 0) return translate(locale, "relative.today");
-  if (difference === 1) return translate(locale, "relative.tomorrow");
-  if (difference === -1) return translate(locale, "relative.yesterday");
-  return difference > 0
-    ? translatePlural(locale, "relative.inDays", difference)
-    : translatePlural(locale, "relative.daysAgo", Math.abs(difference));
-}
-
-export function firstDayOfWeek(): 1 {
-  return 1;
 }
 
 export function formatDuration(locale: Locale, minutes: number): string {
