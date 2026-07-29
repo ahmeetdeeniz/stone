@@ -242,9 +242,6 @@ importers:
       "@codemirror/view":
         specifier: ^6.43.6
         version: 6.43.6
-      "@stone/i18n":
-        specifier: workspace:*
-        version: link:../i18n
       "@stone/markdown":
         specifier: workspace:*
         version: link:../markdown

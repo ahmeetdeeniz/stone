@@ -208,7 +208,7 @@ function AuthScreen({
 }
 
 function StoneShell({ session, onSignedOut }: { session: AuthSession; onSignedOut: () => void }) {
-  const { locale, preference: localePreference, setPreference: setLocalePreference, t } = useI18n();
+  const { preference: localePreference, setPreference: setLocalePreference, t } = useI18n();
   const [section, setSection] = useState<Section>("notes");
   const [theme, setTheme] = useState<Theme>("system");
   const [documents, setDocuments] = useState<DesktopDocument[]>([]);
@@ -306,50 +306,45 @@ function StoneShell({ session, onSignedOut }: { session: AuthSession; onSignedOu
     if (!editorHost.current || !document) return;
     editor.current?.destroy();
     const view = new EditorView({
-      state: createEditorState(
-        document.markdown,
-        false,
-        [
-          highlightActiveLine(),
-          EditorView.theme({
-            "&.cm-focused": {
-              outline: "2px solid var(--focus-ring)",
-              outlineOffset: "-2px",
-            },
-            ".cm-content": {
-              caretColor: "var(--caret)",
-              maxWidth: "780px",
-              margin: "0 auto",
-              paddingBottom: "42vh",
-            },
-            ".cm-cursor, .cm-dropCursor": {
-              borderLeftColor: "var(--caret)",
-              borderLeftWidth: "2px",
-            },
-            ".cm-activeLine": { backgroundColor: "var(--active-line)" },
-            "&.cm-focused .cm-selectionBackground, ::selection": {
-              backgroundColor: "var(--selection) !important",
-            },
-          }),
-          EditorView.updateListener.of((update) => {
-            if (update.docChanged) {
-              draft.current = update.state.doc.toString();
-              setSaveState((current) => transitionSaveState(current, "edited"));
-              setDocument((current) =>
-                current
-                  ? { ...current, markdown: draft.current, title: titleFromMarkdown(draft.current) }
-                  : current,
-              );
-            }
-          }),
-        ],
-        locale,
-      ),
+      state: createEditorState(document.markdown, false, [
+        highlightActiveLine(),
+        EditorView.theme({
+          "&.cm-focused": {
+            outline: "2px solid var(--focus-ring)",
+            outlineOffset: "-2px",
+          },
+          ".cm-content": {
+            caretColor: "var(--caret)",
+            maxWidth: "780px",
+            margin: "0 auto",
+            paddingBottom: "42vh",
+          },
+          ".cm-cursor, .cm-dropCursor": {
+            borderLeftColor: "var(--caret)",
+            borderLeftWidth: "2px",
+          },
+          ".cm-activeLine": { backgroundColor: "var(--active-line)" },
+          "&.cm-focused .cm-selectionBackground, ::selection": {
+            backgroundColor: "var(--selection) !important",
+          },
+        }),
+        EditorView.updateListener.of((update) => {
+          if (update.docChanged) {
+            draft.current = update.state.doc.toString();
+            setSaveState((current) => transitionSaveState(current, "edited"));
+            setDocument((current) =>
+              current
+                ? { ...current, markdown: draft.current, title: titleFromMarkdown(draft.current) }
+                : current,
+            );
+          }
+        }),
+      ]),
       parent: editorHost.current,
     });
     editor.current = view;
     return () => view.destroy();
-  }, [document?.id, locale]);
+  }, [document?.id]);
 
   useEffect(() => {
     if (!isTauri) return;

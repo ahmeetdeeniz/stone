@@ -2,15 +2,13 @@ import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
 import { Alert, FlatList, Modal, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import type { Project, ProjectPlatform, ProjectStatus, ProjectTask } from "@stone/domain";
-import { projectPlatforms, projectPriorities, projectStatuses } from "@stone/domain";
 import {
-  formatInstant,
-  formatProjectPlatform,
-  formatProjectHealth,
-  formatProjectPriority,
-  formatProjectStatus,
-  type TranslationKey,
-} from "@stone/i18n";
+  projectPlatforms,
+  projectPriorities,
+  projectPriorityLabels,
+  projectStatuses,
+  projectStatusLabels,
+} from "@stone/domain";
 import type { ProjectTemplate } from "@stone/markdown";
 import { ResponsiveContent } from "../../src/components/responsive";
 import { EmptyState, ErrorState, LoadingState } from "../../src/components/states";
@@ -19,15 +17,14 @@ import { spacing } from "../../src/design/tokens";
 import { useAuth } from "../../src/providers/auth-provider";
 import { useAppServices } from "../../src/providers/app-provider";
 import { createNewProjectWorkspace } from "../../src/projects/factory";
-import { useI18n } from "../../src/i18n/provider";
 
-const templates: readonly ProjectTemplate[] = [
-  "blank",
-  "general",
-  "mobile_app",
-  "game",
-  "website",
-  "programming_tooling",
+const templates: readonly { id: ProjectTemplate; label: string }[] = [
+  { id: "blank", label: "Boş Proje" },
+  { id: "general", label: "Genel Proje" },
+  { id: "mobile_app", label: "Mobil Uygulama" },
+  { id: "game", label: "Oyun" },
+  { id: "website", label: "Web Sitesi" },
+  { id: "programming_tooling", label: "Programlama Dili / Tooling" },
 ];
 
 interface ProjectListItem {
@@ -39,7 +36,6 @@ export default function ProjectsScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const { projectUseCases, deviceId } = useAppServices();
-  const { locale, t } = useI18n();
   const [items, setItems] = useState<readonly ProjectListItem[]>([]);
   const [view, setView] = useState<"list" | "kanban">("list");
   const [statusFilter, setStatusFilter] = useState<ProjectStatus | undefined>();
@@ -80,7 +76,7 @@ export default function ProjectsScreen() {
         ),
       );
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : t("projects.listLoadFailed"));
+      setError(caught instanceof Error ? caught.message : "Projeler okunamadı.");
     } finally {
       setLoading(false);
     }
@@ -113,8 +109,8 @@ export default function ProjectsScreen() {
       router.push({ pathname: "/project/[id]", params: { id: project.id } });
     } catch (caught) {
       Alert.alert(
-        t("projects.createFailed"),
-        caught instanceof Error ? caught.message : t("notes.localSaveFailed"),
+        "Proje oluşturulamadı",
+        caught instanceof Error ? caught.message : "Yerel kayıt başarısız.",
       );
     } finally {
       setBusy(false);
@@ -123,18 +119,18 @@ export default function ProjectsScreen() {
 
   const changeStatus = (project: Project) => {
     Alert.alert(
-      t("projects.statusTitle"),
-      t("projects.chooseStatus", { project: project.title }),
+      "Proje durumu",
+      `${project.title} için yeni durumu seçin.`,
       projectStatuses.map((status) => ({
-        text: formatProjectStatus(locale, status),
+        text: projectStatusLabels[status],
         onPress: () =>
           void projectUseCases
             .update(user!.uid, project.id, { status }, deviceId)
             .then(load)
             .catch((caught: unknown) =>
               Alert.alert(
-                t("projects.statusUpdateFailed"),
-                caught instanceof Error ? caught.message : t("app.unknownError"),
+                "Durum güncellenemedi",
+                caught instanceof Error ? caught.message : "Tekrar deneyin.",
               ),
             ),
       })),
@@ -156,32 +152,28 @@ export default function ProjectsScreen() {
         <View style={styles.header}>
           <View>
             <StoneText variant="display">Stone</StoneText>
-            <StoneText variant="title1">{t("tabs.projects")}</StoneText>
+            <StoneText variant="title1">Projeler</StoneText>
           </View>
           <View style={styles.headerActions}>
             <StoneButton
-              label={view === "list" ? t("projects.kanbanView") : t("projects.listView")}
+              label={view === "list" ? "Kanban" : "Liste"}
               variant="secondary"
               onPress={() => setView(view === "list" ? "kanban" : "list")}
             />
-            <StoneButton
-              label={t("projects.new")}
-              onPress={() => setCreateOpen(true)}
-              disabled={busy}
-            />
+            <StoneButton label="Yeni proje" onPress={() => setCreateOpen(true)} disabled={busy} />
           </View>
         </View>
         <StoneInput
-          label={t("projects.search")}
+          label="Projelerde ara"
           value={search}
           onChangeText={setSearch}
-          placeholder={t("projects.searchPlaceholder")}
+          placeholder="Başlık veya sonraki iş"
         />
         <StoneInput
-          label={t("projects.tagFilter")}
+          label="Etiket filtresi"
           value={tagFilter}
           onChangeText={setTagFilter}
-          placeholder={t("projects.tagPlaceholder")}
+          placeholder="Örn. mobil"
           autoCapitalize="none"
         />
         <ScrollView
@@ -190,35 +182,23 @@ export default function ProjectsScreen() {
           contentContainerStyle={styles.filters}
         >
           <StoneButton
-            label={
-              statusFilter ? formatProjectStatus(locale, statusFilter) : t("projects.allStatuses")
-            }
+            label={statusFilter ? projectStatusLabels[statusFilter] : "Tüm durumlar"}
             variant="secondary"
             onPress={() => cycleStatusFilter()}
           />
           <StoneButton
-            label={
-              priorityFilter
-                ? formatProjectPriority(locale, priorityFilter)
-                : t("projects.allPriorities")
-            }
+            label={priorityFilter ? projectPriorityLabels[priorityFilter] : "Tüm öncelikler"}
             variant="secondary"
             onPress={() => cyclePriorityFilter()}
           />
           <StoneButton
-            label={
-              platformFilter
-                ? t("projects.platformFilter", {
-                    platform: formatProjectPlatform(locale, platformFilter),
-                  })
-                : t("projects.allPlatforms")
-            }
+            label={platformFilter ? `Platform: ${platformFilter}` : "Tüm platformlar"}
             variant="secondary"
             onPress={() => cyclePlatformFilter()}
           />
           {statusFilter || priorityFilter || tagFilter || platformFilter ? (
             <StoneButton
-              label={t("projects.clearFilters")}
+              label="Filtreleri temizle"
               variant="quiet"
               onPress={() => {
                 setStatusFilter(undefined);
@@ -230,7 +210,7 @@ export default function ProjectsScreen() {
           ) : null}
         </ScrollView>
         {loading ? (
-          <LoadingState label={t("projects.loading")} />
+          <LoadingState label="Projeler yükleniyor" />
         ) : error ? (
           <ErrorState message={error} onRetry={() => void load()} />
         ) : view === "kanban" ? (
@@ -243,7 +223,7 @@ export default function ProjectsScreen() {
             {columns.map((column) => (
               <View key={column.status} style={styles.column}>
                 <StoneText variant="label">
-                  {formatProjectStatus(locale, column.status)} ({column.items.length})
+                  {projectStatusLabels[column.status]} ({column.items.length})
                 </StoneText>
                 {column.items.map((item) => (
                   <ProjectCard
@@ -264,7 +244,10 @@ export default function ProjectsScreen() {
             keyExtractor={(item) => item.project.id}
             contentContainerStyle={items.length === 0 ? styles.emptyList : styles.list}
             ListEmptyComponent={
-              <EmptyState title={t("projects.empty")} description={t("projects.emptyDetail")} />
+              <EmptyState
+                title="İlk projeni oluştur"
+                description="Şablon seçerek Markdown-backed bir proje alanı başlatın."
+              />
             }
             renderItem={({ item }) => (
               <ProjectCard
@@ -284,65 +267,65 @@ export default function ProjectsScreen() {
         >
           <Screen>
             <ScrollView contentContainerStyle={styles.modalContent}>
-              <StoneText variant="title1">{t("projects.new")}</StoneText>
+              <StoneText variant="title1">Yeni proje</StoneText>
               <StoneInput
-                label={t("projects.name")}
+                label="Proje adı"
                 value={title}
                 onChangeText={setTitle}
                 autoFocus
-                placeholder={t("projects.namePlaceholder")}
+                placeholder="Örn. Kelime Zinciri"
               />
-              <StoneText variant="label">{t("projects.template")}</StoneText>
+              <StoneText variant="label">Şablon</StoneText>
               <View style={styles.choices}>
                 {templates.map((option) => (
                   <StoneButton
-                    key={option}
-                    label={t(`projects.template.${option}` as TranslationKey)}
-                    variant={template === option ? "primary" : "secondary"}
-                    onPress={() => setTemplate(option)}
+                    key={option.id}
+                    label={option.label}
+                    variant={template === option.id ? "primary" : "secondary"}
+                    onPress={() => setTemplate(option.id)}
                   />
                 ))}
               </View>
-              <StoneText variant="label">{t("projects.initialStatus")}</StoneText>
+              <StoneText variant="label">Başlangıç durumu</StoneText>
               <View style={styles.choices}>
                 {projectStatuses.map((option) => (
                   <StoneButton
                     key={option}
-                    label={formatProjectStatus(locale, option)}
+                    label={projectStatusLabels[option]}
                     variant={createStatus === option ? "primary" : "secondary"}
                     onPress={() => setCreateStatus(option)}
                   />
                 ))}
               </View>
-              <StoneText variant="label">{t("projects.priority")}</StoneText>
+              <StoneText variant="label">Öncelik</StoneText>
               <View style={styles.choices}>
                 {projectPriorities.map((option) => (
                   <StoneButton
                     key={option}
-                    label={formatProjectPriority(locale, option)}
+                    label={projectPriorityLabels[option]}
                     variant={createPriority === option ? "primary" : "secondary"}
                     onPress={() => setCreatePriority(option)}
                   />
                 ))}
               </View>
               <StoneInput
-                label={t("projects.tagsField")}
+                label="Etiketler (virgülle ayırın)"
                 value={createTags}
                 onChangeText={setCreateTags}
-                placeholder={t("projects.tagsPlaceholder")}
+                placeholder="mobil, oyun"
               />
               <StoneInput
-                label={t("projects.targetDateField")}
+                label="Hedef tarih (YYYY-MM-DD)"
                 value={createTargetDate}
                 onChangeText={setCreateTargetDate}
                 placeholder="2026-09-30"
               />
-              <StoneText variant="label">{t("projects.platforms")}</StoneText>
+              <StoneText variant="label">Platformlar</StoneText>
               <View style={styles.choices}>
                 {projectPlatforms.map((platform) => (
                   <StoneButton
                     key={platform}
-                    label={formatProjectPlatform(locale, platform)}
+                    label={platform}
                     variant={createPlatforms.includes(platform) ? "primary" : "secondary"}
                     onPress={() =>
                       setCreatePlatforms((current) =>
@@ -355,15 +338,11 @@ export default function ProjectsScreen() {
                 ))}
               </View>
               <StoneButton
-                label={t("common.create")}
+                label="Oluştur"
                 onPress={() => void createProject()}
                 disabled={busy || !title.trim()}
               />
-              <StoneButton
-                label={t("common.cancel")}
-                variant="quiet"
-                onPress={() => setCreateOpen(false)}
-              />
+              <StoneButton label="Vazgeç" variant="quiet" onPress={() => setCreateOpen(false)} />
             </ScrollView>
           </Screen>
         </Modal>
@@ -400,52 +379,44 @@ function ProjectCard({
   onStatus: () => void;
 }) {
   const { project, tasks } = item;
-  const { locale, t } = useI18n();
   const completed = tasks.filter((task) => task.completed && !task.canceled).length;
   const total = tasks.filter((task) => !task.canceled).length;
   return (
     <Surface>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={t("projects.openA11y", { title: project.title })}
+        accessibilityLabel={`${project.title} projesini aç`}
         onPress={onOpen}
       >
         <StoneText variant="title3">{project.title}</StoneText>
         <StoneText variant="bodySmall">
-          {project.currentVersion ?? t("projects.noVersion")} →{" "}
-          {project.nextVersion ?? t("projects.noNextVersion")}
+          {project.currentVersion ?? "Sürüm yok"} → {project.nextVersion ?? "Sonraki sürüm yok"}
         </StoneText>
         <StoneText variant="caption" style={{ marginTop: spacing.xs }}>
-          {formatProjectStatus(locale, project.status)} ·{" "}
-          {formatProjectPriority(locale, project.priority)} ·{" "}
-          {t("projects.health", { health: formatProjectHealth(locale, project.health) })}
+          {projectStatusLabels[project.status]} · {projectPriorityLabels[project.priority]} ·
+          Sağlık: {project.health}
         </StoneText>
         <StoneText variant="bodySmall" style={{ marginTop: spacing.xs }}>
-          {t("projects.tasksProgress", { completed, total })} ·{" "}
-          {project.targetDate
-            ? t("projects.targetDate", { date: project.targetDate })
-            : t("projects.noTargetDate")}
+          {completed}/{total} görev ·{" "}
+          {project.targetDate ? `Hedef ${project.targetDate}` : "Hedef tarih yok"}
         </StoneText>
         <StoneText variant="bodySmall" numberOfLines={2} style={{ marginTop: spacing.xs }}>
-          {project.nextAction ?? t("projects.noNextAction")}
+          {project.nextAction ?? "Sonraki iş belirlenmedi."}
         </StoneText>
         <StoneText variant="caption" style={{ marginTop: spacing.xs }}>
-          {t("projects.updatedAt", {
-            date: formatInstant(
-              locale,
-              project.updatedAt,
-              Intl.DateTimeFormat().resolvedOptions().timeZone,
-              { dateStyle: "medium" },
-            ),
-          })}
+          Son güncelleme: {formatDate(project.updatedAt)}
         </StoneText>
       </Pressable>
       <View style={styles.cardActions}>
-        <StoneButton label={t("projects.changeStatus")} variant="quiet" onPress={onStatus} />
-        <StoneButton label={t("common.open")} variant="quiet" onPress={onOpen} />
+        <StoneButton label="Durumu değiştir" variant="quiet" onPress={onStatus} />
+        <StoneButton label="Aç" variant="quiet" onPress={onOpen} />
       </View>
     </Surface>
   );
+}
+
+function formatDate(value: string): string {
+  return new Intl.DateTimeFormat("tr-TR", { dateStyle: "medium" }).format(new Date(value));
 }
 
 const styles = StyleSheet.create({

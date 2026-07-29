@@ -12,16 +12,12 @@ import type {
   Task,
   CalendarItem,
 } from "@stone/domain";
-import { projectPriorities, projectStatuses } from "@stone/domain";
 import {
-  formatProjectPlatform,
-  formatProjectHealth,
-  formatProjectPriority,
-  formatProjectStatus,
-  formatReleaseStatus,
-  formatTaskPriority,
-  formatTaskState,
-} from "@stone/i18n";
+  projectPriorities,
+  projectPriorityLabels,
+  projectStatuses,
+  projectStatusLabels,
+} from "@stone/domain";
 import { ErrorState, LoadingState } from "../../src/components/states";
 import { ResponsiveContent } from "../../src/components/responsive";
 import { Screen, StoneButton, StoneInput, StoneText, Surface } from "../../src/components/ui";
@@ -30,7 +26,6 @@ import { useAuth } from "../../src/providers/auth-provider";
 import { useAppServices } from "../../src/providers/app-provider";
 import { shareProjectExport } from "../../src/projects/project-files";
 import { createNewVersion } from "../../src/projects/factory";
-import { useI18n } from "../../src/i18n/provider";
 
 const platforms = ["android", "ios", "windows", "web", "other"] as const;
 
@@ -39,7 +34,6 @@ export default function ProjectDetailScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const { projectUseCases, taskUseCases, calendar, deviceId } = useAppServices();
-  const { locale, t } = useI18n();
   const [project, setProject] = useState<Project | null>(null);
   const [versions, setVersions] = useState<readonly ProjectVersion[]>([]);
   const [tasks, setTasks] = useState<readonly ProjectTask[]>([]);
@@ -70,7 +64,7 @@ export default function ProjectDetailScreen() {
     try {
       setError(null);
       const loaded = await projectUseCases.get(user.uid, id);
-      if (!loaded) throw new Error(t("projects.notFound"));
+      if (!loaded) throw new Error("Proje bulunamadı.");
       const today = new Date().toISOString().slice(0, 10);
       const horizon = new Date(`${today}T00:00:00Z`);
       horizon.setUTCDate(horizon.getUTCDate() + 90);
@@ -103,7 +97,7 @@ export default function ProjectDetailScreen() {
       setRepositoryUrl(loaded.repositoryUrl ?? "");
       setSelectedPlatforms(loaded.platforms);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : t("projects.loadFailed"));
+      setError(caught instanceof Error ? caught.message : "Proje yüklenemedi.");
     } finally {
       setLoading(false);
     }
@@ -136,11 +130,11 @@ export default function ProjectDetailScreen() {
         deviceId,
       );
       setProject(updated);
-      Alert.alert(t("projects.saved"), t("projects.savedDetail"));
+      Alert.alert("Kaydedildi", "Project.md frontmatter ve yerel proje indeksi güncellendi.");
     } catch (caught) {
       Alert.alert(
-        t("projects.saveFailed"),
-        caught instanceof Error ? caught.message : t("app.unknownError"),
+        "Proje kaydedilemedi",
+        caught instanceof Error ? caught.message : "Tekrar deneyin.",
       );
     } finally {
       setSaving(false);
@@ -155,8 +149,8 @@ export default function ProjectDetailScreen() {
         .then(setProject)
         .catch((caught: unknown) =>
           Alert.alert(
-            t("projects.statusUpdateFailed"),
-            caught instanceof Error ? caught.message : t("app.unknownError"),
+            "Durum güncellenemedi",
+            caught instanceof Error ? caught.message : "Tekrar deneyin.",
           ),
         );
   };
@@ -168,8 +162,8 @@ export default function ProjectDetailScreen() {
       await load();
     } catch (caught) {
       Alert.alert(
-        t("projects.taskUpdateFailed"),
-        caught instanceof Error ? caught.message : t("app.unknownError"),
+        "Görev güncellenemedi",
+        caught instanceof Error ? caught.message : "Tekrar deneyin.",
       );
     }
   };
@@ -191,8 +185,8 @@ export default function ProjectDetailScreen() {
       await load();
     } catch (caught) {
       Alert.alert(
-        t("projects.blockerAddFailed"),
-        caught instanceof Error ? caught.message : t("app.unknownError"),
+        "Blocker eklenemedi",
+        caught instanceof Error ? caught.message : "Tekrar deneyin.",
       );
     }
   };
@@ -205,8 +199,8 @@ export default function ProjectDetailScreen() {
       await load();
     } catch (caught) {
       Alert.alert(
-        t("projects.versionCreateFailed"),
-        caught instanceof Error ? caught.message : t("app.unknownError"),
+        "Sürüm oluşturulamadı",
+        caught instanceof Error ? caught.message : "Tekrar deneyin.",
       );
     }
   };
@@ -227,11 +221,11 @@ export default function ProjectDetailScreen() {
       await projectUseCases.addDecision(user.uid, decision, deviceId);
       setDecisionTitle("");
       setDecisionText("");
-      Alert.alert(t("projects.decisionSaved"), t("projects.decisionSavedDetail"));
+      Alert.alert("Karar kaydedildi", "Decisions.md güncellendi.");
     } catch (caught) {
       Alert.alert(
-        t("projects.decisionSaveFailed"),
-        caught instanceof Error ? caught.message : t("app.unknownError"),
+        "Karar kaydedilemedi",
+        caught instanceof Error ? caught.message : "Tekrar deneyin.",
       );
     }
   };
@@ -245,8 +239,8 @@ export default function ProjectDetailScreen() {
       );
     } catch (caught) {
       Alert.alert(
-        t("projects.exportFailed"),
-        caught instanceof Error ? caught.message : t("projects.shareFailed"),
+        "Proje dışa aktarılamadı",
+        caught instanceof Error ? caught.message : "Paylaşım başlatılamadı.",
       );
     }
   };
@@ -267,7 +261,7 @@ export default function ProjectDetailScreen() {
         deletedAt: null,
         updatedByDeviceId: deviceId,
         kind: "event",
-        title: t("projects.defaultEventTitle", { project: project.title }),
+        title: `${project.title} etkinliği`,
         description: null,
         allDay: true,
         startDate: date,
@@ -290,20 +284,20 @@ export default function ProjectDetailScreen() {
       });
       router.push({ pathname: "/calendar/[id]" as never, params: { id: item.id } });
     } catch (caught) {
-      Alert.alert(t("projects.eventCreateFailed"), message(caught, t("app.unknownError")));
+      Alert.alert("Etkinlik oluşturulamadı", message(caught));
     }
   };
 
   if (loading)
     return (
       <Screen>
-        <LoadingState label={t("projects.preparing")} />
+        <LoadingState label="Proje hazırlanıyor" />
       </Screen>
     );
   if (error || !project)
     return (
       <Screen>
-        <ErrorState message={error ?? t("projects.notFound")} onRetry={() => void load()} />
+        <ErrorState message={error ?? "Proje bulunamadı."} onRetry={() => void load()} />
       </Screen>
     );
 
@@ -312,86 +306,77 @@ export default function ProjectDetailScreen() {
       <ResponsiveContent>
         <ScrollView contentContainerStyle={styles.content}>
           <View style={styles.topbar}>
-            <StoneButton label={t("common.back")} variant="quiet" onPress={() => router.back()} />
+            <StoneButton label="Geri" variant="quiet" onPress={() => router.back()} />
             <StoneButton
-              label={t("projects.exportMarkdown")}
+              label="Markdown dışa aktar"
               variant="secondary"
               onPress={() => void exportProject()}
             />
           </View>
           <StoneText variant="display">{project.title}</StoneText>
           <StoneText variant="bodySmall">
-            {project.slug} ·{" "}
-            {t("projects.health", { health: formatProjectHealth(locale, project.health) })}
+            {project.slug} · sağlık: {project.health}
           </StoneText>
           <Surface>
-            <StoneText variant="title3">{t("projects.healthExplanation")}</StoneText>
-            <StoneText variant="bodySmall">{healthExplanation(project, t)}</StoneText>
+            <StoneText variant="title3">Sağlık açıklaması</StoneText>
+            <StoneText variant="bodySmall">{healthExplanation(project)}</StoneText>
           </Surface>
 
           <Section title="Project.md frontmatter">
-            <StoneInput label={t("tasks.titleField")} value={title} onChangeText={setTitle} />
-            <StoneText variant="label">{t("projects.statusTitle")}</StoneText>
+            <StoneInput label="Başlık" value={title} onChangeText={setTitle} />
+            <StoneText variant="label">Durum</StoneText>
             <View style={styles.choices}>
               {projectStatuses.map((option) => (
                 <StoneButton
                   key={option}
-                  label={formatProjectStatus(locale, option)}
+                  label={projectStatusLabels[option]}
                   variant={status === option ? "primary" : "secondary"}
                   onPress={() => changeStatus(option)}
                 />
               ))}
             </View>
-            <StoneText variant="label">{t("projects.priority")}</StoneText>
+            <StoneText variant="label">Öncelik</StoneText>
             <View style={styles.choices}>
               {projectPriorities.map((option) => (
                 <StoneButton
                   key={option}
-                  label={formatProjectPriority(locale, option)}
+                  label={projectPriorityLabels[option]}
                   variant={priority === option ? "primary" : "secondary"}
                   onPress={() => setPriority(option)}
                 />
               ))}
             </View>
             <StoneInput
-              label={t("projects.tagsField")}
+              label="Etiketler (virgülle ayırın)"
               value={tags}
               onChangeText={setTags}
-              placeholder={t("projects.tagsPlaceholder")}
+              placeholder="mobil, oyun"
             />
             <StoneInput
-              label={t("projects.targetDateField")}
+              label="Hedef tarih (YYYY-MM-DD)"
               value={targetDate}
               onChangeText={setTargetDate}
               placeholder="2026-09-30"
             />
             <StoneInput
-              label={t("projects.currentVersion")}
+              label="Mevcut sürüm"
               value={currentVersion}
               onChangeText={setCurrentVersion}
             />
+            <StoneInput label="Sonraki sürüm" value={nextVersion} onChangeText={setNextVersion} />
+            <StoneInput label="Sonraki iş" value={nextAction} onChangeText={setNextAction} />
             <StoneInput
-              label={t("projects.nextVersion")}
-              value={nextVersion}
-              onChangeText={setNextVersion}
-            />
-            <StoneInput
-              label={t("projects.nextAction")}
-              value={nextAction}
-              onChangeText={setNextAction}
-            />
-            <StoneInput
-              label={t("projects.repositoryUrl")}
+              label="Repository URL"
               value={repositoryUrl}
               onChangeText={setRepositoryUrl}
               autoCapitalize="none"
             />
-            <StoneText variant="label">{t("projects.platforms")}</StoneText>
+            <StoneText variant="label">Platformlar</StoneText>
             <View style={styles.choices}>
               {platforms.map((option) => (
                 <StoneButton
                   key={option}
-                  label={formatProjectPlatform(locale, option)}
+                  label={option}
                   variant={selectedPlatforms.includes(option) ? "primary" : "secondary"}
                   onPress={() =>
                     setSelectedPlatforms((current) =>
@@ -404,20 +389,17 @@ export default function ProjectDetailScreen() {
               ))}
             </View>
             <StoneButton
-              label={saving ? t("projects.saving") : t("projects.saveFrontmatter")}
+              label={saving ? "Kaydediliyor" : "Frontmatter'ı kaydet"}
               onPress={() => void save()}
               disabled={saving}
             />
           </Section>
 
           <Section
-            title={t("projects.markdownTasksProgress", {
-              completed: tasks.filter((task) => !task.canceled && task.completed).length,
-              total: tasks.filter((task) => !task.canceled).length,
-            })}
+            title={`Görevler (${tasks.filter((task) => !task.canceled).filter((task) => task.completed).length}/${tasks.filter((task) => !task.canceled).length})`}
           >
             {tasks.length === 0 ? (
-              <StoneText variant="bodySmall">{t("projects.noTasks")}</StoneText>
+              <StoneText variant="bodySmall">Henüz görev yok.</StoneText>
             ) : (
               tasks.map((task) => (
                 <Pressable
@@ -431,13 +413,9 @@ export default function ProjectDetailScreen() {
                     {task.completed ? "☑" : "☐"} {task.text}
                   </StoneText>
                   <StoneText variant="caption">
-                    {task.priority
-                      ? t("projects.taskPriority", {
-                          priority: formatProjectPriority(locale, task.priority),
-                        })
-                      : ""}
+                    {task.priority ? `Öncelik: ${task.priority}` : ""}
                     {task.dueDate ? ` · ${task.dueDate}` : ""}
-                    {task.blocked ? ` · ${t("tasks.blocker")}` : ""}
+                    {task.blocked ? " · Blocker" : ""}
                   </StoneText>
                 </Pressable>
               ))
@@ -445,19 +423,18 @@ export default function ProjectDetailScreen() {
           </Section>
 
           <Section
-            title={t("projects.planningTasks", {
-              completed: planningTasks.filter((task) => task.state === "completed").length,
-              total: planningTasks.length,
-            })}
+            title={`Planlama görevleri (${planningTasks.filter((task) => task.state === "completed").length}/${planningTasks.length})`}
           >
             {planningTasks.length === 0 ? (
-              <StoneText variant="bodySmall">{t("projects.noPlanningTasks")}</StoneText>
+              <StoneText variant="bodySmall">
+                Bu projeye atanmış bağımsız veya not bağlantılı görev yok.
+              </StoneText>
             ) : (
               planningTasks.map((task) => (
                 <Pressable
                   key={task.id}
                   accessibilityRole="button"
-                  accessibilityLabel={t("tasks.editA11y", { title: task.title })}
+                  accessibilityLabel={`${task.title} görevini aç`}
                   onPress={() =>
                     router.push({ pathname: "/task/[id]" as never, params: { id: task.id } })
                   }
@@ -467,39 +444,34 @@ export default function ProjectDetailScreen() {
                     {task.state === "completed" ? "☑" : "☐"} {task.title}
                   </StoneText>
                   <StoneText variant="caption">
-                    {formatTaskState(locale, task.state)}
-                    {task.priority !== "none"
-                      ? ` · ${t("projects.taskPriority", {
-                          priority: formatTaskPriority(locale, task.priority),
-                        })}`
-                      : ""}
+                    Durum: {task.state}
+                    {task.priority !== "none" ? ` · Öncelik: ${task.priority}` : ""}
                     {task.dueDate ? ` · ${task.dueDate}` : ""}
-                    {task.sourceDocumentId ? ` · ${t("calendar.sourceNote")}` : ""}
+                    {task.sourceDocumentId ? " · Kaynak not" : ""}
                   </StoneText>
                 </Pressable>
               ))
             )}
           </Section>
 
-          <Section title={`${t("projects.calendar")} (${calendarItems.length})`}>
+          <Section title={`Takvim (${calendarItems.length})`}>
             <StoneText variant="bodySmall">
-              {t("calendar.projectTargetDate")} · {t("tasks.blockDistinct")}
+              Proje hedef tarihi Markdown metadata sinyalidir; aşağıdaki kayıtlar bağımsız etkinlik
+              veya görev zaman bloklarıdır.
             </StoneText>
             <StoneButton
-              label={t("projects.createEvent")}
+              label="Projeye bağlı etkinlik oluştur"
               variant="secondary"
               onPress={() => void createProjectEvent()}
             />
             {project.targetDate ? (
-              <StoneText variant="caption">
-                {t("projects.metadataTarget", { date: project.targetDate })}
-              </StoneText>
+              <StoneText variant="caption">Metadata hedefi · {project.targetDate}</StoneText>
             ) : null}
             {calendarItems.map((item) => (
               <Pressable
                 key={item.id}
                 accessibilityRole="button"
-                accessibilityLabel={`${item.title} · ${t("common.open")}`}
+                accessibilityLabel={`${item.title} takvim kaydını aç`}
                 onPress={() =>
                   router.push({ pathname: "/calendar/[id]" as never, params: { id: item.id } })
                 }
@@ -507,22 +479,21 @@ export default function ProjectDetailScreen() {
               >
                 <StoneText>{item.title}</StoneText>
                 <StoneText variant="caption">
-                  {item.kind === "task_block" ? t("calendar.taskBlock") : t("calendar.event")} ·{" "}
-                  {item.startDate}
+                  {item.kind === "task_block" ? "Zaman bloğu" : "Etkinlik"} · {item.startDate}
                 </StoneText>
               </Pressable>
             ))}
           </Section>
 
-          <Section title={t("tasks.blocker")}>
+          <Section title="Blocker'lar">
             <StoneInput
-              label={t("projects.newBlocker")}
+              label="Yeni blocker"
               value={blockerText}
               onChangeText={setBlockerText}
-              placeholder={t("projects.blockerPlaceholder")}
+              placeholder="Neyi bekliyoruz?"
             />
             <StoneButton
-              label={t("projects.addBlocker")}
+              label="Blocker ekle"
               variant="secondary"
               onPress={() => void addBlocker()}
               disabled={!blockerText.trim()}
@@ -534,7 +505,7 @@ export default function ProjectDetailScreen() {
                 </StoneText>
                 {!blocker.resolved ? (
                   <StoneButton
-                    label={t("projects.resolved")}
+                    label="Çözüldü"
                     variant="quiet"
                     onPress={() =>
                       void projectUseCases
@@ -542,8 +513,8 @@ export default function ProjectDetailScreen() {
                         .then(load)
                         .catch((caught: unknown) =>
                           Alert.alert(
-                            t("projects.blockerUpdateFailed"),
-                            caught instanceof Error ? caught.message : t("app.unknownError"),
+                            "Blocker güncellenemedi",
+                            caught instanceof Error ? caught.message : "Tekrar deneyin.",
                           ),
                         )
                     }
@@ -553,16 +524,16 @@ export default function ProjectDetailScreen() {
             ))}
           </Section>
 
-          <Section title={t("projects.versions")}>
+          <Section title="Sürümler">
             <StoneInput
-              label={t("projects.newVersion")}
+              label="Yeni sürüm"
               value={versionText}
               onChangeText={setVersionText}
               placeholder="1.0.0"
               autoCapitalize="none"
             />
             <StoneButton
-              label={t("projects.createVersion")}
+              label="Sürüm oluştur"
               variant="secondary"
               onPress={() => void createVersion()}
               disabled={!versionText.trim()}
@@ -571,9 +542,7 @@ export default function ProjectDetailScreen() {
               <Pressable
                 key={version.id}
                 accessibilityRole="button"
-                accessibilityLabel={t("projects.openVersionA11y", {
-                  version: version.version,
-                })}
+                accessibilityLabel={`${version.version} sürümünü aç`}
                 onPress={() =>
                   router.push({ pathname: "/version/[id]", params: { id: version.id } })
                 }
@@ -581,29 +550,27 @@ export default function ProjectDetailScreen() {
               >
                 <StoneText variant="title3">v{version.version}</StoneText>
                 <StoneText variant="bodySmall">
-                  {formatProjectStatus(locale, version.status)} · {version.completedTasks}/
-                  {version.totalTasks} · Android:{" "}
-                  {formatReleaseStatus(locale, version.androidStatus)} · iOS:{" "}
-                  {formatReleaseStatus(locale, version.iosStatus)}
+                  {projectStatusLabels[version.status]} · {version.completedTasks}/
+                  {version.totalTasks} · Android: {version.androidStatus} · iOS: {version.iosStatus}
                 </StoneText>
               </Pressable>
             ))}
           </Section>
 
-          <Section title={t("projects.decisionLog")}>
+          <Section title="Karar günlüğü">
             <StoneInput
-              label={t("projects.decisionTitle")}
+              label="Karar başlığı"
               value={decisionTitle}
               onChangeText={setDecisionTitle}
             />
             <StoneInput
-              label={t("projects.decision")}
+              label="Karar"
               value={decisionText}
               onChangeText={setDecisionText}
               multiline
             />
             <StoneButton
-              label={t("projects.saveDecision")}
+              label="Kararı kaydet"
               variant="secondary"
               onPress={() => void addDecision()}
               disabled={!decisionTitle.trim() || !decisionText.trim()}
@@ -624,15 +591,17 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
-function healthExplanation(project: Project, t: ReturnType<typeof useI18n>["t"]): string {
-  if (project.health === "paused") return t("projects.health.paused");
-  if (project.health === "risk") return t("projects.health.risk");
-  if (project.health === "attention") return t("projects.health.attention");
-  return t("projects.health.healthy");
+function healthExplanation(project: Project): string {
+  if (project.health === "paused") return "Proje beklemede veya arşivde.";
+  if (project.health === "risk")
+    return "Kritik blocker, gecikmiş hedef veya benzer risk sinyali var.";
+  if (project.health === "attention")
+    return "Yaklaşan hedef, eksik checklist veya uzun süredir güncellenmeme sinyali var.";
+  return "Açık risk sinyali yok.";
 }
 
-function message(error: unknown, fallback: string): string {
-  return error instanceof Error ? error.message : fallback;
+function message(error: unknown): string {
+  return error instanceof Error ? error.message : "Tekrar deneyin.";
 }
 
 const styles = StyleSheet.create({

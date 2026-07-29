@@ -20,7 +20,6 @@ import {
   type InkShapeKind,
   type InkTool,
 } from "@stone/ink";
-import { useI18n } from "../i18n/provider";
 
 export type InkCanvasTool = InkTool | InkShapeKind | "select" | "lasso" | "pan";
 
@@ -45,7 +44,6 @@ export const InkCanvas = forwardRef<InkCanvasHandle, InkCanvasProps>(function In
   { document, tool, color, width, stylusOnly, selection, onStroke, onErase, onShape, onSelect },
   ref,
 ) {
-  const { t } = useI18n();
   const canvasRef = useRef<ComponentRef<typeof Canvas>>(null);
   const activePoints = useRef<InkPoint[]>([]);
   const activeStylus = useRef(true);
@@ -165,7 +163,7 @@ export const InkCanvas = forwardRef<InkCanvasHandle, InkCanvasProps>(function In
   const gesture = useMemo(() => Gesture.Simultaneous(pan, pinch), [pan, pinch]);
 
   return (
-    <View style={styles.container} accessible accessibilityLabel={t("drawing.canvasA11y")}>
+    <View style={styles.container} accessible accessibilityLabel="Stone çizim tuvali">
       <GestureDetector gesture={gesture}>
         <Canvas ref={canvasRef} style={styles.canvas}>
           <Group

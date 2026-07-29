@@ -27,7 +27,6 @@ import { InkCanvas, type InkCanvasHandle, type InkCanvasTool } from "../../src/d
 import { useAuth } from "../../src/providers/auth-provider";
 import { useAppServices } from "../../src/providers/app-provider";
 import type { Drawing } from "@stone/domain";
-import { useI18n } from "../../src/i18n/provider";
 
 const colors = ["#11111D", "#6F63E7", "#C95B67", "#2F9E68", "#C58A1D", "#4B86C5"];
 const widths = [2, 4, 8, 14];
@@ -38,7 +37,6 @@ export default function DrawingScreen() {
   const { colors: themeColors } = useTheme();
   const { user } = useAuth();
   const { drawings, deviceId } = useAppServices();
-  const { t } = useI18n();
   const canvasRef = useRef<InkCanvasHandle>(null);
   const historyRef = useRef<InkHistory | null>(null);
   const [drawing, setDrawing] = useState<Drawing | null>(null);
@@ -49,7 +47,7 @@ export default function DrawingScreen() {
   const [stylusOnly, setStylusOnly] = useState(true);
   const [selection, setSelection] = useState<InkSelection | null>(null);
   const saveRef = useRef<() => Promise<void>>(() => Promise.resolve());
-  const [title, setTitle] = useState(() => t("drawing.newTitle"));
+  const [title, setTitle] = useState("Yeni çizim");
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -62,7 +60,7 @@ export default function DrawingScreen() {
           const nextId = Crypto.randomUUID();
           const nextInk = createEmptyInk({
             id: nextId,
-            title: t("drawing.newTitle"),
+            title: "Yeni çizim",
             width: 900,
             height: 650,
             now,
@@ -71,7 +69,7 @@ export default function DrawingScreen() {
             id: nextId,
             ownerId: user.uid,
             documentId: null,
-            title: t("drawing.newTitle"),
+            title: "Yeni çizim",
             sourcePath: "",
             previewPath: "",
             sourceSha256: "",
@@ -92,7 +90,7 @@ export default function DrawingScreen() {
           return;
         }
         const loaded = await drawings.getById(user.uid, id);
-        if (!loaded) throw new Error(t("drawing.notFound"));
+        if (!loaded) throw new Error("Çizim bulunamadı.");
         const source = await new File(loaded.sourcePath).text();
         const nextInk = parseInk(source);
         if (active) {
@@ -102,7 +100,7 @@ export default function DrawingScreen() {
           historyRef.current = new InkHistory(nextInk);
         }
       } catch (caught) {
-        if (active) setError(caught instanceof Error ? caught.message : t("drawing.loadFailed"));
+        if (active) setError(caught instanceof Error ? caught.message : "Çizim yüklenemedi.");
       }
     };
     void load();
@@ -153,7 +151,7 @@ export default function DrawingScreen() {
       directory.create({ idempotent: true });
       const preview = new File(directory, `${drawing.id}.png`);
       const bytes = canvasRef.current?.capturePreview();
-      if (!bytes) throw new Error(t("drawing.previewFailed"));
+      if (!bytes) throw new Error("Çizim önizlemesi oluşturulamadı.");
       preview.write(bytes);
       const next = await drawings.save(
         { ...drawing, title, revision: drawing.revision + (drawing.sourcePath ? 1 : 0) },
@@ -163,7 +161,7 @@ export default function DrawingScreen() {
       );
       setDrawing(next);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : t("drawing.saveFailed"));
+      setError(caught instanceof Error ? caught.message : "Çizim kaydedilemedi.");
     }
   }, [deviceId, drawing, drawings, ink, title, user]);
   saveRef.current = save;
@@ -195,7 +193,7 @@ export default function DrawingScreen() {
   if (!ink || !drawing)
     return (
       <Screen>
-        <LoadingState label={t("drawing.preparing")} />
+        <LoadingState label="Çizim hazırlanıyor" />
       </Screen>
     );
 
@@ -208,7 +206,7 @@ export default function DrawingScreen() {
         ]}
       >
         <StoneButton
-          label={t("common.back")}
+          label="Geri"
           variant="quiet"
           onPress={() => {
             void save();
@@ -216,12 +214,12 @@ export default function DrawingScreen() {
           }}
         />
         <StoneInput
-          label={t("drawing.titleField")}
+          label="Çizim başlığı"
           value={title}
           onChangeText={setTitle}
           containerStyle={styles.title}
         />
-        <StoneButton label={t("common.save")} onPress={() => void save()} />
+        <StoneButton label="Kaydet" onPress={() => void save()} />
       </View>
       <ScrollView
         horizontal
@@ -244,18 +242,18 @@ export default function DrawingScreen() {
         ).map((item) => (
           <StoneButton
             key={item}
-            label={toolLabel(item, t)}
+            label={toolLabel(item)}
             variant={tool === item ? "primary" : "secondary"}
             onPress={() => setTool(item)}
           />
         ))}
         <StoneButton
-          label={stylusOnly ? t("drawing.stylusOn") : t("drawing.stylusOff")}
+          label={stylusOnly ? "Kalem modu: açık" : "Kalem modu: kapalı"}
           variant="secondary"
           onPress={() => setStylusOnly((value) => !value)}
         />
         <StoneButton
-          label={t("editor.toolbar.undo")}
+          label="Geri al"
           variant="quiet"
           onPress={() => {
             const next = historyRef.current?.undo();
@@ -263,7 +261,7 @@ export default function DrawingScreen() {
           }}
         />
         <StoneButton
-          label={t("editor.toolbar.redo")}
+          label="Yinele"
           variant="quiet"
           onPress={() => {
             const next = historyRef.current?.redo();
@@ -271,19 +269,19 @@ export default function DrawingScreen() {
           }}
         />
         <StoneButton
-          label={t("drawing.moveLeft")}
+          label="Sola taşı"
           variant="quiet"
           onPress={() => transform(-16, 0)}
           disabled={!selection}
         />
         <StoneButton
-          label={t("drawing.zoomIn")}
+          label="Büyüt"
           variant="quiet"
           onPress={() => transform(0, 0, 1.1, 1.1)}
           disabled={!selection}
         />
         <StoneButton
-          label={t("drawing.duplicate")}
+          label="Çoğalt"
           variant="quiet"
           onPress={() => {
             if (ink && selection) commit(duplicateSelection(ink, selection, Crypto.randomUUID));
@@ -291,7 +289,7 @@ export default function DrawingScreen() {
           disabled={!selection}
         />
         <StoneButton
-          label={t("drawing.deleteSelection")}
+          label="Seçimi sil"
           variant="quiet"
           onPress={() => {
             if (ink && selection) {
@@ -311,7 +309,7 @@ export default function DrawingScreen() {
           <Pressable
             key={item}
             accessibilityRole="button"
-            accessibilityLabel={t("drawing.colorA11y", { color: item })}
+            accessibilityLabel={`Renk ${item}`}
             onPress={() => setColor(item)}
             style={[
               styles.swatch,
@@ -353,19 +351,19 @@ export default function DrawingScreen() {
   );
 }
 
-function toolLabel(tool: InkCanvasTool, t: ReturnType<typeof useI18n>["t"]): string {
+function toolLabel(tool: InkCanvasTool): string {
   return (
     {
-      pen: t("drawing.tool.pen"),
-      highlighter: t("drawing.tool.highlighter"),
-      eraser: t("drawing.tool.eraser"),
-      line: t("drawing.tool.line"),
-      arrow: t("drawing.tool.arrow"),
-      rectangle: t("drawing.tool.rectangle"),
-      ellipse: t("drawing.tool.ellipse"),
-      select: t("drawing.tool.select"),
-      lasso: t("drawing.tool.lasso"),
-      pan: t("drawing.tool.pan"),
+      pen: "Kalem",
+      highlighter: "Vurgulayıcı",
+      eraser: "Silgi",
+      line: "Çizgi",
+      arrow: "Ok",
+      rectangle: "Dikdörtgen",
+      ellipse: "Elips",
+      select: "Seçim",
+      lasso: "Kement",
+      pan: "Kaydır",
     } as Record<InkCanvasTool, string>
   )[tool];
 }

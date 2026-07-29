@@ -23,7 +23,6 @@ import { EditorWebView, type EditorWebViewHandle } from "../src/editor/EditorWeb
 import { exportNote } from "../src/notes/note-files";
 import { useAuth } from "../src/providers/auth-provider";
 import { useAppServices } from "../src/providers/app-provider";
-import { useI18n } from "../src/i18n/provider";
 
 export default function EditorScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
@@ -31,7 +30,6 @@ export default function EditorScreen() {
   const { colors, mode } = useTheme();
   const { user } = useAuth();
   const { noteUseCases, deviceId, drawings } = useAppServices();
-  const { t } = useI18n();
   const webViewRef = useRef<EditorWebViewHandle>(null);
   const contentRef = useRef("");
   const selectionRef = useRef({ from: 0, to: 0 });
@@ -54,7 +52,7 @@ export default function EditorScreen() {
       .get(user.uid, id)
       .then(async (loaded) => {
         if (!active) return;
-        if (!loaded) throw new Error(t("editor.notFound"));
+        if (!loaded) throw new Error("Not bulunamadı.");
         const draft = await noteUseCases.getDraft(user.uid, id);
         const useDraft = Boolean(
           draft && new Date(draft.updatedAt).getTime() > new Date(loaded.updatedAt).getTime(),
@@ -68,7 +66,7 @@ export default function EditorScreen() {
         if (useDraft && draft) setRecoveredDraft(draft.markdown);
       })
       .catch((caught: unknown) => {
-        if (active) setError(caught instanceof Error ? caught.message : t("editor.loadFailed"));
+        if (active) setError(caught instanceof Error ? caught.message : "Not yüklenemedi.");
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -106,7 +104,7 @@ export default function EditorScreen() {
       setStatus("saved");
     } catch (caught) {
       setStatus("error");
-      setError(caught instanceof Error ? caught.message : t("editor.saveFailed"));
+      setError(caught instanceof Error ? caught.message : "Not kaydedilemedi.");
     }
   }, [deviceId, note, noteUseCases, user]);
 
@@ -154,18 +152,18 @@ export default function EditorScreen() {
       setNote(updated);
     } catch (caught) {
       Alert.alert(
-        t("editor.titleSaveFailed"),
-        caught instanceof Error ? caught.message : t("app.unknownError"),
+        "Başlık kaydedilemedi",
+        caught instanceof Error ? caught.message : "Lütfen tekrar deneyin.",
       );
     }
   };
 
   const moveToTrash = () => {
     if (!note || !user) return;
-    Alert.alert(t("editor.trashConfirm"), t("editor.trashDetail"), [
-      { text: t("common.cancel"), style: "cancel" },
+    Alert.alert("Notu çöpe taşı?", "Bu not çöp kutusundan geri alınabilir.", [
+      { text: "Vazgeç", style: "cancel" },
       {
-        text: t("notes.moveToTrash"),
+        text: "Çöpe taşı",
         style: "destructive",
         onPress: () =>
           void noteUseCases.trash(user.uid, note.id, deviceId).then(() => router.back()),
@@ -179,8 +177,8 @@ export default function EditorScreen() {
       await exportNote(note);
     } catch (caught) {
       Alert.alert(
-        t("editor.exportFailed"),
-        caught instanceof Error ? caught.message : t("projects.shareFailed"),
+        "Not dışa aktarılamadı",
+        caught instanceof Error ? caught.message : "Paylaşım başlatılamadı.",
       );
     }
   };
@@ -188,7 +186,7 @@ export default function EditorScreen() {
   if (loading)
     return (
       <Screen>
-        <LoadingState label={t("editor.preparing")} />
+        <LoadingState label="Editor hazırlanıyor" />
       </Screen>
     );
   if (error && !note)
@@ -203,7 +201,7 @@ export default function EditorScreen() {
   if (!note || !id)
     return (
       <Screen>
-        <ErrorState message={t("editor.notFound")} />
+        <ErrorState message="Not bulunamadı." />
       </Screen>
     );
 
@@ -221,7 +219,7 @@ export default function EditorScreen() {
             ]}
           >
             <StoneButton
-              label={t("common.back")}
+              label="Geri"
               variant="quiet"
               onPress={() => {
                 void saveCurrent();
@@ -229,7 +227,7 @@ export default function EditorScreen() {
               }}
             />
             <StoneInput
-              label={t("editor.noteTitle")}
+              label="Not başlığı"
               value={title}
               onChangeText={setTitle}
               onEndEditing={() => void rename()}
@@ -240,17 +238,13 @@ export default function EditorScreen() {
                 variant="caption"
                 style={{ color: status === "error" ? "#C95B67" : colors.textMuted }}
               >
-                {statusLabel(status, t)}
+                {statusLabel(status)}
               </StoneText>
               {status === "saving" ? (
                 <ActivityIndicator color={colors.primary} size="small" />
               ) : null}
-              <StoneButton
-                label={t("editor.export")}
-                variant="quiet"
-                onPress={() => void shareExport()}
-              />
-              <StoneButton label={t("notes.moveToTrash")} variant="quiet" onPress={moveToTrash} />
+              <StoneButton label="Dışa aktar" variant="quiet" onPress={() => void shareExport()} />
+              <StoneButton label="Çöpe taşı" variant="quiet" onPress={moveToTrash} />
             </View>
           </View>
           <View
@@ -260,7 +254,7 @@ export default function EditorScreen() {
             ]}
           >
             <StoneInput
-              label={t("editor.search")}
+              label="Not içinde ara"
               value={findQuery}
               onChangeText={(query) => {
                 setFindQuery(query);
@@ -283,7 +277,7 @@ export default function EditorScreen() {
               }
             />
             <StoneButton
-              label={t("editor.find")}
+              label="Bul"
               variant="secondary"
               onPress={() =>
                 webViewRef.current?.post({
@@ -301,9 +295,9 @@ export default function EditorScreen() {
                 { backgroundColor: colors.backgroundSecondary, borderColor: colors.border },
               ]}
             >
-              <StoneText variant="bodySmall">{t("editor.recoveredDraft")}</StoneText>
+              <StoneText variant="bodySmall">Kaydedilmemiş taslak kurtarıldı.</StoneText>
               <StoneButton
-                label={t("editor.discardDraft")}
+                label="Taslağı sil"
                 variant="quiet"
                 onPress={() => {
                   contentRef.current = note.markdown;
@@ -325,7 +319,7 @@ export default function EditorScreen() {
                 <Pressable
                   key={block.id}
                   accessibilityRole="button"
-                  accessibilityLabel={t("editor.openDrawingA11y", { title: block.title })}
+                  accessibilityLabel={`${block.title} çizimini aç`}
                   onPress={() =>
                     router.push({ pathname: "/drawing/[id]", params: { id: block.id } })
                   }
@@ -337,8 +331,8 @@ export default function EditorScreen() {
                   <StoneText variant="label">{block.title}</StoneText>
                   <StoneText variant="caption" style={{ color: colors.textSecondary }}>
                     {block.sourceAvailable
-                      ? t("editor.editableDrawing")
-                      : t("editor.missingDrawing")}
+                      ? "Düzenlenebilir Stone çizimi"
+                      : "PNG önizleme — kaynak dosya bulunamadı"}
                   </StoneText>
                 </Pressable>
               ))}
@@ -354,7 +348,7 @@ export default function EditorScreen() {
           {error ? (
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={t("editor.dismissErrorA11y")}
+              accessibilityLabel="Editör hata bildirimini kapat"
               onPress={() => setError(null)}
               style={styles.error}
             >
@@ -371,13 +365,13 @@ export default function EditorScreen() {
           >
             {(
               [
-                ["toggleBold", t("editor.toolbar.bold")],
-                ["toggleItalic", t("editor.toolbar.italic")],
-                ["toggleBulletList", t("editor.toolbar.list")],
-                ["toggleTask", t("editor.toolbar.task")],
-                ["cycleHeading", t("editor.toolbar.heading")],
-                ["undo", t("editor.toolbar.undo")],
-                ["redo", t("editor.toolbar.redo")],
+                ["toggleBold", "Kalın"],
+                ["toggleItalic", "İtalik"],
+                ["toggleBulletList", "Liste"],
+                ["toggleTask", "Görev"],
+                ["cycleHeading", "Başlık"],
+                ["undo", "Geri al"],
+                ["redo", "Yinele"],
               ] as const
             ).map(([command, label]) => (
               <StoneButton
@@ -400,17 +394,14 @@ export default function EditorScreen() {
   );
 }
 
-function statusLabel(
-  status: "saved" | "unsaved" | "saving" | "error",
-  t: ReturnType<typeof useI18n>["t"],
-): string {
+function statusLabel(status: "saved" | "unsaved" | "saving" | "error"): string {
   return status === "saved"
-    ? t("editor.status.saved")
+    ? "Kaydedildi"
     : status === "saving"
-      ? t("editor.status.saving")
+      ? "Kaydediliyor…"
       : status === "error"
-        ? t("editor.status.error")
-        : t("editor.status.unsaved");
+        ? "Hata"
+        : "Kaydedilmemiş değişiklik";
 }
 
 const styles = StyleSheet.create({

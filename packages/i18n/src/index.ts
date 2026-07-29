@@ -130,25 +130,5 @@ export function formatTaskState(locale: Locale, state: "open" | "completed" | "c
   return translate(locale, `tasks.status.${state}` as TranslationKey);
 }
 
-export function formatProjectStatus(locale: Locale, status: string): string {
-  return translate(locale, `projects.status.${status}` as TranslationKey);
-}
-
-export function formatProjectPriority(locale: Locale, priority: string): string {
-  return translate(locale, `projects.priority.${priority}` as TranslationKey);
-}
-
-export function formatProjectPlatform(locale: Locale, platform: string): string {
-  return translate(locale, `projects.platform.${platform}` as TranslationKey);
-}
-
-export function formatReleaseStatus(locale: Locale, status: string): string {
-  return translate(locale, `versions.release.${status}` as TranslationKey);
-}
-
-export function formatProjectHealth(locale: Locale, health: string): string {
-  return translate(locale, `projects.healthLabel.${health}` as TranslationKey);
-}
-
 export { en, tr };
 export type { TranslationKey };

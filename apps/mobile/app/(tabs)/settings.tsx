@@ -33,8 +33,8 @@ export default function SettingsScreen() {
       .catch((error: unknown) => {
         setSettingsLoaded(true);
         Alert.alert(
-          t("settings.themeLoadFailed"),
-          error instanceof Error ? error.message : t("settings.localReadFailed"),
+          "Tema yüklenemedi",
+          error instanceof Error ? error.message : "Ayarlar yerel olarak okunamadı.",
         );
       });
   }, [services.settingsUseCases, setPreference, user]);
@@ -52,8 +52,8 @@ export default function SettingsScreen() {
       await services.settingsUseCases.setTheme(user.uid, option);
     } catch (error) {
       Alert.alert(
-        t("settings.themeSaveFailed"),
-        error instanceof Error ? error.message : t("settings.localSaveFailed"),
+        "Tema kaydedilemedi",
+        error instanceof Error ? error.message : "Ayar değişikliği yerel olarak kaydedilemedi.",
       );
     }
   };
@@ -65,8 +65,8 @@ export default function SettingsScreen() {
       await loadSyncState();
     } catch (error) {
       Alert.alert(
-        t("settings.syncFailed"),
-        error instanceof Error ? error.message : t("app.unknownError"),
+        "Senkronizasyon başarısız",
+        error instanceof Error ? error.message : "Tekrar deneyin.",
       );
     } finally {
       setBusy(false);
@@ -79,8 +79,8 @@ export default function SettingsScreen() {
       await service.signOut();
     } catch (error) {
       Alert.alert(
-        t("settings.signOutFailed"),
-        error instanceof Error ? error.message : t("app.unknownError"),
+        "Çıkış yapılamadı",
+        error instanceof Error ? error.message : "Lütfen tekrar deneyin.",
       );
     } finally {
       setBusy(false);
@@ -93,8 +93,8 @@ export default function SettingsScreen() {
       await shareWorkspaceExport(await services.exportWorkspace(user.uid));
     } catch (error) {
       Alert.alert(
-        t("settings.exportFailed"),
-        error instanceof Error ? error.message : t("app.unknownError"),
+        "Workspace dışa aktarılamadı",
+        error instanceof Error ? error.message : "Tekrar deneyin.",
       );
     } finally {
       setBusy(false);
@@ -117,17 +117,13 @@ export default function SettingsScreen() {
         documentIds: new Set(documents.map((document) => document.id)),
       });
       Alert.alert(
-        t("settings.calendarRestored"),
-        t("settings.restoreSummary", {
-          created: summary.created,
-          duplicates: summary.duplicates,
-          detached: summary.detachedRelationships,
-        }),
+        "Workspace takvimi geri yüklendi",
+        `${summary.created} kayıt eklendi, ${summary.duplicates} yinelenen kayıt atlandı, ${summary.detachedRelationships} eksik ilişki güvenle kaldırıldı.`,
       );
     } catch (error) {
       Alert.alert(
-        t("settings.restoreFailed"),
-        error instanceof Error ? error.message : t("app.unknownError"),
+        "Workspace takvimi geri yüklenemedi",
+        error instanceof Error ? error.message : "Tekrar deneyin.",
       );
     } finally {
       setBusy(false);
@@ -135,30 +131,34 @@ export default function SettingsScreen() {
   };
   const deleteAccount = () => {
     if (!user || !service) return;
-    Alert.alert(t("settings.deleteAccountConfirm"), t("settings.deleteAccountDetail"), [
-      { text: t("common.cancel"), style: "cancel" },
-      {
-        text: t("settings.deletePermanently"),
-        style: "destructive",
-        onPress: () => {
-          void (async () => {
-            setBusy(true);
-            try {
-              await services.deleteRemoteData(user.uid);
-              await service.deleteAccount();
-              await services.purgeLocalData(user.uid);
-            } catch (error) {
-              Alert.alert(
-                t("settings.deleteAccountFailed"),
-                error instanceof Error ? error.message : t("app.unknownError"),
-              );
-            } finally {
-              setBusy(false);
-            }
-          })();
+    Alert.alert(
+      "Hesabı ve tüm verileri sil?",
+      "Firebase verileri ve bu cihazdaki yerel veriler kalıcı olarak silinir.",
+      [
+        { text: "Vazgeç", style: "cancel" },
+        {
+          text: "Kalıcı olarak sil",
+          style: "destructive",
+          onPress: () => {
+            void (async () => {
+              setBusy(true);
+              try {
+                await services.deleteRemoteData(user.uid);
+                await service.deleteAccount();
+                await services.purgeLocalData(user.uid);
+              } catch (error) {
+                Alert.alert(
+                  "Hesap silinemedi",
+                  error instanceof Error ? error.message : "Tekrar deneyin.",
+                );
+              } finally {
+                setBusy(false);
+              }
+            })();
+          },
         },
-      },
-    ]);
+      ],
+    );
   };
   return (
     <Screen>
@@ -196,41 +196,35 @@ export default function SettingsScreen() {
           </View>
         </View>
         <View style={[styles.section, { borderColor: colors.border }]}>
-          <StoneText variant="title3">{t("settings.sync")}</StoneText>
+          <StoneText variant="title3">Senkronizasyon</StoneText>
           <StoneText variant="bodySmall" style={{ color: colors.textSecondary }}>
-            {t("settings.status", { status: syncState?.status ?? "saved" })}
+            Durum: {syncState?.status ?? "saved"}
             {syncState?.lastError ? ` · ${syncState.lastError}` : ""}
           </StoneText>
           <View style={styles.options}>
             <StoneButton
-              label={t("settings.syncNow")}
+              label="Şimdi eşitle"
               variant="secondary"
               onPress={() => void runSync()}
               disabled={busy || !user}
             />
             <StoneButton
-              label={t("settings.conflicts")}
+              label="Conflict merkezi"
               variant="quiet"
               onPress={() => router.push("/conflicts")}
             />
           </View>
         </View>
         <View style={[styles.section, { borderColor: colors.border }]}>
-          <StoneText variant="title3">{t("settings.theme")}</StoneText>
+          <StoneText variant="title3">Tema</StoneText>
           <StoneText variant="bodySmall" style={{ color: colors.textSecondary }}>
-            {t("settings.themePersistence")}
+            Seçim cihazda saklanır ve uygulama yeniden açıldığında korunur.
           </StoneText>
           <View style={styles.options}>
             {(["system", "light", "dark"] as const).map((option) => (
               <StoneButton
                 key={option}
-                label={
-                  option === "system"
-                    ? t("settings.theme.system")
-                    : option === "light"
-                      ? t("settings.theme.light")
-                      : t("settings.theme.dark")
-                }
+                label={option === "system" ? "Sistem" : option === "light" ? "Açık" : "Koyu"}
                 variant={preference === option ? "primary" : "secondary"}
                 onPress={() => void updateTheme(option)}
               />
@@ -238,39 +232,39 @@ export default function SettingsScreen() {
           </View>
         </View>
         <View style={[styles.section, { borderColor: colors.border }]}>
-          <StoneText variant="title3">{t("settings.account")}</StoneText>
+          <StoneText variant="title3">Hesap</StoneText>
           <StoneText variant="bodySmall" style={{ color: colors.textSecondary }}>
-            {user?.email ?? t("settings.noSession")}
+            {user?.email ?? "Oturum bilgisi yok"}
           </StoneText>
           <StoneButton
-            label={busy ? t("settings.signingOut") : t("settings.signOut")}
+            label={busy ? "Çıkış yapılıyor…" : "Oturumu kapat"}
             variant="secondary"
             onPress={() => void signOut()}
             disabled={busy}
           />
           <StoneButton
-            label={t("settings.exportWorkspace")}
+            label="Workspace'i dışa aktar"
             variant="quiet"
             onPress={() => void exportAll()}
             disabled={busy || !user}
           />
           <StoneButton
-            label={t("settings.restoreCalendar")}
+            label="Workspace takvimini geri yükle"
             variant="quiet"
             onPress={() => void restoreCalendar()}
             disabled={busy || !user}
           />
           <StoneButton
-            label={t("settings.deleteAccount")}
+            label="Hesabı ve verileri sil"
             variant="quiet"
             onPress={deleteAccount}
             disabled={busy || !user}
           />
         </View>
         <View style={[styles.section, { borderColor: colors.border }]}>
-          <StoneText variant="title3">{t("settings.noteManagement")}</StoneText>
+          <StoneText variant="title3">Not yönetimi</StoneText>
           <StoneButton
-            label={t("settings.openTrash")}
+            label="Çöp kutusunu aç"
             variant="secondary"
             onPress={() => router.push("/trash")}
           />

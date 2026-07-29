@@ -9,7 +9,6 @@ import {
   type EditorBridgeMessage,
 } from "@stone/editor";
 import { EDITOR_BUNDLE } from "./editor-bundle";
-import { useI18n } from "../i18n/provider";
 
 export interface EditorWebViewHandle {
   post(message: EditorBridgeMessage): void;
@@ -25,7 +24,6 @@ interface EditorWebViewProps {
 
 export const EditorWebView = React.forwardRef<EditorWebViewHandle, EditorWebViewProps>(
   ({ documentId, markdown, readOnly = false, theme, onMessage }, ref) => {
-    const { locale, t } = useI18n();
     const webViewRef = useRef<WebView>(null);
     useImperativeHandle(ref, () => ({
       post(message) {
@@ -38,7 +36,7 @@ export const EditorWebView = React.forwardRef<EditorWebViewHandle, EditorWebView
         JSON.stringify({
           protocolVersion: EDITOR_BRIDGE_PROTOCOL_VERSION,
           type: "initialize",
-          payload: { documentId, markdown, readOnly, locale },
+          payload: { documentId, markdown, readOnly },
         } satisfies EditorBridgeMessage),
       );
       webViewRef.current?.postMessage(
@@ -58,7 +56,7 @@ export const EditorWebView = React.forwardRef<EditorWebViewHandle, EditorWebView
         onMessage({
           protocolVersion: 1,
           type: "editorError",
-          payload: { message: t("editor.invalidBridge") },
+          payload: { message: "Editor bridge returned invalid JSON." },
         });
       }
     };
@@ -67,7 +65,7 @@ export const EditorWebView = React.forwardRef<EditorWebViewHandle, EditorWebView
       <WebView
         ref={webViewRef}
         originWhitelist={["*"]}
-        source={{ html: createEditorHtml(theme, t("editor.markdownA11y")) }}
+        source={{ html: createEditorHtml(theme) }}
         onLoadEnd={initialize}
         onMessage={handleMessage}
         javaScriptEnabled
@@ -75,22 +73,18 @@ export const EditorWebView = React.forwardRef<EditorWebViewHandle, EditorWebView
         setSupportMultipleWindows={false}
         allowFileAccess={false}
         style={styles.webView}
-        accessibilityLabel={t("editor.markdownA11y")}
+        accessibilityLabel="Stone Markdown editor"
       />
     );
   },
 );
 
-function createEditorHtml(theme: "light" | "dark", accessibilityLabel: string): string {
+function createEditorHtml(theme: "light" | "dark"): string {
   const colors =
     theme === "dark"
       ? { background: "#151515", text: "#F4F0E8", surface: "#23211E", accent: "#D8A15D" }
       : { background: "#F8F6F0", text: "#292721", surface: "#EEE9DF", accent: "#99642D" };
-  return `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"><style>:root{--stone-background:${colors.background};--stone-text:${colors.text};--stone-surface:${colors.surface};--stone-accent:${colors.accent}}html,body,#editor{height:100%;margin:0;background:var(--stone-background);color:var(--stone-text)}body{overflow:hidden}button,a{color:var(--stone-accent)}</style></head><body><main id="editor" role="textbox" aria-label="${escapeHtmlAttribute(accessibilityLabel)}"></main><script>${EDITOR_BUNDLE}</script></body></html>`;
-}
-
-function escapeHtmlAttribute(value: string): string {
-  return value.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;");
+  return `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"><style>:root{--stone-background:${colors.background};--stone-text:${colors.text};--stone-surface:${colors.surface};--stone-accent:${colors.accent}}html,body,#editor{height:100%;margin:0;background:var(--stone-background);color:var(--stone-text)}body{overflow:hidden}button,a{color:var(--stone-accent)}</style></head><body><main id="editor" role="textbox" aria-label="Markdown editor"></main><script>${EDITOR_BUNDLE}</script></body></html>`;
 }
 
 const styles = StyleSheet.create({ webView: { flex: 1, backgroundColor: "transparent" } });

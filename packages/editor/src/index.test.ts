@@ -26,20 +26,6 @@ describe("editor boundary", () => {
     expect(isEditorBridgeMessage({ protocolVersion: 1, type: "requestState", payload: {} })).toBe(
       false,
     );
-    expect(
-      isEditorBridgeMessage({
-        protocolVersion: 1,
-        type: "initialize",
-        payload: { documentId: "note", markdown: "# Stone", locale: "tr" },
-      }),
-    ).toBe(true);
-    expect(
-      isEditorBridgeMessage({
-        protocolVersion: 1,
-        type: "initialize",
-        payload: { documentId: "note", markdown: "# Stone", locale: "de" },
-      }),
-    ).toBe(false);
   });
 
   it("applies source-preserving editor commands", () => {
@@ -76,15 +62,6 @@ describe("editor boundary", () => {
       selection: { anchor: source.length },
     }).state;
     expect(() => buildLivePreviewDecorations(state)).not.toThrow();
-    expect(state.doc.toString()).toBe(source);
-  });
-
-  it("builds Turkish Live Preview labels without changing Markdown source", () => {
-    const source = "---\ntitle: Stone\nstatus: active\n---\n\n- [ ] görev\n";
-    const state = createEditorState(source, false, [], "tr").update({
-      selection: { anchor: source.length },
-    }).state;
-    expect(() => buildLivePreviewDecorations(state, "tr")).not.toThrow();
     expect(state.doc.toString()).toBe(source);
   });
 });
