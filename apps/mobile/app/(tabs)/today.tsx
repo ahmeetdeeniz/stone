@@ -9,27 +9,29 @@ import {
   type TaskListOptions,
   type TodayItem,
 } from "@stone/domain";
+import { formatTaskPriority } from "@stone/i18n";
 import { ResponsiveContent } from "../../src/components/responsive";
 import { EmptyState, ErrorState, LoadingState } from "../../src/components/states";
 import { Screen, StoneButton, StoneInput, StoneText, Surface } from "../../src/components/ui";
 import { spacing } from "../../src/design/tokens";
 import { useAuth } from "../../src/providers/auth-provider";
 import { useAppServices } from "../../src/providers/app-provider";
+import { useI18n } from "../../src/i18n/provider";
 
 type ViewFilter = "all" | "today" | "upcoming" | "overdue" | "completed";
-
-const FILTER_LABELS: Readonly<Record<ViewFilter, string>> = {
-  all: "Tümü",
-  today: "Bugün",
-  upcoming: "Yaklaşan",
-  overdue: "Geciken",
-  completed: "Tamamlanan",
-};
 
 export default function TodayScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const { taskUseCases, projectUseCases, calendar, deviceId } = useAppServices();
+  const { t, tp } = useI18n();
+  const filterLabels: Readonly<Record<ViewFilter, string>> = {
+    all: t("common.all"),
+    today: t("tasks.today"),
+    upcoming: t("tasks.upcoming"),
+    overdue: t("tasks.overdue"),
+    completed: t("tasks.completed"),
+  };
   const [tasks, setTasks] = useState<readonly Task[]>([]);
   const [signals, setSignals] = useState<readonly TodayItem[]>([]);
   const [agendaItems, setAgendaItems] = useState<readonly AgendaItem[]>([]);
@@ -60,7 +62,7 @@ export default function TodayScreen() {
       setSignals(nextSignals.filter((item) => item.kind !== "task"));
       setAgendaItems(buildAgendaItems(nextCalendar, [], [], today, today));
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Planlama görünümü yüklenemedi.");
+      setError(caught instanceof Error ? caught.message : t("tasks.loadPlanningFailed"));
     } finally {
       setLoading(false);
     }
@@ -103,7 +105,7 @@ export default function TodayScreen() {
       setCapture("");
       await load();
     } catch (caught) {
-      Alert.alert("Görev eklenemedi", message(caught));
+      Alert.alert(t("tasks.addFailed"), message(caught, t("app.unknownError")));
     }
   };
 
@@ -114,43 +116,40 @@ export default function TodayScreen() {
       else await taskUseCases.complete(user.uid, task.id, new Date().toISOString(), deviceId);
       await load();
     } catch (caught) {
-      Alert.alert("Görev güncellenemedi", message(caught));
+      Alert.alert(t("tasks.updateFailed"), message(caught, t("app.unknownError")));
     }
   };
 
-  const subtitle = useMemo(
-    () => `${tasks.length} görev · Çevrimdışı değişiklikler cihazda korunur`,
-    [tasks.length],
-  );
+  const subtitle = useMemo(() => tp("planning.subtitle", tasks.length), [tasks.length, tp]);
 
   return (
     <Screen padded={false}>
       <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.page}>
         <ResponsiveContent>
-          <StoneText variant="title1">Planlama</StoneText>
+          <StoneText variant="title1">{t("planning.title")}</StoneText>
           <StoneText variant="bodySmall" style={styles.subtitle}>
             {subtitle}
           </StoneText>
           <View style={styles.quickAdd}>
             <StoneInput
-              label="Hızlı görev ekle"
+              label={t("tasks.quickAdd")}
               value={capture}
               onChangeText={setCapture}
-              placeholder="Yapılacak işi yaz"
+              placeholder={t("tasks.quickAddPlaceholder")}
               returnKeyType="done"
               onSubmitEditing={() => void quickAdd()}
             />
             <StoneButton
-              label="Görev ekle"
+              label={t("tasks.add")}
               onPress={() => void quickAdd()}
               disabled={!capture.trim()}
             />
           </View>
           <StoneInput
-            label="Görevlerde ara"
+            label={t("tasks.search")}
             value={search}
             onChangeText={setSearch}
-            placeholder="Başlık, açıklama veya etiket"
+            placeholder={t("tasks.searchPlaceholder")}
             returnKeyType="search"
           />
           <ScrollView
@@ -158,43 +157,40 @@ export default function TodayScreen() {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.filters}
           >
-            {(Object.keys(FILTER_LABELS) as ViewFilter[]).map((value) => (
+            {(Object.keys(filterLabels) as ViewFilter[]).map((value) => (
               <Pressable
                 key={value}
                 accessibilityRole="button"
                 accessibilityState={{ selected: filter === value }}
-                accessibilityLabel={`${FILTER_LABELS[value]} görevlerini göster`}
+                accessibilityLabel={t("tasks.showFilter", { filter: filterLabels[value] })}
                 onPress={() => setFilter(value)}
                 style={[styles.filter, filter === value && styles.filterActive]}
               >
-                <StoneText variant="label">{FILTER_LABELS[value]}</StoneText>
+                <StoneText variant="label">{filterLabels[value]}</StoneText>
               </Pressable>
             ))}
           </ScrollView>
           {filter === "today" && agendaItems.length > 0 ? (
             <View style={styles.signals}>
-              <StoneText variant="title3">Bugünün zaman çizelgesi</StoneText>
+              <StoneText variant="title3">{t("tasks.timelineToday")}</StoneText>
               {agendaItems.map((item) => (
                 <Surface key={item.id}>
-                  <StoneText variant="caption">{agendaLabel(item.kind)}</StoneText>
+                  <StoneText variant="caption">{agendaLabel(item.kind, t)}</StoneText>
                   <StoneText>{item.title}</StoneText>
                   <StoneText variant="caption">
-                    {item.sortTime ?? "Tüm gün"}
-                    {item.completed ? " · Tamamlandı" : ""}
+                    {item.sortTime ?? t("calendar.allDay")}
+                    {item.completed ? ` · ${t("tasks.completed")}` : ""}
                   </StoneText>
                 </Surface>
               ))}
             </View>
           ) : null}
           {loading ? (
-            <LoadingState label="Görevler yükleniyor" />
+            <LoadingState label={t("tasks.loading")} />
           ) : error ? (
             <ErrorState message={error} onRetry={() => void load()} />
           ) : tasks.length === 0 ? (
-            <EmptyState
-              title="Bu görünüm sakin"
-              description="Filtreye uyan görev yok. Hızlı ekleme alanından yeni bir görev oluşturabilirsin."
-            />
+            <EmptyState title={t("tasks.emptyFilter")} description={t("tasks.emptyFilterDetail")} />
           ) : (
             <View style={styles.list}>
               {tasks.map((task) => (
@@ -211,12 +207,12 @@ export default function TodayScreen() {
           )}
           {filter === "today" && signals.length > 0 ? (
             <View style={styles.signals}>
-              <StoneText variant="title3">Proje sinyalleri</StoneText>
+              <StoneText variant="title3">{t("tasks.projectSignals")}</StoneText>
               {signals.map((item) => (
                 <Surface key={item.id}>
                   <Pressable
                     accessibilityRole="button"
-                    accessibilityLabel={`${item.projectTitle} projesini aç`}
+                    accessibilityLabel={t("tasks.openProjectA11y", { title: item.projectTitle })}
                     onPress={() =>
                       router.push({ pathname: "/project/[id]", params: { id: item.projectId } })
                     }
@@ -224,8 +220,8 @@ export default function TodayScreen() {
                     <StoneText variant="caption">{item.projectTitle}</StoneText>
                     <StoneText>{item.text}</StoneText>
                     <StoneText variant="caption">
-                      {item.blocked ? "Blocker · " : ""}
-                      {item.dueDate ?? "Tarihsiz"}
+                      {item.blocked ? `${t("tasks.blocker")} · ` : ""}
+                      {item.dueDate ?? t("tasks.noDate")}
                     </StoneText>
                   </Pressable>
                 </Surface>
@@ -238,12 +234,12 @@ export default function TodayScreen() {
   );
 }
 
-function agendaLabel(kind: AgendaItem["kind"]): string {
+function agendaLabel(kind: AgendaItem["kind"], t: ReturnType<typeof useI18n>["t"]): string {
   return {
-    event: "Etkinlik",
-    task_block: "Planlanmış görev bloğu",
-    task_due: "Görev son tarihi",
-    project_milestone: "Proje hedef tarihi",
+    event: t("calendar.event"),
+    task_block: t("calendar.scheduledTaskBlock"),
+    task_due: t("calendar.taskDue"),
+    project_milestone: t("calendar.projectTargetDate"),
   }[kind];
 }
 
@@ -257,13 +253,17 @@ function TaskRow({
   onOpen: () => void;
 }) {
   const completed = task.state === "completed";
+  const { locale, t } = useI18n();
   return (
     <Surface>
       <View style={styles.taskRow}>
         <Pressable
           accessibilityRole="checkbox"
           accessibilityState={{ checked: completed }}
-          accessibilityLabel={`${task.title} görevini ${completed ? "yeniden aç" : "tamamla"}`}
+          accessibilityLabel={t("tasks.toggleA11y", {
+            title: task.title,
+            action: completed ? t("a11y.task.reopen") : t("a11y.task.complete"),
+          })}
           onPress={onToggle}
           style={[styles.checkbox, completed && styles.checkboxChecked]}
         >
@@ -271,26 +271,26 @@ function TaskRow({
         </Pressable>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={`${task.title} görevini düzenle`}
+          accessibilityLabel={t("tasks.editA11y", { title: task.title })}
           onPress={onOpen}
           style={styles.taskBody}
         >
           <StoneText variant="body">{task.title}</StoneText>
           <StoneText variant="caption">
-            {task.priority !== "none" ? `${task.priority} öncelik · ` : ""}
-            {task.dueDate ?? "Tarihsiz"}
+            {task.priority !== "none" ? `${formatTaskPriority(locale, task.priority)} · ` : ""}
+            {task.dueDate ?? t("tasks.noDate")}
             {task.dueTime ? ` ${task.dueTime}` : ""}
-            {task.sourceDocumentId ? " · Markdown bağlantılı" : ""}
+            {task.sourceDocumentId ? ` · ${t("tasks.linkedMarkdown")}` : ""}
           </StoneText>
-          {completed ? <StoneText variant="caption">Durum: Tamamlandı</StoneText> : null}
+          {completed ? <StoneText variant="caption">{t("tasks.completed")}</StoneText> : null}
         </Pressable>
       </View>
     </Surface>
   );
 }
 
-function message(error: unknown): string {
-  return error instanceof Error ? error.message : "Tekrar deneyin.";
+function message(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message : fallback;
 }
 
 const styles = StyleSheet.create({

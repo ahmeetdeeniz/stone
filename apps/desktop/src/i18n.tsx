@@ -2,6 +2,7 @@ import {
   parseLocalePreference,
   resolveLocale,
   translate,
+  translatePlural,
   type Locale,
   type LocalePreference,
   type TranslationKey,
@@ -16,6 +17,7 @@ interface I18nContextValue {
   preference: LocalePreference;
   setPreference: (preference: LocalePreference) => void;
   t: (key: TranslationKey, parameters?: TranslationParameters) => string;
+  tp: (baseKey: string, count: number, parameters?: TranslationParameters) => string;
 }
 
 function readPreference(): LocalePreference {
@@ -44,6 +46,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
         }
       },
       t: (key, parameters) => translate(locale, key, parameters),
+      tp: (baseKey, count, parameters) => translatePlural(locale, baseKey, count, parameters),
     }),
     [locale, preference],
   );

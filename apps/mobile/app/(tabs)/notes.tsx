@@ -3,6 +3,7 @@ import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import { Alert, FlatList, Pressable, StyleSheet, View } from "react-native";
 import type { Document } from "@stone/domain";
+import { formatInstant } from "@stone/i18n";
 import { ResponsiveContent } from "../../src/components/responsive";
 import { EmptyState, ErrorState, LoadingState } from "../../src/components/states";
 import { Screen, StoneButton, StoneInput, StoneText, Surface } from "../../src/components/ui";
@@ -10,11 +11,13 @@ import { spacing } from "../../src/design/tokens";
 import { useAuth } from "../../src/providers/auth-provider";
 import { useAppServices } from "../../src/providers/app-provider";
 import { pickAndImportNote } from "../../src/notes/note-files";
+import { useI18n } from "../../src/i18n/provider";
 
 export default function NotesScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const { noteUseCases, deviceId } = useAppServices();
+  const { locale, t } = useI18n();
   const [notes, setNotes] = useState<readonly Document[]>([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
@@ -28,7 +31,7 @@ export default function NotesScreen() {
       setError(null);
       setNotes(await noteUseCases.list(user.uid, search ? { search } : {}));
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Notlar okunamadı.");
+      setError(caught instanceof Error ? caught.message : t("notes.loadFailed"));
     } finally {
       setLoading(false);
     }
@@ -63,8 +66,8 @@ export default function NotesScreen() {
       router.push({ pathname: "/editor", params: { id: note.id } });
     } catch (caught) {
       Alert.alert(
-        "Not oluşturulamadı",
-        caught instanceof Error ? caught.message : "Yerel kayıt başarısız.",
+        t("notes.createFailed"),
+        caught instanceof Error ? caught.message : t("notes.localSaveFailed"),
       );
     } finally {
       setBusy(false);
@@ -79,8 +82,8 @@ export default function NotesScreen() {
       if (note) router.push({ pathname: "/editor", params: { id: note.id } });
     } catch (caught) {
       Alert.alert(
-        "Markdown içe aktarılamadı",
-        caught instanceof Error ? caught.message : "Dosya okunamadı.",
+        t("notes.importFailed"),
+        caught instanceof Error ? caught.message : t("notes.fileReadFailed"),
       );
     } finally {
       setBusy(false);
@@ -94,17 +97,17 @@ export default function NotesScreen() {
       await loadNotes();
     } catch (caught) {
       Alert.alert(
-        "Not güncellenemedi",
-        caught instanceof Error ? caught.message : "Lütfen tekrar deneyin.",
+        t("notes.updateFailed"),
+        caught instanceof Error ? caught.message : t("app.unknownError"),
       );
     }
   };
 
   const moveToTrash = (note: Document) => {
-    Alert.alert("Notu çöpe taşı?", `“${note.title}” çöp kutusuna taşınacak.`, [
-      { text: "Vazgeç", style: "cancel" },
+    Alert.alert(t("notes.trashConfirm"), t("notes.trashDetail", { title: note.title }), [
+      { text: t("common.cancel"), style: "cancel" },
       {
-        text: "Çöpe taşı",
+        text: t("notes.moveToTrash"),
         style: "destructive",
         onPress: () => {
           void noteUseCases
@@ -112,8 +115,8 @@ export default function NotesScreen() {
             .then(loadNotes)
             .catch((caught: unknown) => {
               Alert.alert(
-                "Not silinemedi",
-                caught instanceof Error ? caught.message : "Lütfen tekrar deneyin.",
+                t("notes.deleteFailed"),
+                caught instanceof Error ? caught.message : t("app.unknownError"),
               );
             });
         },
@@ -127,33 +130,33 @@ export default function NotesScreen() {
         <View style={styles.header}>
           <View>
             <StoneText variant="display">Stone</StoneText>
-            <StoneText variant="title1">Notlar</StoneText>
+            <StoneText variant="title1">{t("tabs.notes")}</StoneText>
           </View>
           <View style={styles.headerActions}>
             <StoneButton
-              label=".md Aç"
+              label={t("notes.openMarkdown")}
               variant="secondary"
               onPress={() => void importNote()}
               disabled={busy}
             />
             <StoneButton
-              label="Yeni çizim"
+              label={t("notes.newDrawing")}
               variant="secondary"
               onPress={() => router.push({ pathname: "/drawing/[id]", params: { id: "new" } })}
               disabled={busy}
             />
-            <StoneButton label="Yeni not" onPress={() => void createNote()} disabled={busy} />
+            <StoneButton label={t("notes.new")} onPress={() => void createNote()} disabled={busy} />
           </View>
         </View>
         <StoneInput
-          label="Notlarda ara"
+          label={t("notes.search")}
           value={search}
           onChangeText={setSearch}
-          placeholder="Başlık veya içerik"
+          placeholder={t("notes.searchPlaceholder")}
           returnKeyType="search"
         />
         {loading ? (
-          <LoadingState label="Notlar yükleniyor" />
+          <LoadingState label={t("notes.loading")} />
         ) : error ? (
           <ErrorState message={error} onRetry={() => void loadNotes()} />
         ) : (
@@ -163,19 +166,15 @@ export default function NotesScreen() {
             contentContainerStyle={notes.length === 0 ? styles.emptyList : styles.list}
             ListEmptyComponent={
               <EmptyState
-                title={search ? "Eşleşen not yok" : "İlk notunu oluştur"}
-                description={
-                  search
-                    ? "Başka bir arama deneyin."
-                    : "Yeni not ile yerel Markdown çalışma alanını başlatın."
-                }
+                title={search ? t("notes.searchEmpty") : t("notes.emptyTitle")}
+                description={search ? t("notes.searchEmptyDetail") : t("notes.emptyDetail")}
               />
             }
             renderItem={({ item }) => (
               <Surface>
                 <Pressable
                   accessibilityRole="button"
-                  accessibilityLabel={`${item.title} notunu aç`}
+                  accessibilityLabel={t("notes.openA11y", { title: item.title })}
                   onPress={() => router.push({ pathname: "/editor", params: { id: item.id } })}
                 >
                   <StoneText variant="title3">
@@ -183,20 +182,24 @@ export default function NotesScreen() {
                     {item.title}
                   </StoneText>
                   <StoneText variant="bodySmall" numberOfLines={2} style={styles.preview}>
-                    {preview(item.markdown)}
+                    {preview(item.markdown, t("notes.emptyMarkdown"))}
                   </StoneText>
                   <StoneText variant="caption" style={styles.date}>
-                    {formatDate(item.updatedAt)}
+                    {formatInstant(
+                      locale,
+                      item.updatedAt,
+                      Intl.DateTimeFormat().resolvedOptions().timeZone,
+                    )}
                   </StoneText>
                 </Pressable>
                 <View style={styles.cardActions}>
                   <StoneButton
-                    label={item.isPinned ? "Sabitlemeyi kaldır" : "Sabitle"}
+                    label={item.isPinned ? t("notes.unpin") : t("notes.pin")}
                     variant="quiet"
                     onPress={() => void togglePin(item)}
                   />
                   <StoneButton
-                    label="Çöpe taşı"
+                    label={t("notes.moveToTrash")}
                     variant="quiet"
                     onPress={() => moveToTrash(item)}
                   />
@@ -210,18 +213,12 @@ export default function NotesScreen() {
   );
 }
 
-function preview(markdown: string): string {
+function preview(markdown: string, emptyLabel: string): string {
   return (
     markdown
       .replace(/^---[\s\S]*?---\s*/u, "")
       .replace(/[*_`>#-]/gu, "")
-      .trim() || "Boş Markdown notu"
-  );
-}
-
-function formatDate(value: string): string {
-  return new Intl.DateTimeFormat("tr-TR", { dateStyle: "medium", timeStyle: "short" }).format(
-    new Date(value),
+      .trim() || emptyLabel
   );
 }
 
