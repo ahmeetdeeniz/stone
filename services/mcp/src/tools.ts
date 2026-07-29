@@ -568,6 +568,169 @@ export function createMcpServer(service: StoneMcpService): McpServer {
     async ({ id, ...input }, extra) =>
       result(await service.deleteCalendarEvent(context(extra), id, input)),
   );
+  const focusIdWrite = { focusSessionId: z.string().min(1).max(200), ...write };
+  server.registerTool(
+    "get_active_focus_session",
+    {
+      title: "Get active focus session",
+      description: "Read the authenticated user's active focus session and overlap state.",
+      inputSchema: {},
+      annotations: readMeta,
+    },
+    async (_input, extra) => result(await service.getActiveFocusSession(context(extra))),
+  );
+  server.registerTool(
+    "list_focus_sessions",
+    {
+      title: "List focus sessions",
+      description: "List owner-scoped focus sessions in an explicit bounded instant range.",
+      inputSchema: {
+        startAt: z.string().datetime(),
+        endAt: z.string().datetime(),
+        ...page,
+      },
+      annotations: readMeta,
+    },
+    async (input, extra) => result(await service.listFocusSessions(context(extra), input)),
+  );
+  server.registerTool(
+    "start_focus_session",
+    {
+      title: "Start focus session",
+      description: "Start one durable stopwatch, countdown, or Pomodoro focus session.",
+      inputSchema: {
+        mode: z.enum(["stopwatch", "countdown", "pomodoro"]),
+        plannedDurationSeconds: z.number().int().min(1).max(31_536_000).optional(),
+        taskId: z.string().max(200).optional(),
+        projectId: z.string().max(200).optional(),
+        sourceDocumentId: z.string().max(200).optional(),
+        calendarItemId: z.string().max(200).optional(),
+        category: z.string().max(120).optional(),
+        note: z.string().max(8000).optional(),
+        ...write,
+      },
+      annotations: writeMeta,
+    },
+    async (input, extra) => result(await service.startFocusSession(context(extra), input)),
+  );
+  server.registerTool(
+    "pause_focus_session",
+    {
+      title: "Pause focus session",
+      description: "Pause a running focus session without counting paused time.",
+      inputSchema: focusIdWrite,
+      annotations: writeMeta,
+    },
+    async ({ focusSessionId, ...input }, extra) =>
+      result(await service.pauseFocusSession(context(extra), focusSessionId, input)),
+  );
+  server.registerTool(
+    "resume_focus_session",
+    {
+      title: "Resume focus session",
+      description: "Resume one paused focus session.",
+      inputSchema: focusIdWrite,
+      annotations: writeMeta,
+    },
+    async ({ focusSessionId, ...input }, extra) =>
+      result(await service.resumeFocusSession(context(extra), focusSessionId, input)),
+  );
+  server.registerTool(
+    "complete_focus_session",
+    {
+      title: "Complete focus session",
+      description: "Complete an active session exactly once and record actual focused time.",
+      inputSchema: focusIdWrite,
+      annotations: writeMeta,
+    },
+    async ({ focusSessionId, ...input }, extra) =>
+      result(await service.completeFocusSession(context(extra), focusSessionId, input)),
+  );
+  server.registerTool(
+    "cancel_focus_session",
+    {
+      title: "Cancel focus session",
+      description: "Retain an active session as cancelled history without counting it as focus.",
+      inputSchema: focusIdWrite,
+      annotations: { ...writeMeta, destructiveHint: true },
+    },
+    async ({ focusSessionId, ...input }, extra) =>
+      result(await service.cancelFocusSession(context(extra), focusSessionId, input)),
+  );
+  server.registerTool(
+    "create_manual_focus_session",
+    {
+      title: "Create manual focus session",
+      description: "Create an explicitly marked manual focus record from two ISO instants.",
+      inputSchema: {
+        startedAt: z.string().datetime(),
+        endedAt: z.string().datetime(),
+        taskId: z.string().max(200).optional(),
+        projectId: z.string().max(200).optional(),
+        category: z.string().max(120).optional(),
+        note: z.string().max(8000).optional(),
+        ...write,
+      },
+      annotations: writeMeta,
+    },
+    async (input, extra) => result(await service.createManualFocusSession(context(extra), input)),
+  );
+  server.registerTool(
+    "update_focus_session",
+    {
+      title: "Update focus session",
+      description: "Correct completed duration or update reflection/category with revision safety.",
+      inputSchema: {
+        ...focusIdWrite,
+        durationSeconds: z.number().int().min(1).max(31_536_000).optional(),
+        note: z.string().max(8000).nullable().optional(),
+        category: z.string().max(120).nullable().optional(),
+      },
+      annotations: writeMeta,
+    },
+    async ({ focusSessionId, ...input }, extra) =>
+      result(await service.updateFocusSession(context(extra), focusSessionId, input)),
+  );
+  server.registerTool(
+    "get_productivity_summary",
+    {
+      title: "Get productivity summary",
+      description: "Aggregate bounded focus history without double-counting unresolved overlaps.",
+      inputSchema: {
+        startAt: z.string().datetime(),
+        endAt: z.string().datetime(),
+        timezone: z.string().min(1).max(100),
+      },
+      annotations: readMeta,
+    },
+    async (input, extra) => result(await service.getProductivitySummary(context(extra), input)),
+  );
+  server.registerTool(
+    "get_focus_goal",
+    {
+      title: "Get focus goal",
+      description: "Read the authenticated user's prospective daily and weekly focus goal.",
+      inputSchema: {},
+      annotations: readMeta,
+    },
+    async (_input, extra) => result(await service.getFocusGoal(context(extra))),
+  );
+  server.registerTool(
+    "set_focus_goal",
+    {
+      title: "Set focus goal",
+      description: "Set prospective offline-capable daily and weekly focus targets.",
+      inputSchema: {
+        timezone: z.string().min(1).max(100),
+        dailyMinutes: z.number().int().min(0).max(1440),
+        weeklyMinutes: z.number().int().min(0).max(10080),
+        effectiveFromDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u),
+        ...write,
+      },
+      annotations: writeMeta,
+    },
+    async (input, extra) => result(await service.setFocusGoal(context(extra), input)),
+  );
   return server;
 }
 

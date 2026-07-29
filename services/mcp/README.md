@@ -51,7 +51,12 @@ Calendar scopes (`stone.read.calendar`, `stone.write.calendar`) expose bounded
 `list_calendar_events`, `list_agenda`, `get_calendar_event`, event CRUD and task-block
 schedule/reschedule/unschedule tools. Inputs and outputs are timezone explicit. A task block
 references a task but never changes its due date or completion state. Destructive recurrence
-operations require explicit revision-safe writes; focus-session tools are intentionally absent.
+operations require explicit revision-safe writes.
+
+Focus scopes (`stone.read.focus`, `stone.write.focus`) expose bounded active/history reads,
+stopwatch/countdown/Pomodoro start, pause/resume/complete/cancel transitions, manual entry and
+correction, prospective offline goal settings, and overlap-safe productivity summaries. All focus
+writes use the same owner, revision, idempotency, and audit boundaries as other Stone records.
 
 The initial service intentionally has no custom provider UI. Structured results are usable by every MCP client and keep the business data on the server; a provider-specific UI can be added later without changing the core contract.
 

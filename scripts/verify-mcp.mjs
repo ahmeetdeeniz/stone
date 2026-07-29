@@ -36,6 +36,18 @@ const requiredTools = [
   "schedule_task",
   "reschedule_task_block",
   "unschedule_task_block",
+  "get_active_focus_session",
+  "list_focus_sessions",
+  "start_focus_session",
+  "pause_focus_session",
+  "resume_focus_session",
+  "complete_focus_session",
+  "cancel_focus_session",
+  "create_manual_focus_session",
+  "update_focus_session",
+  "get_productivity_summary",
+  "get_focus_goal",
+  "set_focus_goal",
 ];
 for (const name of requiredTools)
   if (!tools.includes(`"${name}"`)) throw new Error(`MCP tool missing: ${name}`);

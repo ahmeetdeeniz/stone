@@ -15,9 +15,11 @@ const ownerA: AuthContext = {
     "stone.read.notes",
     "stone.read.projects",
     "stone.read.tasks",
+    "stone.read.focus",
     "stone.write.notes",
     "stone.write.projects",
     "stone.write.tasks",
+    "stone.write.focus",
   ],
 };
 const ownerB: AuthContext = { ...ownerA, userId: "owner-b" };
@@ -94,6 +96,51 @@ describe("Stone MCP core", () => {
     });
     expect(updated.entity.markdown).toContain("changed");
     expect(updated.afterRevision).toBe(2);
+  });
+
+  it("keeps focus transitions durable, revision-safe, and idempotent", async () => {
+    const store = new MemoryStoneStore();
+    let sequence = 0;
+    const service = new StoneMcpService(store, {
+      idFactory: () => `focus-${++sequence}`,
+      now: () => new Date("2026-07-29T09:00:00.000Z"),
+    });
+    const started = await service.startFocusSession(ownerA, {
+      mode: "countdown",
+      plannedDurationSeconds: 1500,
+      expectedRevision: 0,
+      idempotencyKey: "focus-start-1",
+    });
+    expect(started.entity).toMatchObject({
+      id: "focus-1",
+      status: "running",
+      plannedDurationSeconds: 1500,
+      revision: 1,
+    });
+    await expect(
+      service.startFocusSession(ownerA, {
+        mode: "stopwatch",
+        expectedRevision: 0,
+        idempotencyKey: "focus-start-2",
+      }),
+    ).rejects.toThrow("active focus session");
+
+    const paused = await service.pauseFocusSession(ownerA, "focus-1", {
+      expectedRevision: 1,
+      idempotencyKey: "focus-pause-1",
+    });
+    const replay = await service.pauseFocusSession(ownerA, "focus-1", {
+      expectedRevision: 1,
+      idempotencyKey: "focus-pause-1",
+    });
+    expect(paused.entity).toMatchObject({ status: "paused", revision: 2 });
+    expect(replay.replayed).toBe(true);
+    await expect(
+      service.completeFocusSession(ownerA, "focus-1", {
+        expectedRevision: 1,
+        idempotencyKey: "focus-complete-stale",
+      }),
+    ).rejects.toBeInstanceOf(McpRevisionConflictError);
   });
 
   it("creates and completes a task through the Markdown boundary", async () => {

@@ -3,10 +3,12 @@ export const SCOPES = [
   "stone.read.projects",
   "stone.read.tasks",
   "stone.read.calendar",
+  "stone.read.focus",
   "stone.write.notes",
   "stone.write.projects",
   "stone.write.tasks",
   "stone.write.calendar",
+  "stone.write.focus",
 ] as const;
 
 export type StoneScope = (typeof SCOPES)[number];
@@ -141,6 +143,65 @@ export interface CalendarRecord {
   [key: string]: unknown;
 }
 
+export interface FocusRecord {
+  id: string;
+  ownerId: string;
+  schemaVersion: 1;
+  mode: "stopwatch" | "countdown" | "pomodoro";
+  status: "running" | "paused" | "completed" | "cancelled";
+  phase: "focus" | "short_break" | "long_break";
+  startedAt: string;
+  endedAt: string | null;
+  plannedDurationSeconds: number | null;
+  actualFocusSeconds: number;
+  accumulatedPausedSeconds: number;
+  pauses: { startedAt: string; endedAt: string | null }[];
+  manuallyAdjustedSeconds: number | null;
+  taskId: string | null;
+  projectId: string | null;
+  sourceDocumentId: string | null;
+  calendarItemId: string | null;
+  category: string | null;
+  tags: string[];
+  note: string | null;
+  pomodoroGroupId: string | null;
+  pomodoroCycle: number | null;
+  activeDeviceId: string;
+  conflictState: "none" | "overlap_unresolved" | "resolved_include" | "resolved_exclude";
+  revision: number;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt: string | null;
+  updatedByDeviceId: string;
+  [key: string]: unknown;
+}
+
+export interface FocusGoalRecord {
+  id: string;
+  ownerId: string;
+  schemaVersion: 1;
+  timezone: string;
+  dailyMinutes: number;
+  weeklyMinutes: number;
+  effectiveFromDate: string;
+  streakVisible: boolean;
+  revision: number;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt: string | null;
+  updatedByDeviceId: string;
+  [key: string]: unknown;
+}
+
+export interface ListFocusOptions {
+  startAt: string;
+  endAt: string;
+  status?: FocusRecord["status"];
+  cursorKey?: string;
+  pageToken?: string;
+  limit: number;
+}
+
 export interface Page<T> {
   items: readonly T[];
   nextPageToken: string | null;
@@ -268,6 +329,28 @@ export interface CalendarWriteInput {
   mutate: (current: CalendarRecord | null) => CalendarRecord;
 }
 
+export interface FocusWriteInput {
+  ownerId: string;
+  focusId: string;
+  expectedRevision: number;
+  idempotencyKey: string;
+  tool: string;
+  confirmation: Record<string, unknown> | null;
+  inputSummary: Record<string, unknown>;
+  mutate: (current: FocusRecord | null) => FocusRecord;
+}
+
+export interface FocusGoalWriteInput {
+  ownerId: string;
+  goalId: string;
+  expectedRevision: number;
+  idempotencyKey: string;
+  tool: string;
+  confirmation: Record<string, unknown> | null;
+  inputSummary: Record<string, unknown>;
+  mutate: (current: FocusGoalRecord | null) => FocusGoalRecord;
+}
+
 export interface WriteResult<T> {
   entity: T;
   replayed: boolean;
@@ -285,11 +368,16 @@ export interface StoneStore {
   listTasks(ownerId: string, options: ListTasksOptions): Promise<Page<TaskRecord>>;
   getCalendar(ownerId: string, id: string): Promise<CalendarRecord | null>;
   listCalendar(ownerId: string, options: ListCalendarOptions): Promise<Page<CalendarRecord>>;
+  getFocus(ownerId: string, id: string): Promise<FocusRecord | null>;
+  listFocus(ownerId: string, options: ListFocusOptions): Promise<Page<FocusRecord>>;
+  getFocusGoal(ownerId: string): Promise<FocusGoalRecord | null>;
   writeDocument(input: DocumentWriteInput): Promise<WriteResult<DocumentRecord>>;
   writeProject(input: ProjectWriteInput): Promise<WriteResult<ProjectRecord>>;
   writeVersion(input: VersionWriteInput): Promise<WriteResult<VersionRecord>>;
   writeTask(input: TaskWriteInput): Promise<WriteResult<TaskRecord>>;
   writeCalendar(input: CalendarWriteInput): Promise<WriteResult<CalendarRecord>>;
+  writeFocus(input: FocusWriteInput): Promise<WriteResult<FocusRecord>>;
+  writeFocusGoal(input: FocusGoalWriteInput): Promise<WriteResult<FocusGoalRecord>>;
   listAudit(ownerId: string, limit: number): Promise<readonly AuditEntry[]>;
 }
 

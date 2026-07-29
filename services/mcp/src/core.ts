@@ -1,12 +1,23 @@
 import { randomUUID } from "node:crypto";
 import {
+  adjustFocusSession,
+  aggregateFocusSessions,
   canTransitionProjectStatus,
+  cancelFocusSession,
+  createManualFocusSession,
   deleteCalendarRecurrence,
   editCalendarRecurrence,
+  finishFocusSession,
+  pauseFocusSession,
+  resumeFocusSession,
+  startFocusSession,
   validateCalendarItem,
+  validateFocusGoal,
+  validateFocusSession,
   type CalendarItem,
   type CalendarOccurrenceChanges,
   type CalendarRecurrenceEditScope,
+  type FocusSession,
 } from "@stone/domain";
 import {
   ensureTaskMetadata,
@@ -22,6 +33,8 @@ import {
   type AuthContext,
   type CalendarRecord,
   type DocumentRecord,
+  type FocusGoalRecord,
+  type FocusRecord,
   type ProjectRecord,
   type StoneStore,
   type TaskRecord,
@@ -170,6 +183,32 @@ export interface CalendarDeleteInput extends WriteOptions {
   recurrenceScope?: CalendarRecurrenceEditScope | undefined;
 }
 
+export interface FocusStartInput extends WriteOptions {
+  mode: "stopwatch" | "countdown" | "pomodoro";
+  plannedDurationSeconds?: number | undefined;
+  taskId?: string | undefined;
+  projectId?: string | undefined;
+  sourceDocumentId?: string | undefined;
+  calendarItemId?: string | undefined;
+  category?: string | undefined;
+  note?: string | undefined;
+}
+
+export interface FocusManualInput extends WriteOptions {
+  startedAt: string;
+  endedAt: string;
+  taskId?: string | undefined;
+  projectId?: string | undefined;
+  category?: string | undefined;
+  note?: string | undefined;
+}
+
+export interface FocusUpdateInput extends WriteOptions {
+  durationSeconds?: number | undefined;
+  note?: string | null | undefined;
+  category?: string | null | undefined;
+}
+
 export interface StoneMcpServiceOptions {
   now?: () => Date;
   idFactory?: () => string;
@@ -278,6 +317,250 @@ export class StoneMcpService {
       limit: boundedLimit(options.limit),
     });
     return { items: page.items.map(versionSummary), nextPageToken: page.nextPageToken };
+  }
+
+  public async getActiveFocusSession(context: AuthContext) {
+    requireScope(context, "stone.read.focus");
+    const page = await this.store.listFocus(context.userId, {
+      startAt: "1970-01-01T00:00:00.000Z",
+      endAt: "9999-12-31T23:59:59.999Z",
+      cursorKey: "focus:active",
+      limit: 10,
+    });
+    const active = page.items.filter(
+      (session) => session.status === "running" || session.status === "paused",
+    );
+    return { session: active[0] ?? null, conflictingActiveCount: Math.max(0, active.length - 1) };
+  }
+
+  public async listFocusSessions(
+    context: AuthContext,
+    input: ReadOptions & { startAt: string; endAt: string },
+  ) {
+    requireScope(context, "stone.read.focus");
+    assertInstant(input.startAt, "startAt");
+    assertInstant(input.endAt, "endAt");
+    if (input.endAt <= input.startAt) throw new McpInputError("endAt must follow startAt.");
+    return this.store.listFocus(context.userId, {
+      startAt: input.startAt,
+      endAt: input.endAt,
+      cursorKey: `focus:${input.startAt}:${input.endAt}`,
+      ...(input.pageToken === undefined ? {} : { pageToken: input.pageToken }),
+      limit: boundedLimit(input.limit),
+    });
+  }
+
+  public async startFocusSession(context: AuthContext, input: FocusStartInput) {
+    requireScope(context, "stone.write.focus");
+    validateWrite(input);
+    const active = await this.getActiveFocusSession({
+      ...context,
+      scopes: [...context.scopes, "stone.read.focus"],
+    });
+    if (active.session) throw new McpInputError("An active focus session already exists.");
+    const id = this.idFactory();
+    const now = this.now().toISOString();
+    const session = startFocusSession(
+      {
+        id,
+        ownerId: context.userId,
+        deviceId: this.device(context),
+        mode: input.mode,
+        plannedDurationSeconds: input.plannedDurationSeconds ?? null,
+        taskId: input.taskId ?? null,
+        projectId: input.projectId ?? null,
+        sourceDocumentId: input.sourceDocumentId ?? null,
+        calendarItemId: input.calendarItemId ?? null,
+        category: input.category ?? null,
+        note: input.note ?? null,
+        pomodoroGroupId: input.mode === "pomodoro" ? this.idFactory() : null,
+        pomodoroCycle: input.mode === "pomodoro" ? 0 : null,
+      },
+      { now: () => now },
+    );
+    return this.store.writeFocus({
+      ownerId: context.userId,
+      focusId: id,
+      expectedRevision: input.expectedRevision,
+      idempotencyKey: input.idempotencyKey,
+      tool: "start_focus_session",
+      confirmation: input.confirmation ?? null,
+      inputSummary: { mode: input.mode, plannedDurationSeconds: input.plannedDurationSeconds },
+      mutate: () => session as unknown as FocusRecord,
+    });
+  }
+
+  public pauseFocusSession(context: AuthContext, id: string, input: WriteOptions) {
+    return this.transitionFocus(context, id, input, "pause_focus_session", (session) =>
+      pauseFocusSession(session, { now: () => this.now().toISOString() }),
+    );
+  }
+
+  public resumeFocusSession(context: AuthContext, id: string, input: WriteOptions) {
+    return this.transitionFocus(context, id, input, "resume_focus_session", (session) =>
+      resumeFocusSession(session, { now: () => this.now().toISOString() }),
+    );
+  }
+
+  public completeFocusSession(context: AuthContext, id: string, input: WriteOptions) {
+    return this.transitionFocus(context, id, input, "complete_focus_session", (session) =>
+      finishFocusSession(session, { now: () => this.now().toISOString() }),
+    );
+  }
+
+  public cancelFocusSession(context: AuthContext, id: string, input: WriteOptions) {
+    return this.transitionFocus(context, id, input, "cancel_focus_session", (session) =>
+      cancelFocusSession(session, { now: () => this.now().toISOString() }),
+    );
+  }
+
+  public async createManualFocusSession(context: AuthContext, input: FocusManualInput) {
+    requireScope(context, "stone.write.focus");
+    validateWrite(input);
+    assertInstant(input.startedAt, "startedAt");
+    assertInstant(input.endedAt, "endedAt");
+    const id = this.idFactory();
+    const session = createManualFocusSession(
+      {
+        id,
+        ownerId: context.userId,
+        deviceId: this.device(context),
+        mode: "stopwatch",
+        startedAt: input.startedAt,
+        endedAt: input.endedAt,
+        taskId: input.taskId ?? null,
+        projectId: input.projectId ?? null,
+        category: input.category ?? null,
+        note: input.note ?? null,
+      },
+      { now: () => this.now().toISOString() },
+    );
+    return this.store.writeFocus({
+      ownerId: context.userId,
+      focusId: id,
+      expectedRevision: input.expectedRevision,
+      idempotencyKey: input.idempotencyKey,
+      tool: "create_manual_focus_session",
+      confirmation: input.confirmation ?? null,
+      inputSummary: { startedAt: input.startedAt, endedAt: input.endedAt },
+      mutate: () => session as unknown as FocusRecord,
+    });
+  }
+
+  public async updateFocusSession(context: AuthContext, id: string, input: FocusUpdateInput) {
+    requireScope(context, "stone.write.focus");
+    validateWrite(input);
+    const current = await this.store.getFocus(context.userId, id);
+    if (!current) throw new McpNotFoundError("Focus session not found.");
+    return this.store.writeFocus({
+      ownerId: context.userId,
+      focusId: id,
+      expectedRevision: input.expectedRevision,
+      idempotencyKey: input.idempotencyKey,
+      tool: "update_focus_session",
+      confirmation: input.confirmation ?? null,
+      inputSummary: { durationSeconds: input.durationSeconds, category: input.category },
+      mutate: () => {
+        let next = current as unknown as FocusSession;
+        if (input.durationSeconds !== undefined)
+          next = adjustFocusSession(next, input.durationSeconds, input.note ?? next.note, {
+            now: () => this.now().toISOString(),
+          });
+        else
+          next = validateFocusSession({
+            ...next,
+            note: input.note === undefined ? next.note : input.note,
+            category: input.category === undefined ? next.category : input.category,
+            revision: next.revision + 1,
+            updatedAt: this.now().toISOString(),
+          });
+        return next as unknown as FocusRecord;
+      },
+    });
+  }
+
+  public async getProductivitySummary(
+    context: AuthContext,
+    input: { startAt: string; endAt: string; timezone: string },
+  ) {
+    requireScope(context, "stone.read.focus");
+    const page = await this.listFocusSessions(context, { ...input, limit: 100 });
+    return aggregateFocusSessions(page.items, boundedText(input.timezone, 100, "timezone"));
+  }
+
+  public async getFocusGoal(context: AuthContext) {
+    requireScope(context, "stone.read.focus");
+    return { goal: await this.store.getFocusGoal(context.userId) };
+  }
+
+  public async setFocusGoal(
+    context: AuthContext,
+    input: WriteOptions & {
+      timezone: string;
+      dailyMinutes: number;
+      weeklyMinutes: number;
+      effectiveFromDate: string;
+    },
+  ) {
+    requireScope(context, "stone.write.focus");
+    validateWrite(input);
+    const timestamp = this.now().toISOString();
+    const current = await this.store.getFocusGoal(context.userId);
+    const next = validateFocusGoal({
+      id: context.userId,
+      ownerId: context.userId,
+      schemaVersion: 1,
+      timezone: input.timezone,
+      dailyMinutes: input.dailyMinutes,
+      weeklyMinutes: input.weeklyMinutes,
+      effectiveFromDate: input.effectiveFromDate,
+      streakVisible: false,
+      revision: (current?.revision ?? 0) + 1,
+      createdAt: current?.createdAt ?? timestamp,
+      updatedAt: timestamp,
+      deletedAt: null,
+      updatedByDeviceId: this.device(context),
+    });
+    return this.store.writeFocusGoal({
+      ownerId: context.userId,
+      goalId: context.userId,
+      expectedRevision: input.expectedRevision,
+      idempotencyKey: input.idempotencyKey,
+      tool: "set_focus_goal",
+      confirmation: input.confirmation ?? null,
+      inputSummary: {
+        dailyMinutes: input.dailyMinutes,
+        weeklyMinutes: input.weeklyMinutes,
+        effectiveFromDate: input.effectiveFromDate,
+      },
+      mutate: () => next as unknown as FocusGoalRecord,
+    });
+  }
+
+  private async transitionFocus(
+    context: AuthContext,
+    id: string,
+    input: WriteOptions,
+    tool: string,
+    transition: (session: FocusSession) => FocusSession,
+  ) {
+    requireScope(context, "stone.write.focus");
+    validateWrite(input);
+    const current = await this.store.getFocus(context.userId, id);
+    if (!current) throw new McpNotFoundError("Focus session not found.");
+    return this.store.writeFocus({
+      ownerId: context.userId,
+      focusId: id,
+      expectedRevision: input.expectedRevision,
+      idempotencyKey: input.idempotencyKey,
+      tool,
+      confirmation: input.confirmation ?? null,
+      inputSummary: { id },
+      mutate: () => {
+        const next = transition(current);
+        return { ...next, pauses: [...next.pauses], tags: [...next.tags] };
+      },
+    });
   }
 
   public async getTodayTasks(context: AuthContext, date: string) {
@@ -1160,6 +1443,11 @@ function assertIsoDate(value: string, name: string): void {
     new Date(`${value}T00:00:00.000Z`).toISOString().slice(0, 10) !== value
   )
     throw new McpInputError(`${name} must be an ISO date.`);
+}
+
+function assertInstant(value: string, name: string): void {
+  if (!/^\d{4}-\d{2}-\d{2}T.*Z$/u.test(value) || !Number.isFinite(Date.parse(value)))
+    throw new McpInputError(`${name} must be an ISO UTC instant.`);
 }
 
 function previousDate(value: string): string {

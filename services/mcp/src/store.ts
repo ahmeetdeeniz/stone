@@ -9,7 +9,12 @@ import {
   type CalendarWriteInput,
   type DocumentRecord,
   type DocumentWriteInput,
+  type FocusGoalRecord,
+  type FocusGoalWriteInput,
+  type FocusRecord,
+  type FocusWriteInput,
   type ListDocumentsOptions,
+  type ListFocusOptions,
   type ListCalendarOptions,
   type ListProjectsOptions,
   type ListVersionsOptions,
@@ -176,6 +181,38 @@ export class FirestoreStoneStore implements StoneStore {
     );
   }
 
+  public async getFocus(ownerId: string, id: string): Promise<FocusRecord | null> {
+    const snapshot = await this.entityRef(ownerId, "focusSessions", id).get();
+    return snapshot.exists ? (snapshot.data() as FocusRecord) : null;
+  }
+
+  public async listFocus(ownerId: string, options: ListFocusOptions): Promise<Page<FocusRecord>> {
+    const query: Query = this.database
+      .collection(`users/${ownerId}/focusSessions`)
+      .where("ownerId", "==", ownerId)
+      .orderBy("updatedAt", "desc");
+    return this.scan(
+      query,
+      ownerId,
+      options.cursorKey ?? "focus",
+      options.pageToken,
+      options.limit,
+      (value) => value as FocusRecord,
+      (item) =>
+        Boolean(
+          !item.deletedAt &&
+          item.startedAt < options.endAt &&
+          (item.endedAt ?? item.updatedAt) >= options.startAt &&
+          (!options.status || item.status === options.status),
+        ),
+    );
+  }
+
+  public async getFocusGoal(ownerId: string): Promise<FocusGoalRecord | null> {
+    const snapshot = await this.entityRef(ownerId, "focusGoals", ownerId).get();
+    return snapshot.exists ? (snapshot.data() as FocusGoalRecord) : null;
+  }
+
   public writeDocument(input: DocumentWriteInput): Promise<WriteResult<DocumentRecord>> {
     return this.writeEntity("documents", input.documentId, input, input.mutate);
   }
@@ -194,6 +231,12 @@ export class FirestoreStoneStore implements StoneStore {
   public writeCalendar(input: CalendarWriteInput): Promise<WriteResult<CalendarRecord>> {
     return this.writeEntity("calendar", input.calendarId, input, input.mutate);
   }
+  public writeFocus(input: FocusWriteInput): Promise<WriteResult<FocusRecord>> {
+    return this.writeEntity("focusSessions", input.focusId, input, input.mutate);
+  }
+  public writeFocusGoal(input: FocusGoalWriteInput): Promise<WriteResult<FocusGoalRecord>> {
+    return this.writeEntity("focusGoals", input.goalId, input, input.mutate);
+  }
 
   public async listAudit(ownerId: string, limit: number): Promise<readonly AuditEntry[]> {
     const snapshot = await this.database
@@ -205,7 +248,14 @@ export class FirestoreStoneStore implements StoneStore {
   }
 
   private async writeEntity<
-    T extends DocumentRecord | ProjectRecord | VersionRecord | TaskRecord | CalendarRecord,
+    T extends
+      | DocumentRecord
+      | ProjectRecord
+      | VersionRecord
+      | TaskRecord
+      | CalendarRecord
+      | FocusRecord
+      | FocusGoalRecord,
     I extends {
       ownerId: string;
       expectedRevision: number;
@@ -216,7 +266,8 @@ export class FirestoreStoneStore implements StoneStore {
       mutate: (current: T | null) => T;
     },
   >(
-    collection: "documents" | "projects" | "versions" | "tasks" | "calendar",
+    collection:
+      "documents" | "projects" | "versions" | "tasks" | "calendar" | "focusSessions" | "focusGoals",
     id: string,
     input: I,
     mutate: (current: T | null) => T,
@@ -287,7 +338,12 @@ export class FirestoreStoneStore implements StoneStore {
       transaction.set(eventReference, {
         eventId,
         ownerId: input.ownerId,
-        entityType: collection.slice(0, -1),
+        entityType:
+          collection === "focusSessions"
+            ? "focus"
+            : collection === "focusGoals"
+              ? "focus_goal"
+              : collection.slice(0, -1),
         entityId: id,
         operation: "upsert",
         revision: next.revision,
@@ -361,6 +417,8 @@ export class MemoryStoneStore implements StoneStore {
   private readonly versions = new Map<string, VersionRecord>();
   private readonly tasks = new Map<string, TaskRecord>();
   private readonly calendar = new Map<string, CalendarRecord>();
+  private readonly focus = new Map<string, FocusRecord>();
+  private readonly focusGoals = new Map<string, FocusGoalRecord>();
   private readonly idempotency = new Map<string, WriteResult<unknown>>();
   private readonly cursors = new CursorCodec("memory-store-cursor-secret");
 
@@ -381,6 +439,9 @@ export class MemoryStoneStore implements StoneStore {
   }
   public seedCalendar(item: CalendarRecord): void {
     this.calendar.set(key(item.ownerId, item.id), structuredClone(item));
+  }
+  public seedFocus(item: FocusRecord): void {
+    this.focus.set(key(item.ownerId, item.id), structuredClone(item));
   }
 
   public async getDocument(ownerId: string, id: string): Promise<DocumentRecord | null> {
@@ -507,6 +568,30 @@ export class MemoryStoneStore implements StoneStore {
       this.cursors,
     );
   }
+  public async getFocus(ownerId: string, id: string): Promise<FocusRecord | null> {
+    return clone(this.focus.get(key(ownerId, id)) ?? null);
+  }
+  public async listFocus(ownerId: string, options: ListFocusOptions): Promise<Page<FocusRecord>> {
+    const values = [...this.focus.values()]
+      .filter((item) => item.ownerId === ownerId && !item.deletedAt)
+      .filter(
+        (item) =>
+          item.startedAt < options.endAt && (item.endedAt ?? item.updatedAt) >= options.startAt,
+      )
+      .filter((item) => !options.status || item.status === options.status)
+      .sort(sortUpdated);
+    return page(
+      values,
+      ownerId,
+      options.cursorKey ?? "focus",
+      options.pageToken,
+      options.limit,
+      this.cursors,
+    );
+  }
+  public async getFocusGoal(ownerId: string): Promise<FocusGoalRecord | null> {
+    return clone(this.focusGoals.get(key(ownerId, ownerId)) ?? null);
+  }
 
   public writeDocument(input: DocumentWriteInput): Promise<WriteResult<DocumentRecord>> {
     return this.write(this.documents, input.documentId, input);
@@ -526,6 +611,12 @@ export class MemoryStoneStore implements StoneStore {
   public writeCalendar(input: CalendarWriteInput): Promise<WriteResult<CalendarRecord>> {
     return this.write(this.calendar, input.calendarId, input);
   }
+  public writeFocus(input: FocusWriteInput): Promise<WriteResult<FocusRecord>> {
+    return this.write(this.focus, input.focusId, input);
+  }
+  public writeFocusGoal(input: FocusGoalWriteInput): Promise<WriteResult<FocusGoalRecord>> {
+    return this.write(this.focusGoals, input.goalId, input);
+  }
 
   public async listAudit(ownerId: string, limit: number): Promise<readonly AuditEntry[]> {
     return this.audits
@@ -535,7 +626,14 @@ export class MemoryStoneStore implements StoneStore {
   }
 
   private async write<
-    T extends DocumentRecord | ProjectRecord | VersionRecord | TaskRecord | CalendarRecord,
+    T extends
+      | DocumentRecord
+      | ProjectRecord
+      | VersionRecord
+      | TaskRecord
+      | CalendarRecord
+      | FocusRecord
+      | FocusGoalRecord,
   >(
     values: Map<string, T>,
     id: string,
@@ -544,7 +642,9 @@ export class MemoryStoneStore implements StoneStore {
       | ProjectWriteInput
       | VersionWriteInput
       | TaskWriteInput
-      | CalendarWriteInput,
+      | CalendarWriteInput
+      | FocusWriteInput
+      | FocusGoalWriteInput,
   ): Promise<WriteResult<T>> {
     const idempotencyKey = `${input.ownerId}:${input.idempotencyKey}`;
     const replay = this.idempotency.get(idempotencyKey) as WriteResult<T> | undefined;
