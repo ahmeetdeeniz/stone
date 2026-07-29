@@ -33,6 +33,76 @@ export type TaskRecurrenceUnit = "day" | "week" | "month";
 export type CalendarItemKind = "event" | "task_block";
 export type CalendarCategory = "neutral" | "purple" | "blue" | "green" | "amber" | "red";
 export type CalendarRecurrenceEditScope = "occurrence" | "future" | "series";
+export type FocusMode = "stopwatch" | "countdown" | "pomodoro";
+export type FocusStatus = "running" | "paused" | "completed" | "cancelled";
+export type FocusPhase = "focus" | "short_break" | "long_break";
+export type FocusConflictState =
+  "none" | "overlap_unresolved" | "resolved_include" | "resolved_exclude";
+
+export interface FocusPauseInterval {
+  startedAt: string;
+  endedAt: string | null;
+}
+
+export interface FocusSession extends SyncFields {
+  schemaVersion: 1;
+  mode: FocusMode;
+  status: FocusStatus;
+  phase: FocusPhase;
+  startedAt: string;
+  endedAt: string | null;
+  plannedDurationSeconds: number | null;
+  actualFocusSeconds: number;
+  accumulatedPausedSeconds: number;
+  pauses: readonly FocusPauseInterval[];
+  manuallyAdjustedSeconds: number | null;
+  taskId: string | null;
+  projectId: string | null;
+  sourceDocumentId: string | null;
+  calendarItemId: string | null;
+  category: string | null;
+  tags: readonly string[];
+  note: string | null;
+  pomodoroGroupId: string | null;
+  pomodoroCycle: number | null;
+  activeDeviceId: string;
+  conflictState: FocusConflictState;
+}
+
+export interface FocusGoal extends SyncFields {
+  schemaVersion: 1;
+  timezone: string;
+  dailyMinutes: number;
+  weeklyMinutes: number;
+  effectiveFromDate: string;
+  streakVisible: boolean;
+}
+
+export interface FocusSessionListOptions {
+  startAt: string;
+  endAt: string;
+  status?: FocusStatus;
+  taskId?: string;
+  projectId?: string;
+  includeDeleted?: boolean;
+  limit?: number;
+}
+
+export interface FocusRepository {
+  create(session: FocusSession): Promise<FocusSession>;
+  getById(ownerId: string, id: string, includeDeleted?: boolean): Promise<FocusSession | null>;
+  getActive(ownerId: string): Promise<readonly FocusSession[]>;
+  list(ownerId: string, options: FocusSessionListOptions): Promise<readonly FocusSession[]>;
+  save(
+    ownerId: string,
+    session: FocusSession,
+    expectedRevision: number,
+    deviceId: string,
+  ): Promise<FocusSession>;
+  softDelete(ownerId: string, id: string, deviceId: string): Promise<FocusSession>;
+  getGoal(ownerId: string): Promise<FocusGoal | null>;
+  saveGoal(goal: FocusGoal, expectedRevision: number | null): Promise<FocusGoal>;
+}
 
 export interface TaskRecurrence {
   frequency: TaskRecurrenceFrequency;
