@@ -46,7 +46,6 @@ import {
   type DesktopTask,
   type FileFingerprint,
 } from "./desktop-api";
-import { useI18n } from "./i18n";
 
 type Section = "notes" | "projects" | "tasks" | "calendar" | "today" | "settings";
 type Theme = "system" | "light" | "dark";
@@ -208,7 +207,6 @@ function AuthScreen({
 }
 
 function StoneShell({ session, onSignedOut }: { session: AuthSession; onSignedOut: () => void }) {
-  const { preference: localePreference, setPreference: setLocalePreference, t } = useI18n();
   const [section, setSection] = useState<Section>("notes");
   const [theme, setTheme] = useState<Theme>("system");
   const [documents, setDocuments] = useState<DesktopDocument[]>([]);
@@ -485,16 +483,16 @@ function StoneShell({ session, onSignedOut }: { session: AuthSession; onSignedOu
 
   const activeLabel =
     section === "notes"
-      ? t("tabs.notes")
+      ? "Notlar"
       : section === "projects"
-        ? t("tabs.projects")
+        ? "Projeler"
         : section === "tasks"
-          ? t("tabs.tasks")
+          ? "Görevler"
           : section === "calendar"
-            ? t("tabs.calendar")
+            ? "Takvim"
             : section === "today"
-              ? t("tabs.today")
-              : t("tabs.settings");
+              ? "Bugün"
+              : "Ayarlar";
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -502,36 +500,36 @@ function StoneShell({ session, onSignedOut }: { session: AuthSession; onSignedOu
           <span className="brand-mark small">S</span>
           <span className="brand-wordmark">Stone</span>
         </div>
-        <nav aria-label={t("navigation.main")}>
+        <nav aria-label="Ana menü">
           <NavButton active={section === "notes"} onClick={() => setSection("notes")} icon="✎">
-            {t("tabs.notes")}
+            Notlar
           </NavButton>
           <NavButton
             active={section === "projects"}
             onClick={() => setSection("projects")}
             icon="▦"
           >
-            {t("tabs.projects")}
+            Projeler
           </NavButton>
           <NavButton active={section === "tasks"} onClick={() => setSection("tasks")} icon="✓">
-            {t("tabs.tasks")}
+            Görevler
           </NavButton>
           <NavButton
             active={section === "calendar"}
             onClick={() => setSection("calendar")}
             icon="□"
           >
-            {t("tabs.calendar")}
+            Takvim
           </NavButton>
           <NavButton active={section === "today"} onClick={() => setSection("today")} icon="◷">
-            {t("tabs.today")}
+            Bugün
           </NavButton>
           <NavButton
             active={section === "settings"}
             onClick={() => setSection("settings")}
             icon="⚙"
           >
-            {t("tabs.settings")}
+            Ayarlar
           </NavButton>
         </nav>
         <div className="sidebar-bottom">
@@ -541,7 +539,7 @@ function StoneShell({ session, onSignedOut }: { session: AuthSession; onSignedOu
       <main className="content">
         <header className="topbar">
           <div>
-            <p className="eyebrow">{t("navigation.workspace").toLocaleUpperCase()}</p>
+            <p className="eyebrow">ÇALIŞMA ALANI</p>
             <h1>{activeLabel}</h1>
           </div>
           <div className="top-actions">
@@ -694,32 +692,13 @@ function StoneShell({ session, onSignedOut }: { session: AuthSession; onSignedOu
         {section === "settings" && (
           <section className="settings-panel">
             <div className="settings-card">
-              <h2>{t("locale.setting")}</h2>
-              <p className="muted">
-                {t("locale.description")} {t("locale.persistence")}
-              </p>
+              <h2>Görünüm</h2>
               <label>
-                {t("locale.setting")}
-                <select
-                  value={localePreference}
-                  onChange={(event) =>
-                    setLocalePreference(event.target.value as "system" | "en" | "tr")
-                  }
-                >
-                  <option value="system">{t("locale.system")}</option>
-                  <option value="en">{t("locale.english")}</option>
-                  <option value="tr">{t("locale.turkish")}</option>
-                </select>
-              </label>
-            </div>
-            <div className="settings-card">
-              <h2>{t("settings.appearance")}</h2>
-              <label>
-                {t("settings.theme")}
+                Tema
                 <select value={theme} onChange={(event) => setTheme(event.target.value as Theme)}>
-                  <option value="system">{t("settings.theme.system")}</option>
-                  <option value="light">{t("settings.theme.light")}</option>
-                  <option value="dark">{t("settings.theme.dark")}</option>
+                  <option value="system">Sistem</option>
+                  <option value="light">Açık</option>
+                  <option value="dark">Koyu</option>
                 </select>
               </label>
               <p className="muted">Kısayollar: Ctrl+N yeni not, Ctrl+S kaydet.</p>

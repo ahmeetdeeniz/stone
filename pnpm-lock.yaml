@@ -61,9 +61,6 @@ importers:
       "@stone/editor":
         specifier: workspace:*
         version: link:../../packages/editor
-      "@stone/i18n":
-        specifier: workspace:*
-        version: link:../../packages/i18n
       "@stone/markdown":
         specifier: workspace:*
         version: link:../../packages/markdown
@@ -134,9 +131,6 @@ importers:
       "@stone/editor":
         specifier: workspace:*
         version: link:../../packages/editor
-      "@stone/i18n":
-        specifier: workspace:*
-        version: link:../../packages/i18n
       "@stone/ink":
         specifier: workspace:*
         version: link:../../packages/ink
@@ -248,8 +242,6 @@ importers:
       codemirror:
         specifier: ^6.0.2
         version: 6.0.2
-
-  packages/i18n: {}
 
   packages/ink: {}
 
