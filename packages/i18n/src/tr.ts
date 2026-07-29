@@ -827,6 +827,12 @@ export const tr = {
   "focus.linkHint":
     "Görev, proje, not ve takvim bloğu bağlantıları oradan başlatıldığında korunur.",
   "focus.noStreak": "Geçmiş hedef anlık görüntüleri güvenilir kılana kadar seriler gizlidir.",
+  "widgets.privacy": "Widget gizliliği",
+  "widgets.privacyDescription":
+    "Yalnızca sayılar, Stone dışında görünen bilgiler için güvenli varsayılandır.",
+  "widgets.privacy.counts_only": "Yalnızca sayılar",
+  "widgets.privacy.titles": "Başlıkları göster",
+  "widgets.privacy.titles_and_context": "Başlıklar ve bağlam",
   "relative.today": "Bugün",
   "relative.tomorrow": "Yarın",
   "relative.yesterday": "Dün",

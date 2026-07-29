@@ -13,6 +13,7 @@ import type { AuthUser } from "../infrastructure/firebase/auth";
 import { createAppServices, type AppServices } from "../services/composition-root";
 import { AuthProvider } from "./auth-provider";
 import { registerBackgroundSync } from "../services/background-sync";
+import { WidgetLifecycle } from "../widgets/widget-lifecycle";
 
 export function AppProvider({ children }: PropsWithChildren) {
   const [services, setServices] = useState<AppServices | null>(null);
@@ -41,6 +42,7 @@ export function AppProvider({ children }: PropsWithChildren) {
       {services ? (
         <AppServicesContext.Provider value={services}>
           <AuthProvider onUserChanged={bindDeviceOwner} onSyncRequested={syncOwner}>
+            <WidgetLifecycle />
             {children}
           </AuthProvider>
         </AppServicesContext.Provider>

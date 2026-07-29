@@ -824,6 +824,12 @@ export const en = {
   "focus.linkHint":
     "Task, project, note and calendar-block links are preserved when started there.",
   "focus.noStreak": "Streaks are hidden until historical goal snapshots can make them trustworthy.",
+  "widgets.privacy": "Widget privacy",
+  "widgets.privacyDescription":
+    "Counts only is the safe default for information visible outside Stone.",
+  "widgets.privacy.counts_only": "Counts only",
+  "widgets.privacy.titles": "Show titles",
+  "widgets.privacy.titles_and_context": "Titles and context",
   "relative.today": "Today",
   "relative.tomorrow": "Tomorrow",
   "relative.yesterday": "Yesterday",

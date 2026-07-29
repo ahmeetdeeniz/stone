@@ -11,16 +11,23 @@ import { pickWorkspaceCalendarFile, shareWorkspaceExport } from "../../src/notes
 import { restoreCalendarWorkspaceFile } from "../../src/notes/workspace-bundle";
 import type { SyncState } from "../../src/infrastructure/storage/sync";
 import { useI18n } from "../../src/i18n/provider";
+import type { WidgetPrivacy } from "@stone/widgets";
+import { readWidgetPrivacy, writeWidgetPrivacy } from "../../src/widgets/widget-lifecycle";
+import { refreshNativeWidgets } from "../../src/widgets/snapshot";
 
 export default function SettingsScreen() {
   const router = useRouter();
   const { preference, setPreference, colors } = useTheme();
-  const { preference: localePreference, setPreference: setLocalePreference, t } = useI18n();
+  const { locale, preference: localePreference, setPreference: setLocalePreference, t } = useI18n();
   const { user, service } = useAuth();
   const services = useAppServices();
   const [busy, setBusy] = useState(false);
   const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [syncState, setSyncState] = useState<SyncState | null>(null);
+  const [widgetPrivacy, setWidgetPrivacy] = useState<WidgetPrivacy>("counts_only");
+  useEffect(() => {
+    void readWidgetPrivacy().then(setWidgetPrivacy);
+  }, []);
   useEffect(() => {
     if (!user) return;
     setSettingsLoaded(false);
@@ -71,6 +78,11 @@ export default function SettingsScreen() {
     } finally {
       setBusy(false);
     }
+  };
+  const updateWidgetPrivacy = async (value: WidgetPrivacy) => {
+    setWidgetPrivacy(value);
+    await writeWidgetPrivacy(value);
+    if (user) await refreshNativeWidgets(services, user.uid, locale, value);
   };
   const signOut = async () => {
     if (!service) return;
@@ -233,6 +245,22 @@ export default function SettingsScreen() {
                 }
                 variant={preference === option ? "primary" : "secondary"}
                 onPress={() => void updateTheme(option)}
+              />
+            ))}
+          </View>
+        </View>
+        <View style={[styles.section, { borderColor: colors.border }]}>
+          <StoneText variant="title3">{t("widgets.privacy")}</StoneText>
+          <StoneText variant="bodySmall" style={{ color: colors.textSecondary }}>
+            {t("widgets.privacyDescription")}
+          </StoneText>
+          <View style={styles.options}>
+            {(["counts_only", "titles", "titles_and_context"] as const).map((option) => (
+              <StoneButton
+                key={option}
+                label={t(`widgets.privacy.${option}`)}
+                variant={widgetPrivacy === option ? "primary" : "secondary"}
+                onPress={() => void updateWidgetPrivacy(option)}
               />
             ))}
           </View>
