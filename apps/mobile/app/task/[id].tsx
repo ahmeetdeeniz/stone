@@ -8,12 +8,14 @@ import {
   type Task,
   type TaskRecurrenceFrequency,
 } from "@stone/domain";
+import { formatTaskPriority, type TranslationKey } from "@stone/i18n";
 import { ResponsiveContent } from "../../src/components/responsive";
 import { ErrorState, LoadingState } from "../../src/components/states";
 import { Screen, StoneButton, StoneInput, StoneText, Surface } from "../../src/components/ui";
 import { spacing } from "../../src/design/tokens";
 import { useAuth } from "../../src/providers/auth-provider";
 import { useAppServices } from "../../src/providers/app-provider";
+import { useI18n } from "../../src/i18n/provider";
 
 const RECURRENCES: readonly (TaskRecurrenceFrequency | "none")[] = [
   "none",
@@ -28,6 +30,7 @@ export default function TaskDetailScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const { taskUseCases, projectUseCases, calendar, deviceId } = useAppServices();
+  const { locale, t } = useI18n();
   const [task, setTask] = useState<Task | null>(null);
   const [subtasks, setSubtasks] = useState<readonly Task[]>([]);
   const [projects, setProjects] = useState<readonly Project[]>([]);
@@ -46,7 +49,7 @@ export default function TaskDetailScreen() {
     try {
       setError(null);
       const current = await taskUseCases.get(user.uid, id);
-      if (!current) throw new Error("Görev bulunamadı.");
+      if (!current) throw new Error(t("tasks.notFound"));
       const [children, projectList] = await Promise.all([
         taskUseCases.list(user.uid, { parentTaskId: current.id }),
         projectUseCases.list(user.uid),
@@ -61,7 +64,7 @@ export default function TaskDetailScreen() {
       setTags(current.tags.join(", "));
       setEstimate(current.estimatedMinutes?.toString() ?? "");
     } catch (caught) {
-      setError(message(caught));
+      setError(message(caught, t("app.unknownError")));
     }
   };
 
@@ -89,9 +92,9 @@ export default function TaskDetailScreen() {
         deviceId,
       );
       setTask(updated);
-      Alert.alert("Kaydedildi", "Görev önce yerel olarak kaydedildi.");
+      Alert.alert(t("tasks.saved"), t("tasks.savedLocally"));
     } catch (caught) {
-      Alert.alert("Görev kaydedilemedi", message(caught));
+      Alert.alert(t("tasks.saveFailed"), message(caught, t("app.unknownError")));
     } finally {
       setSaving(false);
     }
@@ -108,7 +111,7 @@ export default function TaskDetailScreen() {
       );
       setTask(updated);
     } catch (caught) {
-      Alert.alert("Öncelik değiştirilemedi", message(caught));
+      Alert.alert(t("tasks.priorityFailed"), message(caught, t("app.unknownError")));
     }
   };
 
@@ -123,7 +126,7 @@ export default function TaskDetailScreen() {
       );
       setTask(updated);
     } catch (caught) {
-      Alert.alert("Proje değiştirilemedi", message(caught));
+      Alert.alert(t("tasks.projectFailed"), message(caught, t("app.unknownError")));
     }
   };
 
@@ -152,7 +155,7 @@ export default function TaskDetailScreen() {
       );
       setTask(updated);
     } catch (caught) {
-      Alert.alert("Tekrar ayarı değiştirilemedi", message(caught));
+      Alert.alert(t("tasks.recurrenceFailed"), message(caught, t("app.unknownError")));
     }
   };
 
@@ -183,7 +186,7 @@ export default function TaskDetailScreen() {
       setSubtaskTitle("");
       await load();
     } catch (caught) {
-      Alert.alert("Alt görev eklenemedi", message(caught));
+      Alert.alert(t("tasks.subtaskAddFailed"), message(caught, t("app.unknownError")));
     }
   };
 
@@ -203,15 +206,15 @@ export default function TaskDetailScreen() {
         ),
       );
     } catch (caught) {
-      Alert.alert("Sıralama değiştirilemedi", message(caught));
+      Alert.alert(t("tasks.reorderFailed"), message(caught, t("app.unknownError")));
     }
   };
 
   const remove = (subtask: Task) =>
-    Alert.alert("Alt görevi sil", subtask.title, [
-      { text: "Vazgeç", style: "cancel" },
+    Alert.alert(t("tasks.deleteSubtask"), subtask.title, [
+      { text: t("common.cancel"), style: "cancel" },
       {
-        text: "Sil",
+        text: t("common.delete"),
         style: "destructive",
         onPress: () =>
           void (async () => {
@@ -223,10 +226,10 @@ export default function TaskDetailScreen() {
     ]);
 
   const deleteTask = () =>
-    Alert.alert("Görevi sil", "Görev çöp durumuna alınacak ve eşitlenecek.", [
-      { text: "Vazgeç", style: "cancel" },
+    Alert.alert(t("tasks.deleteTask"), t("tasks.deleteDetail"), [
+      { text: t("common.cancel"), style: "cancel" },
       {
-        text: "Sil",
+        text: t("common.delete"),
         style: "destructive",
         onPress: () =>
           void (async () => {
@@ -279,7 +282,7 @@ export default function TaskDetailScreen() {
       });
       router.push({ pathname: "/calendar/[id]" as never, params: { id: block.id } });
     } catch (caught) {
-      Alert.alert("Görev planlanamadı", message(caught));
+      Alert.alert(t("tasks.scheduleFailed"), message(caught, t("app.unknownError")));
     }
   };
 
@@ -294,64 +297,64 @@ export default function TaskDetailScreen() {
   if (!task)
     return (
       <Screen>
-        <LoadingState label="Görev yükleniyor" />
+        <LoadingState label={t("tasks.loadingTask")} />
       </Screen>
     );
 
   return (
     <Screen padded={false}>
-      <Stack.Screen options={{ title: "Görev", headerBackTitle: "Planlama" }} />
+      <Stack.Screen options={{ title: t("tabs.tasks"), headerBackTitle: t("planning.title") }} />
       <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.page}>
         <ResponsiveContent>
-          <StoneInput label="Başlık" value={title} onChangeText={setTitle} />
+          <StoneInput label={t("tasks.titleField")} value={title} onChangeText={setTitle} />
           <StoneInput
-            label="Açıklama"
+            label={t("tasks.description")}
             value={description}
             onChangeText={setDescription}
             multiline
           />
           <View style={styles.twoColumns}>
             <StoneInput
-              label="Tarih (YYYY-AA-GG)"
+              label={t("tasks.dateField")}
               value={dueDate}
               onChangeText={setDueDate}
               placeholder="2026-08-01"
               containerStyle={styles.field}
             />
             <StoneInput
-              label="Saat (SS:dd)"
+              label={t("tasks.timeField")}
               value={dueTime}
               onChangeText={setDueTime}
               placeholder="09:00"
               containerStyle={styles.field}
             />
           </View>
-          <StoneText variant="caption">
-            Saat işletim sistemi bildirimi planlamaz; yalnızca planlama bilgisidir.
-          </StoneText>
-          <StoneInput label="Etiketler (virgülle)" value={tags} onChangeText={setTags} />
+          <StoneText variant="caption">{t("tasks.timeNoNotification")}</StoneText>
+          <StoneInput label={t("tasks.tagsField")} value={tags} onChangeText={setTags} />
           <StoneInput
-            label="Tahmini süre (dakika)"
+            label={t("tasks.estimateField")}
             value={estimate}
             onChangeText={setEstimate}
             keyboardType="number-pad"
           />
           <ChoiceSection
-            title="Öncelik"
+            title={t("tasks.priority")}
             values={["none", "low", "medium", "high"]}
             selected={task.priority}
+            labelFor={(value) => formatTaskPriority(locale, value as Task["priority"])}
             onSelect={(value) => void setPriority(value as Task["priority"])}
           />
           <ChoiceSection
-            title="Tekrar"
+            title={t("tasks.recurrence")}
             values={RECURRENCES}
             selected={recurrence}
+            labelFor={(value) => t(`recurrence.${value}` as TranslationKey)}
             onSelect={(value) => void setRecurrence(value as TaskRecurrenceFrequency | "none")}
           />
-          <StoneText variant="label">Proje</StoneText>
+          <StoneText variant="label">{t("tasks.project")}</StoneText>
           <ScrollView horizontal contentContainerStyle={styles.choices}>
             <Choice
-              label="Projesiz"
+              label={t("tasks.noProject")}
               selected={!task.projectId}
               onPress={() => void setProject(null)}
             />
@@ -366,12 +369,10 @@ export default function TaskDetailScreen() {
           </ScrollView>
           {task.sourceDocumentId ? (
             <Surface>
-              <StoneText variant="label">Markdown bağlantılı görev</StoneText>
-              <StoneText variant="bodySmall">
-                Tamamlama durumu kaynak nottaki doğru checkbox ile birlikte güncellenir.
-              </StoneText>
+              <StoneText variant="label">{t("tasks.markdownLinked")}</StoneText>
+              <StoneText variant="bodySmall">{t("tasks.markdownLinkedDetail")}</StoneText>
               <StoneButton
-                label="Kaynak notu aç"
+                label={t("tasks.openSourceNote")}
                 variant="secondary"
                 onPress={() =>
                   router.push({
@@ -383,30 +384,28 @@ export default function TaskDetailScreen() {
             </Surface>
           ) : null}
           <StoneButton
-            label={saving ? "Kaydediliyor…" : "Değişiklikleri kaydet"}
+            label={saving ? t("tasks.saving") : t("tasks.saveChanges")}
             onPress={() => void save()}
             disabled={saving || !title.trim()}
           />
           <StoneButton
-            label="Takvimde planla"
+            label={t("tasks.schedule")}
             variant="secondary"
             onPress={() => void scheduleTask()}
           />
-          <StoneText variant="caption">
-            Zaman bloğu görev son tarihini veya tamamlanma durumunu değiştirmez.
-          </StoneText>
+          <StoneText variant="caption">{t("tasks.blockDistinct")}</StoneText>
           <View style={styles.subtasks}>
-            <StoneText variant="title3">Alt görevler</StoneText>
+            <StoneText variant="title3">{t("tasks.subtasks")}</StoneText>
             <View style={styles.addSubtask}>
               <StoneInput
-                label="Yeni alt görev"
+                label={t("tasks.newSubtask")}
                 value={subtaskTitle}
                 onChangeText={setSubtaskTitle}
                 containerStyle={styles.field}
                 onSubmitEditing={() => void addSubtask()}
               />
               <StoneButton
-                label="Ekle"
+                label={t("common.create")}
                 variant="secondary"
                 onPress={() => void addSubtask()}
                 disabled={!subtaskTitle.trim()}
@@ -417,23 +416,27 @@ export default function TaskDetailScreen() {
                 <StoneText>{subtask.title}</StoneText>
                 <View style={styles.rowActions}>
                   <StoneButton
-                    label="Yukarı"
+                    label={t("tasks.moveUp")}
                     variant="quiet"
                     onPress={() => void move(index, -1)}
                     disabled={index === 0}
                   />
                   <StoneButton
-                    label="Aşağı"
+                    label={t("tasks.moveDown")}
                     variant="quiet"
                     onPress={() => void move(index, 1)}
                     disabled={index === subtasks.length - 1}
                   />
-                  <StoneButton label="Sil" variant="quiet" onPress={() => remove(subtask)} />
+                  <StoneButton
+                    label={t("common.delete")}
+                    variant="quiet"
+                    onPress={() => remove(subtask)}
+                  />
                 </View>
               </Surface>
             ))}
           </View>
-          <StoneButton label="Görevi sil" variant="quiet" onPress={deleteTask} />
+          <StoneButton label={t("tasks.deleteTask")} variant="quiet" onPress={deleteTask} />
         </ResponsiveContent>
       </ScrollView>
     </Screen>
@@ -445,11 +448,13 @@ function ChoiceSection({
   values,
   selected,
   onSelect,
+  labelFor = (value) => value,
 }: {
   title: string;
   values: readonly string[];
   selected: string;
   onSelect: (value: string) => void;
+  labelFor?: (value: string) => string;
 }) {
   return (
     <View style={styles.choiceSection}>
@@ -458,7 +463,7 @@ function ChoiceSection({
         {values.map((value) => (
           <Choice
             key={value}
-            label={value}
+            label={labelFor(value)}
             selected={selected === value}
             onPress={() => onSelect(value)}
           />
@@ -489,8 +494,8 @@ function Choice({
   );
 }
 
-function message(error: unknown): string {
-  return error instanceof Error ? error.message : "Tekrar deneyin.";
+function message(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message : fallback;
 }
 
 const styles = StyleSheet.create({

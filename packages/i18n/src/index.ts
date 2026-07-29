@@ -119,5 +119,16 @@ export function formatRecurrence(locale: Locale, recurrence: RecurrenceDescripti
   return translatePlural(locale, `recurrence.custom.${recurrence.unit}`, recurrence.interval);
 }
 
+export function formatTaskPriority(
+  locale: Locale,
+  priority: "none" | "low" | "medium" | "high" | "urgent",
+): string {
+  return translate(locale, `tasks.priority.${priority}` as TranslationKey);
+}
+
+export function formatTaskState(locale: Locale, state: "open" | "completed" | "cancelled"): string {
+  return translate(locale, `tasks.status.${state}` as TranslationKey);
+}
+
 export { en, tr };
 export type { TranslationKey };

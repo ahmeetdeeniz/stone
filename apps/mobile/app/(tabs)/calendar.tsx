@@ -3,6 +3,7 @@ import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { buildAgendaItems, zonedWallTimeToInstant, type AgendaItem } from "@stone/domain";
+import { formatDateOnly, formatInstant } from "@stone/i18n";
 import { EmptyState, ErrorState, LoadingState } from "../../src/components/states";
 import { ResponsiveContent } from "../../src/components/responsive";
 import { Screen, StoneButton, StoneInput, StoneText, Surface } from "../../src/components/ui";
@@ -14,11 +15,13 @@ import {
   reviewCalendarIcsImport,
 } from "../../src/calendar/calendar-import";
 import { pickCalendarIcs, shareCalendarIcs } from "../../src/calendar/calendar-files";
+import { useI18n } from "../../src/i18n/provider";
 
 export default function CalendarScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const { calendar, deviceId, taskUseCases, projectUseCases } = useAppServices();
+  const { locale, t } = useI18n();
   const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [agendaItems, setAgendaItems] = useState<readonly AgendaItem[]>([]);
   const [title, setTitle] = useState("");
@@ -39,7 +42,7 @@ export default function CalendarScreen() {
       ]);
       setAgendaItems(buildAgendaItems(nextItems, tasks, projects, selectedDate, selectedDate));
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Takvim yüklenemedi.");
+      setError(caught instanceof Error ? caught.message : t("calendar.loadFailed"));
     } finally {
       setLoading(false);
     }
@@ -86,8 +89,8 @@ export default function CalendarScreen() {
       await load();
     } catch (caught) {
       Alert.alert(
-        "Etkinlik oluşturulamadı",
-        caught instanceof Error ? caught.message : "Tekrar deneyin.",
+        t("calendar.createFailed"),
+        caught instanceof Error ? caught.message : t("app.unknownError"),
       );
     }
   };
@@ -115,8 +118,11 @@ export default function CalendarScreen() {
       const commit = async (confirmed: boolean) => {
         const imported = await commitCalendarIcsImport(review, calendar, confirmed);
         Alert.alert(
-          "Takvim içe aktarıldı",
-          `${imported.length} yeni kayıt eklendi; ${review.duplicates} yinelenen kayıt atlandı.`,
+          t("calendar.imported"),
+          t("calendar.importSummary", {
+            created: imported.length,
+            duplicates: review.duplicates,
+          }),
         );
         await load();
       };
@@ -125,17 +131,20 @@ export default function CalendarScreen() {
         return;
       }
       Alert.alert(
-        "Büyük takvim içe aktarımı",
-        `${review.newItems} yeni kayıt ve ${review.duplicates} yinelenen kayıt bulundu. Devam edilsin mi?`,
+        t("calendar.largeImport"),
+        t("calendar.largeImportDetail", {
+          created: review.newItems,
+          duplicates: review.duplicates,
+        }),
         [
-          { text: "Vazgeç", style: "cancel" },
-          { text: "İçe aktar", onPress: () => void commit(true) },
+          { text: t("common.cancel"), style: "cancel" },
+          { text: t("common.import"), onPress: () => void commit(true) },
         ],
       );
     } catch (caught) {
       Alert.alert(
-        "Takvim içe aktarılamadı",
-        caught instanceof Error ? caught.message : "Tekrar deneyin.",
+        t("calendar.importFailed"),
+        caught instanceof Error ? caught.message : t("app.unknownError"),
       );
     }
   };
@@ -150,40 +159,50 @@ export default function CalendarScreen() {
     <Screen padded={false}>
       <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.page}>
         <ResponsiveContent>
-          <StoneText variant="title1">Takvim ve Ajanda</StoneText>
-          <StoneText variant="bodySmall">
-            Çevrimdışı çalışır. İşletim sistemi hatırlatması sunulmaz.
-          </StoneText>
+          <StoneText variant="title1">{t("calendar.title")}</StoneText>
+          <StoneText variant="bodySmall">{t("calendar.offlineNoReminder")}</StoneText>
           <View style={styles.fileActions}>
             <StoneButton
-              label=".ics içe aktar"
+              label={t("calendar.importIcs")}
               variant="secondary"
               onPress={() => void importIcs()}
             />
             <StoneButton
-              label=".ics dışa aktar"
+              label={t("calendar.exportIcs")}
               variant="secondary"
               onPress={() =>
                 user &&
                 void shareCalendarIcs(user.uid, calendar).catch((caught: unknown) =>
                   Alert.alert(
-                    "Takvim dışa aktarılamadı",
-                    caught instanceof Error ? caught.message : "Tekrar deneyin.",
+                    t("calendar.exportFailed"),
+                    caught instanceof Error ? caught.message : t("app.unknownError"),
                   ),
                 )
               }
             />
           </View>
           <View style={styles.navigation}>
-            <StoneButton label="Önceki gün" onPress={() => move(-1)} variant="secondary" />
+            <StoneButton
+              label={t("calendar.previousDay")}
+              onPress={() => move(-1)}
+              variant="secondary"
+            />
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={`Seçili gün ${selectedDate}; bugüne dön`}
+              accessibilityLabel={t("calendar.selectedTodayA11y", {
+                date: formatDateOnly(locale, selectedDate, { dateStyle: "full" }),
+              })}
               onPress={() => setSelectedDate(new Date().toISOString().slice(0, 10))}
             >
-              <StoneText variant="title3">{selectedDate}</StoneText>
+              <StoneText variant="title3">
+                {formatDateOnly(locale, selectedDate, { dateStyle: "full" })}
+              </StoneText>
             </Pressable>
-            <StoneButton label="Sonraki gün" onPress={() => move(1)} variant="secondary" />
+            <StoneButton
+              label={t("calendar.nextDay")}
+              onPress={() => move(1)}
+              variant="secondary"
+            />
           </View>
           <View style={styles.week} accessibilityRole="tablist">
             {week.map((weekDate) => (
@@ -191,31 +210,46 @@ export default function CalendarScreen() {
                 key={weekDate}
                 accessibilityRole="tab"
                 accessibilityState={{ selected: weekDate === selectedDate }}
-                accessibilityLabel={`${weekDate}${weekDate === selectedDate ? ", seçili" : ""}`}
+                accessibilityLabel={
+                  weekDate === selectedDate
+                    ? t("calendar.selectedA11y", {
+                        date: formatDateOnly(locale, weekDate, { dateStyle: "full" }),
+                      })
+                    : formatDateOnly(locale, weekDate, { dateStyle: "full" })
+                }
                 style={[styles.weekDay, weekDate === selectedDate && styles.weekDaySelected]}
                 onPress={() => setSelectedDate(weekDate)}
               >
-                <StoneText variant="caption">{weekDate.slice(8)}</StoneText>
+                <StoneText variant="caption">
+                  {formatDateOnly(locale, weekDate, { weekday: "narrow", day: "numeric" })}
+                </StoneText>
               </Pressable>
             ))}
           </View>
           {selectedDate === today ? (
             <StoneText variant="caption" accessibilityLiveRegion="polite">
-              Şu an {new Date().toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}
+              {t("calendar.now", {
+                time: formatInstant(
+                  locale,
+                  new Date(),
+                  Intl.DateTimeFormat().resolvedOptions().timeZone,
+                  { hour: "2-digit", minute: "2-digit" },
+                ),
+              })}
             </StoneText>
           ) : null}
           <Surface>
-            <StoneText variant="title3">Hızlı etkinlik</StoneText>
+            <StoneText variant="title3">{t("calendar.quickEvent")}</StoneText>
             <StoneInput
-              label="Başlık"
+              label={t("calendar.titleField")}
               value={title}
               onChangeText={setTitle}
-              placeholder="Etkinlik adı"
+              placeholder={t("calendar.titlePlaceholder")}
             />
             <View style={styles.times}>
               <View style={styles.time}>
                 <StoneInput
-                  label="Başlangıç"
+                  label={t("calendar.start")}
                   value={startTime}
                   onChangeText={setStartTime}
                   placeholder="09:00"
@@ -223,7 +257,7 @@ export default function CalendarScreen() {
               </View>
               <View style={styles.time}>
                 <StoneInput
-                  label="Bitiş"
+                  label={t("calendar.end")}
                   value={endTime}
                   onChangeText={setEndTime}
                   placeholder="10:00"
@@ -231,27 +265,24 @@ export default function CalendarScreen() {
               </View>
             </View>
             <StoneButton
-              label="Etkinlik oluştur"
+              label={t("calendar.createEvent")}
               onPress={() => void create()}
               disabled={!title.trim()}
             />
           </Surface>
-          <StoneText variant="title3">Günün ajandası</StoneText>
+          <StoneText variant="title3">{t("calendar.dayAgenda")}</StoneText>
           {loading ? (
-            <LoadingState label="Ajanda yükleniyor" />
+            <LoadingState label={t("calendar.agendaLoading")} />
           ) : error ? (
             <ErrorState message={error} onRetry={() => void load()} />
           ) : agendaItems.length === 0 ? (
-            <EmptyState
-              title="Bu gün boş"
-              description="Etkinlik veya planlanmış çalışma bloğu bulunmuyor."
-            />
+            <EmptyState title={t("calendar.emptyDay")} description={t("calendar.emptyDayDetail")} />
           ) : (
             agendaItems.map((item) => (
               <Pressable
                 key={item.id}
                 accessibilityRole={item.calendarItemId ? "button" : undefined}
-                accessibilityLabel={`${agendaKindLabel(item.kind)} ${item.title}`}
+                accessibilityLabel={`${agendaKindLabel(item.kind, t)} ${item.title}`}
                 disabled={!item.calendarItemId}
                 onPress={() =>
                   item.calendarItemId &&
@@ -262,11 +293,11 @@ export default function CalendarScreen() {
                 }
               >
                 <Surface>
-                  <StoneText variant="caption">{agendaKindLabel(item.kind)}</StoneText>
+                  <StoneText variant="caption">{agendaKindLabel(item.kind, t)}</StoneText>
                   <StoneText variant="title3">{item.title}</StoneText>
                   <StoneText variant="bodySmall">
-                    {item.sortTime ?? "Tüm gün"}
-                    {item.completed ? " · Tamamlandı" : ""}
+                    {item.sortTime ?? t("calendar.allDay")}
+                    {item.completed ? ` · ${t("tasks.completed")}` : ""}
                   </StoneText>
                 </Surface>
               </Pressable>
@@ -278,12 +309,12 @@ export default function CalendarScreen() {
   );
 }
 
-function agendaKindLabel(kind: AgendaItem["kind"]): string {
+function agendaKindLabel(kind: AgendaItem["kind"], t: ReturnType<typeof useI18n>["t"]): string {
   return {
-    event: "Etkinlik",
-    task_block: "Zaman bloğu",
-    task_due: "Görev son tarihi",
-    project_milestone: "Proje hedef tarihi",
+    event: t("calendar.event"),
+    task_block: t("calendar.taskBlock"),
+    task_due: t("calendar.taskDue"),
+    project_milestone: t("calendar.projectTargetDate"),
   }[kind];
 }
 

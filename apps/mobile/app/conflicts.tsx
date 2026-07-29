@@ -9,10 +9,12 @@ import { Screen, StoneButton, StoneInput, StoneText, Surface } from "../src/comp
 import { spacing } from "../src/design/tokens";
 import { useAuth } from "../src/providers/auth-provider";
 import { useAppServices } from "../src/providers/app-provider";
+import { useI18n } from "../src/i18n/provider";
 
 export default function ConflictsScreen() {
   const { user } = useAuth();
   const { syncStore, deviceId } = useAppServices();
+  const { t, tp } = useI18n();
   const [conflicts, setConflicts] = useState<readonly LocalConflict[]>([]);
   const [merged, setMerged] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
@@ -42,7 +44,7 @@ export default function ConflictsScreen() {
         ),
       }));
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Conflictler okunamadı.");
+      setError(caught instanceof Error ? caught.message : t("conflicts.loadFailed"));
     } finally {
       setLoading(false);
     }
@@ -65,22 +67,24 @@ export default function ConflictsScreen() {
       await load();
     } catch (caught) {
       Alert.alert(
-        "Conflict çözülemedi",
-        caught instanceof Error ? caught.message : "Lütfen tekrar deneyin.",
+        t("conflicts.resolveFailed"),
+        caught instanceof Error ? caught.message : t("app.unknownError"),
       );
     }
   };
 
   const statusLabel = useMemo(() => {
-    if (loading) return "Conflictler yükleniyor";
-    return conflicts.length === 0 ? "Açık conflict yok" : `${conflicts.length} açık conflict`;
-  }, [conflicts.length, loading]);
+    if (loading) return t("conflicts.loading");
+    return conflicts.length === 0
+      ? t("conflicts.open.none")
+      : tp("conflicts.open", conflicts.length);
+  }, [conflicts.length, loading, t, tp]);
 
   return (
     <Screen>
       <ResponsiveContent>
         <StoneText variant="title1" style={styles.title}>
-          Conflict merkezi
+          {t("conflicts.title")}
         </StoneText>
         {loading ? (
           <LoadingState label={statusLabel} />
@@ -92,10 +96,7 @@ export default function ConflictsScreen() {
             keyExtractor={(item) => item.id}
             contentContainerStyle={conflicts.length === 0 ? styles.empty : styles.list}
             ListEmptyComponent={
-              <EmptyState
-                title="Çakışma yok"
-                description="Tüm cihaz değişiklikleri güvenle eşitlendi."
-              />
+              <EmptyState title={t("conflicts.empty")} description={t("conflicts.emptyDetail")} />
             }
             renderItem={({ item }) => (
               <Surface>
@@ -103,17 +104,20 @@ export default function ConflictsScreen() {
                   {item.entityType} · {item.entityId}
                 </StoneText>
                 <StoneText variant="caption" style={styles.meta}>
-                  Yerel r{item.localRevision} · uzak r{item.remoteRevision}
+                  {t("conflicts.localRemoteRevision", {
+                    local: item.localRevision,
+                    remote: item.remoteRevision,
+                  })}
                 </StoneText>
                 <StoneText variant="bodySmall" style={styles.preview}>
-                  Yerel:{" "}
+                  {t("conflicts.local")}:{" "}
                   {asText(item.localPayload.title ?? item.localPayload.markdown ?? "—").slice(
                     0,
                     160,
                   )}
                 </StoneText>
                 <StoneText variant="bodySmall" style={styles.preview}>
-                  Uzak:{" "}
+                  {t("conflicts.remote")}:{" "}
                   {asText(item.remotePayload.title ?? item.remotePayload.markdown ?? "—").slice(
                     0,
                     160,
@@ -121,7 +125,7 @@ export default function ConflictsScreen() {
                 </StoneText>
                 {item.entityType === "document" ? (
                   <StoneInput
-                    label="Birleştirilmiş Markdown"
+                    label={t("conflicts.mergedMarkdown")}
                     value={merged[item.id] ?? ""}
                     onChangeText={(value) =>
                       setMerged((current) => ({ ...current, [item.id]: value }))
@@ -132,17 +136,20 @@ export default function ConflictsScreen() {
                 ) : null}
                 <View style={styles.actions}>
                   <StoneButton
-                    label="Yereli kullan"
+                    label={t("conflicts.useLocal")}
                     variant="quiet"
                     onPress={() => void resolve(item, "local")}
                   />
                   <StoneButton
-                    label="Uzağı kullan"
+                    label={t("conflicts.useRemote")}
                     variant="secondary"
                     onPress={() => void resolve(item, "remote")}
                   />
                   {item.entityType === "document" ? (
-                    <StoneButton label="Birleştir" onPress={() => void resolve(item, "merged")} />
+                    <StoneButton
+                      label={t("conflicts.merge")}
+                      onPress={() => void resolve(item, "merged")}
+                    />
                   ) : null}
                 </View>
               </Surface>
