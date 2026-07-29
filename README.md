@@ -2,6 +2,8 @@
 
 **A calm, personal Markdown workspace for notes, tasks, projects, ink, and recovery across your own devices.**
 
+[Türkçe README](README.tr.md)
+
 > **Public preview.** Automated source and clean-clone gates pass. Physical Android/iPhone/tablet,
 > final accessibility, and live credential-restart checks remain pending; binary distribution
 > requires its own candidate-specific validation.
@@ -13,6 +15,18 @@ by the self-hoster.
 
 Stone does **not** provide a shared public backend. Every installation connects to its owner's
 Firebase project and, optionally, GitHub OAuth App and separately deployed MCP service.
+
+## Language
+
+English is Stone's canonical and default interface language. Turkish is fully bundled on mobile and
+Windows. Choose **System**, **English**, or **Türkçe** in Settings; the versioned preference is
+stored locally before sign-in and is never synced into notes, exports, Firebase documents, or MCP
+schemas. System mode recognizes `tr`, `tr-TR`, and `tr-CY`; unsupported or unavailable locale data
+falls back to English without blocking startup.
+
+Changing the interface language does not translate or rewrite user-authored Markdown, titles,
+frontmatter, tags, paths, repository names, or imported data. See the
+[internationalization contributor guide](public-docs/I18N.md).
 
 ## Why Stone
 
