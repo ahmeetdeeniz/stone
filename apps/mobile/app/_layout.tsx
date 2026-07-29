@@ -6,11 +6,13 @@ import { useStoneFonts } from "../src/design/fonts";
 import { LoadingState } from "../src/components/states";
 import { AppProvider } from "../src/providers/app-provider";
 import { useTheme } from "../src/design/theme";
+import { I18nProvider, useI18n } from "../src/i18n/provider";
 
 function RootNavigator() {
   const { ready } = useStoneFonts();
   const { mode } = useTheme();
-  if (!ready) return <LoadingState label="Stone yükleniyor" />;
+  const { ready: localeReady, t } = useI18n();
+  if (!ready || !localeReady) return <LoadingState label={t("app.loading")} />;
   return (
     <>
       <StatusBar style={mode === "dark" ? "light" : "dark"} />
@@ -23,9 +25,11 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <AppProvider>
-          <RootNavigator />
-        </AppProvider>
+        <I18nProvider>
+          <AppProvider>
+            <RootNavigator />
+          </AppProvider>
+        </I18nProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

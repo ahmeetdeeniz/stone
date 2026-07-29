@@ -38,17 +38,20 @@ export function StoneButton({
   onPress,
   variant = "primary",
   disabled = false,
+  accessibilityLabel,
 }: {
   label: string;
   onPress: () => void;
   variant?: "primary" | "secondary" | "quiet";
   disabled?: boolean;
+  accessibilityLabel?: string;
 }) {
   const { colors } = useTheme();
   const primary = variant === "primary";
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel ?? label}
       accessibilityState={{ disabled }}
       disabled={disabled}
       onPress={onPress}

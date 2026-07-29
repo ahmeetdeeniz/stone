@@ -10,10 +10,12 @@ import { useAppServices } from "../../src/providers/app-provider";
 import { pickWorkspaceCalendarFile, shareWorkspaceExport } from "../../src/notes/workspace-files";
 import { restoreCalendarWorkspaceFile } from "../../src/notes/workspace-bundle";
 import type { SyncState } from "../../src/infrastructure/storage/sync";
+import { useI18n } from "../../src/i18n/provider";
 
 export default function SettingsScreen() {
   const router = useRouter();
   const { preference, setPreference, colors } = useTheme();
+  const { preference: localePreference, setPreference: setLocalePreference, t } = useI18n();
   const { user, service } = useAuth();
   const services = useAppServices();
   const [busy, setBusy] = useState(false);
@@ -162,8 +164,37 @@ export default function SettingsScreen() {
     <Screen>
       <ResponsiveContent>
         <StoneText variant="title1" style={styles.title}>
-          Ayarlar
+          {t("tabs.settings")}
         </StoneText>
+        <View style={[styles.section, { borderColor: colors.border }]}>
+          <StoneText variant="title3">{t("locale.setting")}</StoneText>
+          <StoneText variant="bodySmall" style={{ color: colors.textSecondary }}>
+            {t("locale.description")} {t("locale.persistence")}
+          </StoneText>
+          <View style={styles.options}>
+            {(["system", "en", "tr"] as const).map((option) => (
+              <StoneButton
+                key={option}
+                label={
+                  option === "system"
+                    ? t("locale.system")
+                    : option === "en"
+                      ? t("locale.english")
+                      : t("locale.turkish")
+                }
+                variant={localePreference === option ? "primary" : "secondary"}
+                onPress={() => void setLocalePreference(option)}
+                accessibilityLabel={`${t("locale.setting")}: ${
+                  option === "system"
+                    ? t("locale.system")
+                    : option === "en"
+                      ? t("locale.english")
+                      : t("locale.turkish")
+                }`}
+              />
+            ))}
+          </View>
+        </View>
         <View style={[styles.section, { borderColor: colors.border }]}>
           <StoneText variant="title3">Senkronizasyon</StoneText>
           <StoneText variant="bodySmall" style={{ color: colors.textSecondary }}>

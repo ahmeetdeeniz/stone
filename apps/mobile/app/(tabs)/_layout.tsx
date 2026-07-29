@@ -1,17 +1,11 @@
 import { Tabs } from "expo-router";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useTheme } from "../../src/design/theme";
-
-const tabs = {
-  notes: "Notlar",
-  projects: "Projeler",
-  today: "Bugün",
-  calendar: "Takvim",
-  settings: "Ayarlar",
-} as const;
+import { useI18n } from "../../src/i18n/provider";
 
 export default function TabsLayout() {
   const { colors } = useTheme();
+  const { t } = useI18n();
   return (
     <Tabs
       screenOptions={{
@@ -25,7 +19,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="notes"
         options={{
-          title: tabs.notes,
+          title: t("tabs.notes"),
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="document-text-outline" color={color} size={size} />
           ),
@@ -34,7 +28,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="projects"
         options={{
-          title: tabs.projects,
+          title: t("tabs.projects"),
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="layers-outline" color={color} size={size} />
           ),
@@ -43,7 +37,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="today"
         options={{
-          title: tabs.today,
+          title: t("tabs.today"),
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="calendar-outline" color={color} size={size} />
           ),
@@ -52,7 +46,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="calendar"
         options={{
-          title: tabs.calendar,
+          title: t("tabs.calendar"),
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="calendar-number-outline" color={color} size={size} />
           ),
@@ -61,7 +55,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="settings"
         options={{
-          title: tabs.settings,
+          title: t("tabs.settings"),
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="settings-outline" color={color} size={size} />
           ),
