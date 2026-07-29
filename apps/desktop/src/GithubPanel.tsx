@@ -9,10 +9,12 @@ import {
   type RestoreItemResult,
 } from "./desktop-api";
 import { restoreGitHubConnection } from "./github-restore";
+import { useI18n } from "./i18n";
 
 const githubClientConfigured = config.githubClientId.length > 0;
 
 export default function GithubPanel() {
+  const { locale, t, tp } = useI18n();
   const [account, setAccount] = useState<GitHubAccount | null>(null);
   const [repos, setRepos] = useState<GitHubRepository[]>([]);
   const [knownRepos, setKnownRepos] = useState<Map<number, GitHubRepository>>(new Map());
@@ -49,18 +51,20 @@ export default function GithubPanel() {
         setAccount(null);
       } else {
         setStoredConnectionFailed(true);
-        setNotice(`Kayıtlı GitHub bağlantısı doğrulanamadı: ${result.message}`);
+        setNotice(t("github.storedConnectionFailed", { message: result.message }));
       }
     });
     void desktopApi
       .githubListLinks()
       .then(setLinks)
-      .catch((error: unknown) => setNotice(`Proje bağlantıları yüklenemedi: ${toMessage(error)}`));
+      .catch((error: unknown) =>
+        setNotice(t("github.linksLoadFailed", { message: toMessage(error) })),
+      );
     void desktopApi
       .gitSystemVersion()
       .then(setGitVersion)
       .catch((error: unknown) => setGitError(toMessage(error)));
-  }, []);
+  }, [t]);
 
   async function loadPage(nextPage: number) {
     setBusy(true);
@@ -104,11 +108,11 @@ export default function GithubPanel() {
           return;
         }
         if (polled.status === "denied" || polled.status === "expired")
-          throw new Error("GitHub yetkilendirmesi tamamlanmadı.");
+          throw new Error(t("github.authorizationFailed"));
         interval = Math.max(5, polled.interval);
         setDevice({ code: started.userCode, uri: started.verificationUri, interval });
       }
-      throw new Error("GitHub doğrulama kodunun süresi doldu.");
+      throw new Error(t("github.codeExpired"));
     } catch (error) {
       setNotice(toMessage(error));
     } finally {
@@ -124,7 +128,7 @@ export default function GithubPanel() {
     setSelected(new Set());
     setDevice(null);
     setStoredConnectionFailed(false);
-    setNotice("GitHub bağlantısı kaldırıldı.");
+    setNotice(t("github.disconnected"));
   }
 
   async function pickRoot() {
@@ -150,7 +154,7 @@ export default function GithubPanel() {
         .githubListLinks()
         .then(setLinks)
         .catch(() => undefined);
-      setNotice(summary.cancelled ? "Restore iptal edildi." : "Restore tamamlandı.");
+      setNotice(summary.cancelled ? t("github.restoreCancelled") : t("github.restoreCompleted"));
     } catch (error) {
       setNotice(toMessage(error));
     } finally {
@@ -173,11 +177,11 @@ export default function GithubPanel() {
         for (const repository of result.repositories) all.set(repository.id, repository);
         if (!result.hasNext) break;
         nextPage += 1;
-        if (request === 99) throw new Error("GitHub repository sayfa sınırı aşıldı.");
+        if (request === 99) throw new Error(t("github.pageLimit"));
       }
       setKnownRepos(all);
       setSelected(new Set(all.keys()));
-      setNotice(`${all.size} repository restore için seçildi.`);
+      setNotice(t("github.selectedForRestore", { count: all.size }));
     } catch (error) {
       setNotice(toMessage(error));
     } finally {
@@ -204,7 +208,7 @@ export default function GithubPanel() {
       ),
     );
     setResults([]);
-    setNotice("Başarısız repository'ler yeniden denenmeye hazır.");
+    setNotice(t("github.failedReady"));
   }
 
   async function link(repository: GitHubRepository) {
@@ -219,7 +223,7 @@ export default function GithubPanel() {
         saved,
         ...current.filter((item) => item.projectId !== saved.projectId),
       ]);
-      setNotice(`${repository.fullName} projeye bağlandı.`);
+      setNotice(t("github.linkedToProject", { repository: repository.fullName }));
     } catch (error) {
       setNotice(toMessage(error));
     }
@@ -239,7 +243,7 @@ export default function GithubPanel() {
     try {
       await desktopApi.gitPull(path);
       await inspect(path);
-      setNotice("Pull tamamlandı.");
+      setNotice(t("github.pullCompleted"));
     } catch (error) {
       setNotice(toMessage(error));
     }
@@ -249,14 +253,14 @@ export default function GithubPanel() {
     if (!status || !commitMessage.trim()) return;
     const paths = [...selectedPaths];
     if (paths.length === 0) {
-      setNotice("Commit için en az bir dosya seçin.");
+      setNotice(t("github.selectCommitFile"));
       return;
     }
     try {
       await desktopApi.gitStageCommitPush(path, paths, commitMessage);
       setCommitMessage("");
       await inspect(path);
-      setNotice("Commit ve push tamamlandı.");
+      setNotice(t("github.pushCompleted"));
     } catch (error) {
       setNotice(toMessage(error));
     }
@@ -272,16 +276,8 @@ export default function GithubPanel() {
   if (!account) {
     return (
       <section className="github-panel">
-        <PanelHeading
-          title="GitHub"
-          detail="Repository bağlantısı ve yeni bilgisayar restore işlemleri."
-        />
-        {!githubClientConfigured && (
-          <p className="error-text">
-            VITE_GITHUB_CLIENT_ID yapılandırılmamış. Device Flow etkinleştirilmiş kendi GitHub OAuth
-            App client ID'nizi ekleyin.
-          </p>
-        )}
+        <PanelHeading title="GitHub" detail={t("github.detail")} />
+        {!githubClientConfigured && <p className="error-text">{t("github.clientMissing")}</p>}
         {device && (
           <div className="device-card">
             <strong>{device.code}</strong>
@@ -290,7 +286,7 @@ export default function GithubPanel() {
               className="secondary-button"
               onClick={() => void desktopApi.openGithubUrl(device.uri)}
             >
-              GitHub doğrulamasını aç
+              {t("github.openVerification")}
             </button>
           </div>
         )}
@@ -299,11 +295,11 @@ export default function GithubPanel() {
           disabled={connecting || !githubClientConfigured}
           onClick={() => void connect()}
         >
-          {connecting ? "GitHub bekleniyor…" : "GitHub hesabını bağla"}
+          {connecting ? t("github.waiting") : t("github.connect")}
         </button>
         {storedConnectionFailed && (
           <button className="secondary-button" onClick={() => void disconnect()}>
-            Geçersiz kayıtlı bağlantıyı temizle
+            {t("github.clearInvalidConnection")}
           </button>
         )}
         {gitError && <p className="error-text">{gitError}</p>}
@@ -314,23 +310,20 @@ export default function GithubPanel() {
 
   return (
     <section className="github-panel">
-      <PanelHeading
-        title="GitHub"
-        detail={`${account.login} bağlı · token Windows keychain'de tutulur.`}
-      />
+      <PanelHeading title="GitHub" detail={t("github.connectedDetail", { login: account.login })} />
       <div className="github-toolbar">
-        <span className="success-text">Bağlı</span>
-        <span className="muted">{gitVersion ?? "Git kontrol ediliyor…"}</span>
+        <span className="success-text">{t("github.connected")}</span>
+        <span className="muted">{gitVersion ?? t("github.checkingGit")}</span>
         <button className="secondary-button" onClick={() => void disconnect()}>
-          Bağlantıyı kaldır
+          {t("github.disconnect")}
         </button>
       </div>
       {gitError && <p className="error-text">{gitError}</p>}
       <div className="github-section">
         <div className="section-heading">
           <div>
-            <h3>Repository'ler</h3>
-            <p className="muted">GitHub erişiminizdeki public ve private repository'ler.</p>
+            <h3>{t("github.repositories")}</h3>
+            <p className="muted">{t("github.repositoriesDetail")}</p>
           </div>
           <div className="toolbar-actions">
             <button
@@ -338,20 +331,20 @@ export default function GithubPanel() {
               disabled={busy || page === 1}
               onClick={() => void loadPage(page - 1)}
             >
-              Önceki
+              {t("desktop.previous")}
             </button>
-            <span className="muted">Sayfa {page}</span>
+            <span className="muted">{t("github.page", { page })}</span>
             <button
               className="secondary-button"
               disabled={busy || !hasNext}
               onClick={() => void loadPage(page + 1)}
             >
-              Sonraki
+              {t("desktop.next")}
             </button>
           </div>
         </div>
         <label>
-          Stone proje kimliği
+          {t("github.projectId")}
           <input
             value={projectId}
             onChange={(event) => setProjectId(event.target.value)}
@@ -374,21 +367,21 @@ export default function GithubPanel() {
                       return next;
                     })
                   }
-                  aria-label={`${repo.fullName} restore seçimi`}
+                  aria-label={t("github.restoreSelectionA11y", { repository: repo.fullName })}
                 />
                 <div className="repo-main">
                   <strong>{repo.fullName}</strong>
                   <span>
-                    {repo.private ? "Private" : "Public"} · {formatSize(repo.sizeKb)} ·{" "}
-                    {repo.defaultBranch}
+                    {repo.private ? t("github.private") : t("github.public")} ·{" "}
+                    {formatSize(repo.sizeKb, locale)} · {repo.defaultBranch}
                   </span>
                   {repo.sizeKb > 1_000_000 && (
-                    <small className="warning-text">
-                      Büyük repository; clone öncesi disk alanını kontrol edin.
-                    </small>
+                    <small className="warning-text">{t("github.largeRepository")}</small>
                   )}
                   {linked && (
-                    <small className="success-text">Stone projesi: {linked.projectId}</small>
+                    <small className="success-text">
+                      {t("github.stoneProject", { project: linked.projectId })}
+                    </small>
                   )}
                 </div>
                 <div className="repo-actions">
@@ -403,7 +396,7 @@ export default function GithubPanel() {
                     disabled={!projectId.trim()}
                     onClick={() => void link(repo)}
                   >
-                    Projeye bağla
+                    {t("github.linkProject")}
                   </button>
                   {linked?.localPath && (
                     <>
@@ -411,7 +404,7 @@ export default function GithubPanel() {
                         className="icon-button"
                         onClick={() => void inspect(linked.localPath!)}
                       >
-                        İncele
+                        {t("github.inspect")}
                       </button>
                       <button className="icon-button" onClick={() => void pull(linked.localPath!)}>
                         Pull
@@ -426,30 +419,30 @@ export default function GithubPanel() {
         <div className="restore-controls">
           <div className="restore-root">
             <button className="secondary-button" onClick={() => void pickRoot()}>
-              Hedef klasör seç
+              {t("github.chooseTarget")}
             </button>
-            <span>{root || "Klasör seçilmedi"}</span>
+            <span>{root || t("github.noFolder")}</span>
           </div>
           <button
             className="text-button"
             disabled={busy}
             onClick={() => void selectAllRepositories()}
           >
-            {allSelected ? "Seçimi kaldır" : "Tüm repository'leri seç"}
+            {allSelected ? t("github.clearSelection") : t("github.selectAll")}
           </button>
           <button
             className="primary-button"
             disabled={restoring || !root || selectedCount === 0}
             onClick={() => void restore()}
           >
-            {restoring ? "Restore ediliyor…" : `${selectedCount} repository restore et`}
+            {restoring ? t("github.restoring") : tp("github.restoreCount", selectedCount)}
           </button>
           {restoring && runId && (
             <button
               className="secondary-button"
               onClick={() => void desktopApi.cancelRestore(runId)}
             >
-              İptal
+              {t("common.cancel")}
             </button>
           )}
         </div>
@@ -458,20 +451,20 @@ export default function GithubPanel() {
         <div className="github-section">
           <div className="section-heading">
             <div>
-              <h3>Restore özeti</h3>
-              <p className="muted">
-                Her repository ayrı sonuçlanır; başarısız olanlar yeniden denenebilir.
-              </p>
+              <h3>{t("github.restoreSummary")}</h3>
+              <p className="muted">{t("github.restoreSummaryDetail")}</p>
             </div>
             <button className="secondary-button" onClick={() => void retryFailed()}>
-              Başarısızları yeniden seç
+              {t("github.reselectFailed")}
             </button>
           </div>
           <div className="restore-results">
             {results.map((result) => (
               <div className="restore-result" key={result.fullName}>
                 <strong>{result.fullName}</strong>
-                <span className={`result-${result.status}`}>{result.status}</span>
+                <span className={`result-${result.status}`}>
+                  {t(`github.status.${result.status}`)}
+                </span>
                 {result.path && (
                   <>
                     <button
@@ -503,17 +496,14 @@ export default function GithubPanel() {
         <div className="github-section review-card">
           <div className="section-heading">
             <div>
-              <h3>Git review</h3>
-              <p className="muted">
-                Sadece aşağıdaki açıkça seçilen dosyalar stage edilir. Force push, reset ve clean
-                sunulmaz.
-              </p>
+              <h3>{t("github.review")}</h3>
+              <p className="muted">{t("github.reviewDetail")}</p>
             </div>
             <span className={status.status.isDirty ? "warning-text" : "success-text"}>
-              {status.status.isDirty ? "Değişiklik var" : "Temiz"}
+              {status.status.isDirty ? t("github.dirty") : t("github.clean")}
             </span>
           </div>
-          <pre>{status.diffStat || "Stage edilmiş diff yok."}</pre>
+          <pre>{status.diffStat || t("github.noStagedDiff")}</pre>
           {status.status.isDirty && (
             <>
               <div className="review-files">
@@ -539,11 +529,11 @@ export default function GithubPanel() {
                 })}
               </div>
               <label>
-                Commit mesajı
+                {t("github.commitMessage")}
                 <input
                   value={commitMessage}
                   onChange={(event) => setCommitMessage(event.target.value)}
-                  placeholder="Değişikliği açıkla"
+                  placeholder={t("github.commitPlaceholder")}
                 />
               </label>
               <button
@@ -563,23 +553,24 @@ export default function GithubPanel() {
 }
 
 function PanelHeading({ title, detail }: { title: string; detail: string }) {
+  const { t } = useI18n();
   return (
     <div className="panel-heading">
       <div className="brand-mark small">G</div>
       <div>
-        <p className="eyebrow">INTEGRATION</p>
+        <p className="eyebrow">{t("github.integrationEyebrow")}</p>
         <h2>{title}</h2>
         <p className="muted">{detail}</p>
       </div>
     </div>
   );
 }
-function formatSize(sizeKb: number): string {
+function formatSize(sizeKb: number, locale: string): string {
   return sizeKb > 1024 * 1024
-    ? `${(sizeKb / (1024 * 1024)).toFixed(1)} GB`
+    ? `${new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(sizeKb / (1024 * 1024))} GB`
     : sizeKb > 1024
-      ? `${(sizeKb / 1024).toFixed(1)} MB`
-      : `${sizeKb} KB`;
+      ? `${new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(sizeKb / 1024)} MB`
+      : `${new Intl.NumberFormat(locale).format(sizeKb)} KB`;
 }
 function gitEntryPath(entry: string): string {
   const value = entry.slice(3).trim();
