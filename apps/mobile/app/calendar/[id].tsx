@@ -14,7 +14,6 @@ import { Screen, StoneButton, StoneInput, StoneText } from "../../src/components
 import { spacing } from "../../src/design/tokens";
 import { useAppServices } from "../../src/providers/app-provider";
 import { useAuth } from "../../src/providers/auth-provider";
-import { useI18n } from "../../src/i18n/provider";
 
 const recurrenceOptions = ["none", "daily", "weekdays", "weekly", "monthly", "custom"] as const;
 const categoryOptions = ["neutral", "purple", "blue", "green", "amber", "red"] as const;
@@ -26,7 +25,6 @@ export default function CalendarDetailScreen() {
   const navigation = useNavigation();
   const { user } = useAuth();
   const { calendar, projectUseCases, noteUseCases, deviceId } = useAppServices();
-  const { t } = useI18n();
   const [item, setItem] = useState<CalendarItem | null>(null);
   const [projects, setProjects] = useState<readonly Project[]>([]);
   const [notes, setNotes] = useState<readonly Document[]>([]);
@@ -72,7 +70,7 @@ export default function CalendarDetailScreen() {
         projectUseCases.list(user.uid),
         noteUseCases.list(user.uid),
       ]);
-      if (!current) throw new Error(t("calendar.notFound"));
+      if (!current) throw new Error("Etkinlik bulunamadı.");
       setItem(current);
       setProjects(projectList);
       setNotes(noteList);
@@ -114,7 +112,7 @@ export default function CalendarDetailScreen() {
       });
       setError(null);
     } catch (caught) {
-      setError(message(caught, t("app.unknownError")));
+      setError(message(caught));
     }
   };
   useEffect(() => void load(), [id, user]);
@@ -123,17 +121,21 @@ export default function CalendarDetailScreen() {
       navigation.addListener("beforeRemove", (event) => {
         if (!isDirty || allowNavigationRef.current) return;
         event.preventDefault();
-        Alert.alert(t("calendar.unsavedTitle"), t("calendar.unsavedDetail"), [
-          { text: t("calendar.keepEditing"), style: "cancel" },
-          {
-            text: t("calendar.discardChanges"),
-            style: "destructive",
-            onPress: () => {
-              allowNavigationRef.current = true;
-              navigation.dispatch(event.data.action);
+        Alert.alert(
+          "Kaydedilmemiş değişiklikler",
+          "Bu ekrandan ayrılırsanız değişiklikleriniz kaybolacak.",
+          [
+            { text: "Düzenlemeye devam et", style: "cancel" },
+            {
+              text: "Değişiklikleri at",
+              style: "destructive",
+              onPress: () => {
+                allowNavigationRef.current = true;
+                navigation.dispatch(event.data.action);
+              },
             },
-          },
-        ]);
+          ],
+        );
       }),
     [isDirty, navigation],
   );
@@ -179,19 +181,19 @@ export default function CalendarDetailScreen() {
       );
       setItem(next);
       baselineRef.current = formSnapshot;
-      Alert.alert(t("calendar.saved"), t("calendar.savedLocally"));
+      Alert.alert("Kaydedildi", "Değişiklik önce yerel SQLite'a kaydedildi.");
     } catch (caught) {
-      Alert.alert(t("calendar.saveFailed"), message(caught, t("app.unknownError")));
+      Alert.alert("Etkinlik kaydedilemedi", message(caught));
     } finally {
       setSaving(false);
     }
   };
 
   const remove = () =>
-    Alert.alert(t("calendar.deleteEvent"), t("calendar.deleteDetail"), [
-      { text: t("common.cancel"), style: "cancel" },
+    Alert.alert("Etkinliği sil", "Etkinlik soft-delete ile çöp durumuna alınacak.", [
+      { text: "Vazgeç", style: "cancel" },
       {
-        text: t("common.delete"),
+        text: "Sil",
         style: "destructive",
         onPress: () =>
           void (async () => {
@@ -212,45 +214,39 @@ export default function CalendarDetailScreen() {
   if (!item)
     return (
       <Screen>
-        <LoadingState label={t("calendar.loadingEvent")} />
+        <LoadingState label="Etkinlik yükleniyor" />
       </Screen>
     );
   return (
     <Screen padded={false}>
-      <Stack.Screen
-        options={{
-          title: item.kind === "task_block" ? t("calendar.taskBlock") : t("calendar.event"),
-        }}
-      />
+      <Stack.Screen options={{ title: item.kind === "task_block" ? "Zaman bloğu" : "Etkinlik" }} />
       <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.page}>
         <ResponsiveContent>
-          <StoneInput label={t("calendar.titleField")} value={title} onChangeText={setTitle} />
+          <StoneInput label="Başlık" value={title} onChangeText={setTitle} />
           <StoneInput
-            label={t("calendar.description")}
+            label="Açıklama"
             value={description}
             onChangeText={setDescription}
             multiline
           />
-          <StoneInput label={t("calendar.location")} value={location} onChangeText={setLocation} />
+          <StoneInput label="Konum" value={location} onChangeText={setLocation} />
           <Pressable
             accessibilityRole="checkbox"
             accessibilityState={{ checked: allDay }}
             onPress={() => setAllDay((value) => !value)}
             style={styles.toggle}
           >
-            <StoneText>
-              {allDay ? "☑" : "☐"} {t("calendar.allDay")}
-            </StoneText>
+            <StoneText>{allDay ? "☑" : "☐"} Tüm gün</StoneText>
           </Pressable>
           <View style={styles.row}>
             <StoneInput
-              label={t("calendar.startDate")}
+              label="Başlangıç tarihi"
               value={startDate}
               onChangeText={setStartDate}
               containerStyle={styles.field}
             />
             <StoneInput
-              label={t("calendar.endDate")}
+              label="Bitiş tarihi"
               value={endDate}
               onChangeText={setEndDate}
               containerStyle={styles.field}
@@ -259,13 +255,13 @@ export default function CalendarDetailScreen() {
           {!allDay ? (
             <View style={styles.row}>
               <StoneInput
-                label={t("calendar.startTime")}
+                label="Başlangıç saati"
                 value={startTime}
                 onChangeText={setStartTime}
                 containerStyle={styles.field}
               />
               <StoneInput
-                label={t("calendar.endTime")}
+                label="Bitiş saati"
                 value={endTime}
                 onChangeText={setEndTime}
                 containerStyle={styles.field}
@@ -273,30 +269,28 @@ export default function CalendarDetailScreen() {
             </View>
           ) : null}
           <StoneInput
-            label={t("calendar.timezone")}
+            label="IANA zaman dilimi"
             value={timezone}
             onChangeText={setTimezone}
             autoCapitalize="none"
           />
-          <StoneText variant="caption">{t("calendar.timezoneHint")}</StoneText>
-          <StoneText variant="label">{t("calendar.recurrence")}</StoneText>
+          <StoneText variant="caption">
+            Cihaz zaman dilimi değişirse an aynı kalır; tüm gün tarihleri kaymaz.
+          </StoneText>
+          <StoneText variant="label">Tekrar</StoneText>
           <ScrollView horizontal contentContainerStyle={styles.choices}>
             {recurrenceOptions.map((value) => (
               <Choice
                 key={value}
-                label={recurrenceLabel(value, t)}
+                label={value}
                 selected={recurrence === value}
                 onPress={() => setRecurrence(value)}
               />
             ))}
           </ScrollView>
-          <StoneText variant="label">{t("calendar.project")}</StoneText>
+          <StoneText variant="label">Proje</StoneText>
           <ScrollView horizontal contentContainerStyle={styles.choices}>
-            <Choice
-              label={t("calendar.noProject")}
-              selected={!projectId}
-              onPress={() => setProjectId(null)}
-            />
+            <Choice label="Projesiz" selected={!projectId} onPress={() => setProjectId(null)} />
             {projects.map((project) => (
               <Choice
                 key={project.id}
@@ -306,21 +300,21 @@ export default function CalendarDetailScreen() {
               />
             ))}
           </ScrollView>
-          <StoneText variant="label">{t("calendar.category")}</StoneText>
+          <StoneText variant="label">Kategori</StoneText>
           <ScrollView horizontal contentContainerStyle={styles.choices}>
             {categoryOptions.map((value) => (
               <Choice
                 key={value}
-                label={t(`calendar.category.${value}`)}
+                label={value}
                 selected={category === value}
                 onPress={() => setCategory(value)}
               />
             ))}
           </ScrollView>
-          <StoneText variant="label">{t("calendar.sourceNote")}</StoneText>
+          <StoneText variant="label">Kaynak not</StoneText>
           <ScrollView horizontal contentContainerStyle={styles.choices}>
             <Choice
-              label={t("calendar.noLink")}
+              label="Bağlantı yok"
               selected={!sourceDocumentId}
               onPress={() => setSourceDocumentId(null)}
             />
@@ -335,7 +329,7 @@ export default function CalendarDetailScreen() {
           </ScrollView>
           {item.taskId ? (
             <StoneButton
-              label={t("calendar.openTask")}
+              label="Bağlı görevi aç"
               variant="secondary"
               onPress={() =>
                 router.push({ pathname: "/task/[id]" as never, params: { id: item.taskId! } })
@@ -344,20 +338,20 @@ export default function CalendarDetailScreen() {
           ) : null}
           {item.sourceDocumentId ? (
             <StoneButton
-              label={t("calendar.openSourceNote")}
+              label="Kaynak notu aç"
               variant="secondary"
               onPress={() =>
                 router.push({ pathname: "/editor", params: { id: item.sourceDocumentId! } })
               }
             />
           ) : null}
-          <StoneText variant="caption">{t("calendar.noNotifications")}</StoneText>
+          <StoneText variant="caption">Hatırlatıcı veya arka plan bildirimi planlanmaz.</StoneText>
           <StoneButton
-            label={saving ? t("calendar.saving") : t("common.save")}
+            label={saving ? "Kaydediliyor" : "Kaydet"}
             onPress={() => void save()}
             disabled={saving || !title.trim()}
           />
-          <StoneButton label={t("calendar.deleteEvent")} variant="quiet" onPress={remove} />
+          <StoneButton label="Etkinliği sil" variant="quiet" onPress={remove} />
         </ResponsiveContent>
       </ScrollView>
     </Screen>
@@ -385,12 +379,8 @@ function Choice({
   );
 }
 
-function recurrenceLabel(recurrence: RecurrenceChoice, t: ReturnType<typeof useI18n>["t"]): string {
-  return t(`recurrence.${recurrence}`);
-}
-
-function message(error: unknown, fallback: string): string {
-  return error instanceof Error ? error.message : fallback;
+function message(error: unknown): string {
+  return error instanceof Error ? error.message : "Tekrar deneyin.";
 }
 
 const styles = StyleSheet.create({

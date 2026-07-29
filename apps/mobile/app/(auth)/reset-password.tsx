@@ -4,25 +4,23 @@ import { ScrollView, StyleSheet } from "react-native";
 import { StoneButton, StoneInput, StoneText } from "../../src/components/ui";
 import { spacing } from "../../src/design/tokens";
 import { useAuth } from "../../src/providers/auth-provider";
-import { useI18n } from "../../src/i18n/provider";
 
 export default function ResetPasswordScreen() {
   const { service } = useAuth();
-  const { t } = useI18n();
   const [email, setEmail] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const reset = async () => {
-    if (!service) return setError(t("auth.firebaseUnavailable"));
+    if (!service) return setError("Firebase yapılandırması hazır değil.");
     setBusy(true);
     setError(null);
     setMessage(null);
     try {
       await service.sendPasswordReset(email);
-      setMessage(t("auth.resetSent"));
+      setMessage("Şifre sıfırlama bağlantısı e-posta adresinize gönderildi.");
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : t("auth.sendLinkFailed"));
+      setError(caught instanceof Error ? caught.message : "Bağlantı gönderilemedi.");
     } finally {
       setBusy(false);
     }
@@ -30,24 +28,24 @@ export default function ResetPasswordScreen() {
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <StoneText variant="display">Stone</StoneText>
-      <StoneText variant="title1">{t("auth.resetPassword")}</StoneText>
-      <StoneText variant="body">{t("auth.resetDetail")}</StoneText>
+      <StoneText variant="title1">Şifre sıfırla</StoneText>
+      <StoneText variant="body">Hesabınıza bağlı e-posta adresini girin.</StoneText>
       {message ? <StoneText style={styles.success}>{message}</StoneText> : null}
       {error ? <StoneText style={styles.error}>{error}</StoneText> : null}
       <StoneInput
-        label={t("auth.email")}
+        label="E-posta"
         value={email}
         onChangeText={setEmail}
         autoCapitalize="none"
         keyboardType="email-address"
       />
       <StoneButton
-        label={busy ? t("auth.sendingLink") : t("auth.sendLink")}
+        label={busy ? "Gönderiliyor…" : "Bağlantı gönder"}
         onPress={() => void reset()}
         disabled={busy}
       />
       <Link href="/(auth)/sign-in" style={styles.link}>
-        {t("auth.backToSignIn")}
+        Giriş ekranına dön
       </Link>
     </ScrollView>
   );
