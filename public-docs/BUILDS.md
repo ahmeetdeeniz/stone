@@ -34,6 +34,12 @@ pnpm verify:widgets
 pnpm mobile:android
 ```
 
+The native verifier runs the real React Native Firebase config plugin, Expo prebuild, and Android
+autolinking with temporary demo-only Firebase files. It deletes those files and the generated
+native project afterward. This static public-CI fixture is not application configuration and must
+never be used for a Development or Release Build; those builds still require the genuine files
+from your own Firebase project.
+
 For EAS, configure ignored Firebase native files as sensitive file variables
 `GOOGLE_SERVICES_JSON` and `GOOGLE_SERVICE_INFO_PLIST`, then:
 

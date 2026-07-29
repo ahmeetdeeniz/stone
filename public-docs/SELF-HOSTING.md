@@ -44,6 +44,9 @@ pnpm mobile:export
 ```
 
 The rules tests require Java. Firebase Emulator Suite may download emulator binaries on first use.
+Native verification generates temporary demo-only Android and iOS Firebase files solely to exercise
+the real config-plugin/prebuild path in public CI, then removes them. Real Development, EAS, and
+Release Builds never use this fixture and require the self-hoster's genuine ignored native files.
 
 ## Configuration boundaries
 

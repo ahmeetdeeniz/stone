@@ -35,12 +35,8 @@ jobs:
       - run: pnpm verify:widgets
       - name: Install pinned Android NDK
         run: sdkmanager "ndk;27.1.12297006"
-      - name: Generate Android native project
-        working-directory: apps/mobile
-        run: pnpm exec expo prebuild --platform android --clean --no-install
-      - name: Compile local Android widget module
-        working-directory: apps/mobile/android
-        run: ./gradlew :stone-native-widgets:compileDebugKotlin
+      - name: Verify Android widget native compilation
+        run: pnpm verify:android-widget-compile
       - run: pnpm verify:desktop
       - run: pnpm verify:github
       - run: pnpm verify:public-boundary
