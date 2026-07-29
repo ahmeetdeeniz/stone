@@ -14,7 +14,6 @@ pnpm lint
 pnpm typecheck
 pnpm test
 pnpm test:integration
-pnpm verify:i18n
 pnpm verify:public-boundary
 ```
 
@@ -32,10 +31,6 @@ MSVC/Visual C++ Build Tools/WebView2. Never report an unavailable manual test as
 - Keep changes focused, strict, and typed. Do not use `any`, `@ts-ignore`, disabled lint rules, test
   skips, production mocks, or swallowed errors.
 - Do not add unplanned v1 features or team/collaboration behavior.
-- Keep English canonical and add matching Turkish keys with identical interpolation parameters.
-  Use typed translation/formatting APIs and follow [the i18n guide](public-docs/I18N.md).
-- Never localize stored Markdown, user-authored content, enum identifiers, sync payloads, file
-  paths, or MCP tool/schema contracts.
 
 ## Public boundary and secrets
 
