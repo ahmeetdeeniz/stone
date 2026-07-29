@@ -84,4 +84,5 @@ Capture the real current build with intentional sample data and no personal iden
 - [ ] Import/export synthetic `.ics` fixtures and review the documented subset.
 - [ ] Create on device A, move offline on B, sync, and resolve concurrent revision conflicts.
 - [ ] Change device timezone and verify timed instants and all-day dates follow the documented policy.
-- [ ] Confirm no native reminder, focus timer, external calendar or widget behavior is implied.
+- [ ] Confirm no native reminder, external calendar account, or invitation behavior is implied.
+- [ ] Validate the documented focus and widget behavior separately on supported physical devices.

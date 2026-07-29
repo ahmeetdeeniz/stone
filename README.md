@@ -220,8 +220,8 @@ private notes in public issues.
   backend are not available.
 - MCP hosting and provider publication are not automatic.
 - Due times and calendar records do not schedule operating-system notifications.
-- Full-workspace restore beyond the calendar segment, Agenda virtualization, focus
-  physical-device acceptance for native widgets and Live Activities remains pending.
+- Full-workspace restore beyond the calendar segment, Agenda virtualization, and physical-device
+  acceptance for focus, native widgets, and Live Activities remain pending.
 
 ## Roadmap
 

@@ -7,6 +7,8 @@ on:
 jobs:
   checks:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -16,13 +18,29 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
       - run: pnpm install --frozen-lockfile
+      - run: pnpm verify:clean-workspace
       - run: pnpm format:check
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm test:integration
+      - run: pnpm test:rules
+      - run: pnpm test:storage-rules
       - run: pnpm verify:native-dependencies
+      - run: pnpm verify:widgets
+      - name: Install pinned Android NDK
+        run: sdkmanager "ndk;27.1.12297006"
+      - name: Generate Android native project
+        working-directory: apps/mobile
+        run: pnpm exec expo prebuild --platform android --clean --no-install
+      - name: Compile local Android widget module
+        working-directory: apps/mobile/android
+        run: ./gradlew :stone-native-widgets:compileDebugKotlin
       - run: pnpm verify:desktop
       - run: pnpm verify:github
       - run: pnpm verify:public-boundary
