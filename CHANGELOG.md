@@ -7,6 +7,11 @@ tag, so no release date or semantic version is claimed.
 
 ### Added
 
+- English-default internationalization with bundled Turkish across mobile and Windows, pre-auth
+  System/English/Türkçe preference, locale-aware date/number/duration/recurrence presentation, and
+  CI verification for resource parity, interpolation parameters, duplicate keys, and selected UI
+  hardcoded-copy boundaries.
+
 - Local-first calendar records and scheduled task blocks, timezone/DST-safe domain logic, bounded
   recurrence/occurrence exceptions and explicit edit scopes, mobile Agenda/week navigation,
   Windows month/week/day/Agenda with drag/move/resize, Firebase rules, workspace-calendar and
