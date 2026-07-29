@@ -277,7 +277,9 @@ export function aggregateFocusSessions(
   const included: FocusSession[] = [];
   let excludedConflictedSessions = 0;
   let excludedOverlappingSessions = 0;
-  for (const session of [...sessions].sort((a, b) => a.startedAt.localeCompare(b.startedAt))) {
+  for (const session of [...sessions].sort(
+    (a, b) => a.startedAt.localeCompare(b.startedAt) || a.id.localeCompare(b.id),
+  )) {
     if (
       session.status !== "completed" ||
       session.deletedAt ||
@@ -364,10 +366,10 @@ export function focusGoalProgress(
   monday.setUTCDate(day.getUTCDate() - weekday + 1);
   const mondayDate = monday.toISOString().slice(0, 10);
   const weeklySeconds = Object.entries(summary.byDay)
-    .filter(([entry]) => entry >= mondayDate && entry <= date)
+    .filter(([entry]) => entry >= mondayDate && entry >= goal.effectiveFromDate && entry <= date)
     .reduce((total, [, seconds]) => total + seconds, 0);
   return {
-    dailySeconds: summary.byDay[date] ?? 0,
+    dailySeconds: date < goal.effectiveFromDate ? 0 : (summary.byDay[date] ?? 0),
     weeklySeconds,
     dailyTargetSeconds: goal.dailyMinutes * 60,
     weeklyTargetSeconds: goal.weeklyMinutes * 60,

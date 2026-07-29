@@ -141,8 +141,9 @@ describe("focus analytics and goals", () => {
 
   it("calculates offline daily and Monday-based weekly goal progress prospectively", () => {
     const session = completed("goal", "2026-07-29T09:00:00.000Z", "2026-07-29T09:30:00.000Z");
+    const earlier = completed("earlier", "2026-07-28T09:00:00.000Z", "2026-07-28T09:30:00.000Z");
     const progress = focusGoalProgress(
-      [session],
+      [earlier, session],
       {
         id: "goal-1",
         ownerId: "owner-1",
@@ -163,5 +164,17 @@ describe("focus analytics and goals", () => {
     expect(progress.dailySeconds).toBe(1_800);
     expect(progress.weeklySeconds).toBe(1_800);
     expect(progress.dailyTargetSeconds).toBe(3_600);
+  });
+
+  it("aggregates thousands of sessions deterministically", () => {
+    const sessions = Array.from({ length: 5_000 }, (_, index) => {
+      const startedAt = new Date(Date.UTC(2026, 0, 1, index, 0, 0)).toISOString();
+      const endedAt = new Date(Date.UTC(2026, 0, 1, index, 1, 0)).toISOString();
+      return completed(`bulk-${index}`, startedAt, endedAt);
+    });
+    const first = aggregateFocusSessions(sessions, "UTC");
+    const reversed = aggregateFocusSessions([...sessions].reverse(), "UTC");
+    expect(first.focusedSeconds).toBe(300_000);
+    expect(reversed).toEqual(first);
   });
 });
