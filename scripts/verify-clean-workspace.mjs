@@ -72,6 +72,8 @@ run("pnpm", [
   "--filter",
   "@stone/domain",
   "--filter",
+  "@stone/i18n",
+  "--filter",
   "@stone/markdown",
   "--filter",
   "@stone/editor",
