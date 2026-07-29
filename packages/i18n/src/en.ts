@@ -620,6 +620,7 @@ export const en = {
     "{{fresh}} calendar records imported; {{duplicates}} duplicate records skipped.",
   "desktop.icsExported": "Calendar .ics file exported.",
   "desktop.calendarViewA11y": "Calendar view",
+  "desktop.goToDate": "Go to date",
   "desktop.view.month": "Month",
   "desktop.view.week": "Week",
   "desktop.view.day": "Day",
@@ -747,6 +748,13 @@ export const en = {
   "github.commitMessage": "Commit message",
   "github.commitPlaceholder": "Describe the change",
   "github.integrationEyebrow": "INTEGRATION",
+  "relative.today": "Today",
+  "relative.tomorrow": "Tomorrow",
+  "relative.yesterday": "Yesterday",
+  "relative.inDays.one": "In {{count}} day",
+  "relative.inDays.other": "In {{count}} days",
+  "relative.daysAgo.one": "{{count}} day ago",
+  "relative.daysAgo.other": "{{count}} days ago",
 } as const;
 
 export type TranslationKey = keyof typeof en;
