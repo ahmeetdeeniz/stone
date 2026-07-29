@@ -6,7 +6,10 @@ export type LocalePreference = "system" | Locale;
 export type TranslationParameters = Readonly<Record<string, string | number>>;
 
 const resources: Readonly<Record<Locale, Readonly<Record<TranslationKey, string>>>> = { en, tr };
-const formatterCache = new Map<string, Intl.DateTimeFormat | Intl.NumberFormat>();
+const formatterCache = new Map<
+  string,
+  Intl.DateTimeFormat | Intl.NumberFormat | Intl.PluralRules
+>();
 
 export function resolveSystemLocale(locale: string | null | undefined): Locale {
   if (!locale) return "en";
@@ -69,7 +72,11 @@ export function translatePlural(
   count: number,
   parameters: TranslationParameters = {},
 ): string {
-  const category = new Intl.PluralRules(locale).select(count);
+  const cacheKey = `plural:${locale}`;
+  const cached = formatterCache.get(cacheKey);
+  const rules = cached instanceof Intl.PluralRules ? cached : new Intl.PluralRules(locale);
+  if (!(cached instanceof Intl.PluralRules)) formatterCache.set(cacheKey, rules);
+  const category = rules.select(count);
   const candidate = `${baseKey}.${category}` as TranslationKey;
   const fallback = `${baseKey}.other` as TranslationKey;
   const key = candidate in en ? candidate : fallback;
@@ -94,9 +101,7 @@ export function formatDateOnly(
   date: string,
   options: Intl.DateTimeFormatOptions = { dateStyle: "medium" },
 ): string {
-  const [year, month, day] = date.split("-").map(Number);
-  const value = new Date(Date.UTC(year ?? 0, (month ?? 1) - 1, day ?? 1, 12));
-  return dateFormatter(locale, "UTC", options).format(value);
+  return dateFormatter(locale, "UTC", options).format(dateOnlyValue(date));
 }
 
 export function formatInstant(
@@ -107,6 +112,45 @@ export function formatInstant(
 ): string {
   return dateFormatter(locale, timezone, options).format(
     typeof instant === "string" ? new Date(instant) : instant,
+  );
+}
+
+export function formatTime(
+  locale: Locale,
+  instant: string | Date,
+  timezone: string,
+  options: Intl.DateTimeFormatOptions = { hour: "numeric", minute: "2-digit" },
+): string {
+  return formatInstant(locale, instant, timezone, options);
+}
+
+export function formatDateRange(
+  locale: Locale,
+  startDate: string,
+  endDate: string,
+  options: Intl.DateTimeFormatOptions = { dateStyle: "medium" },
+): string {
+  const start = dateOnlyValue(startDate);
+  const end = dateOnlyValue(endDate);
+  return dateFormatter(locale, "UTC", options).formatRange(start, end);
+}
+
+export function formatWeekdayName(
+  locale: Locale,
+  date: string,
+  width: "long" | "short" | "narrow" = "long",
+): string {
+  return formatDateOnly(locale, date, { weekday: width });
+}
+
+export function formatMonthName(
+  locale: Locale,
+  month: number,
+  width: "long" | "short" | "narrow" = "long",
+): string {
+  const safeMonth = Math.min(12, Math.max(1, Math.trunc(month)));
+  return dateFormatter(locale, "UTC", { month: width }).format(
+    new Date(Date.UTC(2026, safeMonth - 1, 1, 12)),
   );
 }
 
@@ -151,6 +195,10 @@ export function formatRelativeDate(locale: Locale, date: string, today: string):
 
 export function firstDayOfWeek(): 1 {
   return 1;
+}
+
+export function formatCount(locale: Locale, baseKey: string, count: number): string {
+  return translatePlural(locale, baseKey, count);
 }
 
 export function formatDuration(locale: Locale, minutes: number): string {
@@ -205,6 +253,11 @@ export function formatReleaseStatus(locale: Locale, status: string): string {
 
 export function formatProjectHealth(locale: Locale, health: string): string {
   return translate(locale, `projects.healthLabel.${health}` as TranslationKey);
+}
+
+function dateOnlyValue(date: string): Date {
+  const [year, month, day] = date.split("-").map(Number);
+  return new Date(Date.UTC(year ?? 0, (month ?? 1) - 1, day ?? 1, 12));
 }
 
 export { en, tr };

@@ -341,15 +341,15 @@ export default function TaskDetailScreen() {
             title={t("tasks.priority")}
             values={["none", "low", "medium", "high"]}
             selected={task.priority}
-            labelFor={(value) => formatTaskPriority(locale, value as Task["priority"])}
-            onSelect={(value) => void setPriority(value as Task["priority"])}
+            labelFor={(value) => formatTaskPriority(locale, value)}
+            onSelect={(value) => void setPriority(value)}
           />
           <ChoiceSection
             title={t("tasks.recurrence")}
             values={RECURRENCES}
             selected={recurrence}
             labelFor={(value) => t(`recurrence.${value}` as TranslationKey)}
-            onSelect={(value) => void setRecurrence(value as TaskRecurrenceFrequency | "none")}
+            onSelect={(value) => void setRecurrence(value)}
           />
           <StoneText variant="label">{t("tasks.project")}</StoneText>
           <ScrollView horizontal contentContainerStyle={styles.choices}>
@@ -443,7 +443,7 @@ export default function TaskDetailScreen() {
   );
 }
 
-function ChoiceSection({
+function ChoiceSection<Value extends string>({
   title,
   values,
   selected,
@@ -451,10 +451,10 @@ function ChoiceSection({
   labelFor = (value) => value,
 }: {
   title: string;
-  values: readonly string[];
-  selected: string;
-  onSelect: (value: string) => void;
-  labelFor?: (value: string) => string;
+  values: readonly Value[];
+  selected: Value;
+  onSelect: (value: Value) => void;
+  labelFor?: (value: Value) => string;
 }) {
   return (
     <View style={styles.choiceSection}>

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { formatFileSize } from "@stone/i18n";
 import {
   config,
   desktopApi,
@@ -373,7 +374,7 @@ export default function GithubPanel() {
                   <strong>{repo.fullName}</strong>
                   <span>
                     {repo.private ? t("github.private") : t("github.public")} ·{" "}
-                    {formatSize(repo.sizeKb, locale)} · {repo.defaultBranch}
+                    {formatFileSize(locale, repo.sizeKb * 1024)} · {repo.defaultBranch}
                   </span>
                   {repo.sizeKb > 1_000_000 && (
                     <small className="warning-text">{t("github.largeRepository")}</small>
@@ -564,13 +565,6 @@ function PanelHeading({ title, detail }: { title: string; detail: string }) {
       </div>
     </div>
   );
-}
-function formatSize(sizeKb: number, locale: string): string {
-  return sizeKb > 1024 * 1024
-    ? `${new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(sizeKb / (1024 * 1024))} GB`
-    : sizeKb > 1024
-      ? `${new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(sizeKb / 1024)} MB`
-      : `${new Intl.NumberFormat(locale).format(sizeKb)} KB`;
 }
 function gitEntryPath(entry: string): string {
   const value = entry.slice(3).trim();

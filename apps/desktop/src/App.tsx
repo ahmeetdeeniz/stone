@@ -2,9 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { EditorView, highlightActiveLine } from "@codemirror/view";
 import { createEditorState } from "@stone/editor";
 import {
+  formatInstant,
   formatProjectPriority,
   formatProjectStatus,
   formatTaskPriority,
+  formatWeekdayName,
   type TranslationKey,
 } from "@stone/i18n";
 import { normalizeMarkdown } from "@stone/markdown";
@@ -2154,9 +2156,7 @@ function MonthCalendar({
     <div className="month-view" role="grid" aria-label={t("desktop.monthViewA11y")}>
       {weekDates("2026-01-05").map((date) => (
         <div key={date} className="month-weekday" role="columnheader">
-          {new Intl.DateTimeFormat(locale, { weekday: "short", timeZone: "UTC" }).format(
-            new Date(`${date}T00:00:00Z`),
-          )}
+          {formatWeekdayName(locale, date, "short")}
         </div>
       ))}
       {days.map((day) => {
@@ -2605,7 +2605,13 @@ function TodayOverview({
               {recentNotes.map((note) => (
                 <button key={note.id} onClick={() => onOpen(note.id)}>
                   <strong>{note.title}</strong>
-                  <span>{new Date(note.updatedAt).toLocaleString(locale)}</span>
+                  <span>
+                    {formatInstant(
+                      locale,
+                      note.updatedAt,
+                      Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+                    )}
+                  </span>
                 </button>
               ))}
             </div>

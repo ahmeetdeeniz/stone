@@ -1,13 +1,18 @@
 import { describe, expect, it } from "vitest";
 import {
   en,
+  formatCount,
   formatDateOnly,
+  formatDateRange,
   formatDuration,
   formatFileSize,
   formatInstant,
+  formatMonthName,
   formatPercentage,
   formatRecurrence,
   formatRelativeDate,
+  formatTime,
+  formatWeekdayName,
   firstDayOfWeek,
   loadLocalePreference,
   parseLocalePreference,
@@ -71,6 +76,9 @@ describe("locale-aware formatters", () => {
         minute: "2-digit",
       }),
     ).toBe("12:00 PM");
+    expect(formatTime("tr", "2026-07-29T09:00:00.000Z", "Europe/Istanbul")).toBe("12:00");
+    expect(formatDateRange("en", "2026-07-29", "2026-07-31")).toBe("Jul 29 – 31, 2026");
+    expect(formatDateRange("tr", "2026-07-29", "2026-07-31")).toBe("29–31 Tem 2026");
   });
 
   it("formats durations and recurrence from structured values", () => {
@@ -91,7 +99,23 @@ describe("locale-aware formatters", () => {
     expect(formatPercentage("tr", 0.125)).toBe("%12,5");
     expect(formatFileSize("en", 1_572_864)).toBe("1.5 MB");
     expect(formatFileSize("tr", 1_572_864)).toBe("1,5 MB");
+    expect(formatWeekdayName("en", "2026-07-27")).toBe("Monday");
+    expect(formatWeekdayName("tr", "2026-07-27")).toBe("Pazartesi");
+    expect(formatMonthName("en", 7)).toBe("July");
+    expect(formatMonthName("tr", 7)).toBe("Temmuz");
+    expect(formatCount("en", "count.items", 1)).toBe("1 item");
+    expect(formatCount("tr", "count.items", 4)).toBe("4 öğe");
     expect(firstDayOfWeek()).toBe(1);
+  });
+
+  it("restores system and manual preferences across a simulated restart", async () => {
+    let stored: string | null = null;
+    expect(await loadLocalePreference(() => stored)).toBe("system");
+    expect(resolveLocale("system", "tr-TR")).toBe("tr");
+    expect(await saveLocalePreference("en", (value) => void (stored = value))).toBe(true);
+    expect(resolveLocale(await loadLocalePreference(() => stored), "tr-TR")).toBe("en");
+    expect(await saveLocalePreference("tr", (value) => void (stored = value))).toBe(true);
+    expect(resolveLocale(await loadLocalePreference(() => stored), "en-US")).toBe("tr");
   });
 
   it("never mutates user Markdown or structured data while changing locale", () => {

@@ -58,7 +58,7 @@ export default function ProjectDetailScreen() {
   const [nextVersion, setNextVersion] = useState("");
   const [nextAction, setNextAction] = useState("");
   const [repositoryUrl, setRepositoryUrl] = useState("");
-  const [selectedPlatforms, setSelectedPlatforms] = useState<readonly string[]>([]);
+  const [selectedPlatforms, setSelectedPlatforms] = useState<Project["platforms"]>([]);
   const [blockerText, setBlockerText] = useState("");
   const [versionText, setVersionText] = useState("");
   const [decisionTitle, setDecisionTitle] = useState("");
@@ -131,7 +131,7 @@ export default function ProjectDetailScreen() {
           nextVersion: nextVersion.trim() || null,
           nextAction: nextAction.trim() || null,
           repositoryUrl: repositoryUrl.trim() || null,
-          platforms: selectedPlatforms as Project["platforms"],
+          platforms: selectedPlatforms,
         },
         deviceId,
       );
@@ -148,10 +148,11 @@ export default function ProjectDetailScreen() {
   };
 
   const changeStatus = (next: Project["status"]) => {
+    if (!user) return;
     setStatus(next);
     if (project)
       void projectUseCases
-        .update(user!.uid, project.id, { status: next }, deviceId)
+        .update(user.uid, project.id, { status: next }, deviceId)
         .then(setProject)
         .catch((caught: unknown) =>
           Alert.alert(
@@ -536,17 +537,18 @@ export default function ProjectDetailScreen() {
                   <StoneButton
                     label={t("projects.resolved")}
                     variant="quiet"
-                    onPress={() =>
+                    onPress={() => {
+                      if (!user) return;
                       void projectUseCases
-                        .resolveBlocker(user!.uid, blocker.id, new Date().toISOString(), deviceId)
+                        .resolveBlocker(user.uid, blocker.id, new Date().toISOString(), deviceId)
                         .then(load)
                         .catch((caught: unknown) =>
                           Alert.alert(
                             t("projects.blockerUpdateFailed"),
                             caught instanceof Error ? caught.message : t("app.unknownError"),
                           ),
-                        )
-                    }
+                        );
+                    }}
                   />
                 ) : null}
               </Surface>
