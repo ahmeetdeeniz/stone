@@ -75,6 +75,7 @@ jobs:
       - run: pnpm lint
       - run: pnpm test
       - run: pnpm verify:desktop
+      - run: pnpm verify:i18n
 
       # Reports only whether each variable is configured or missing -- never the values
       # themselves -- so a run's log makes it obvious why an installer would show the runtime
