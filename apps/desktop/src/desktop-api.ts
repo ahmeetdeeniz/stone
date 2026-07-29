@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { CalendarItem } from "@stone/domain";
+import type { CalendarItem, FocusGoal, FocusSession } from "@stone/domain";
 
 export interface DesktopDocument {
   id: string;
@@ -94,6 +94,12 @@ export const desktopApi = {
   listCalendarItems: (startDate: string, endDate: string) =>
     call<CalendarItem[]>("list_calendar_items", { startDate, endDate }),
   listCalendarItemsForExport: () => call<CalendarItem[]>("list_calendar_items_for_export"),
+  listFocusSessions: (ownerId: string, startAt: string, endAt: string) =>
+    call<FocusSession[]>("list_focus_sessions", { ownerId, startAt, endAt }),
+  saveFocusSession: (session: FocusSession) =>
+    call<FocusSession>("save_focus_session", { session }),
+  getFocusGoal: (ownerId: string) => call<FocusGoal | null>("get_focus_goal", { ownerId }),
+  saveFocusGoal: (goal: FocusGoal) => call<FocusGoal>("save_focus_goal", { goal }),
   pickCalendarFile: () => call<string | null>("pick_calendar_file"),
   saveCalendarFile: (content: string) => call<boolean>("save_calendar_file", { content }),
   saveCalendarItem: (item: CalendarItem) => call<CalendarItem>("save_calendar_item", { item }),

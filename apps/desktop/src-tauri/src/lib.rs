@@ -234,6 +234,10 @@ pub fn run() {
             list_tasks,
             list_calendar_items,
             list_calendar_items_for_export,
+            list_focus_sessions,
+            save_focus_session,
+            save_focus_goal,
+            get_focus_goal,
             pick_calendar_file,
             save_calendar_file,
             save_calendar_item,
@@ -322,6 +326,14 @@ impl Database {
             connection.pragma_update(None, "user_version", 4_i64)?;
             connection.execute(
                 "INSERT OR IGNORE INTO migrations(version, applied_at) VALUES(4, ?1)",
+                [Utc::now().to_rfc3339()],
+            )?;
+        }
+        if current < 5 {
+            connection.execute_batch("CREATE TABLE IF NOT EXISTS focus_sessions (id TEXT PRIMARY KEY, owner_id TEXT NOT NULL, payload TEXT NOT NULL, status TEXT NOT NULL, phase TEXT NOT NULL, started_at TEXT NOT NULL, ended_at TEXT, task_id TEXT, project_id TEXT, calendar_item_id TEXT, revision INTEGER NOT NULL, updated_at TEXT NOT NULL, deleted_at TEXT); CREATE TABLE IF NOT EXISTS focus_goals (owner_id TEXT PRIMARY KEY, payload TEXT NOT NULL, revision INTEGER NOT NULL, updated_at TEXT NOT NULL); CREATE INDEX IF NOT EXISTS desktop_focus_active_idx ON focus_sessions(owner_id,status,deleted_at,updated_at DESC); CREATE INDEX IF NOT EXISTS desktop_focus_range_idx ON focus_sessions(owner_id,deleted_at,started_at,ended_at); CREATE INDEX IF NOT EXISTS desktop_focus_task_idx ON focus_sessions(owner_id,task_id,deleted_at,started_at); CREATE INDEX IF NOT EXISTS desktop_focus_project_idx ON focus_sessions(owner_id,project_id,deleted_at,started_at);")?;
+            connection.pragma_update(None, "user_version", 5_i64)?;
+            connection.execute(
+                "INSERT OR IGNORE INTO migrations(version, applied_at) VALUES(5, ?1)",
                 [Utc::now().to_rfc3339()],
             )?;
         }
@@ -503,6 +515,162 @@ fn list_calendar_items_for_export(
         serde_json::from_str(&payload).map_err(|error| error.to_string())
     })
     .collect()
+}
+
+#[tauri::command]
+fn list_focus_sessions(
+    owner_id: String,
+    start_at: String,
+    end_at: String,
+    state: State<'_, Mutex<Database>>,
+) -> Result<Vec<serde_json::Value>, String> {
+    if owner_id.trim().is_empty() || end_at <= start_at {
+        return Err("Invalid focus query.".into());
+    }
+    let database = state.lock().map_err(|_| "Database lock failed.")?;
+    let mut statement = database.connection.prepare(
+        "SELECT payload FROM focus_sessions WHERE owner_id=?1 AND deleted_at IS NULL AND started_at < ?3 AND COALESCE(ended_at,updated_at) >= ?2 ORDER BY started_at DESC,id LIMIT 10000",
+    ).map_err(|error| error.to_string())?;
+    let rows = statement
+        .query_map(params![owner_id, start_at, end_at], |row| {
+            row.get::<_, String>(0)
+        })
+        .map_err(|error| error.to_string())?;
+    rows.map(|row| {
+        let payload = row.map_err(|error| error.to_string())?;
+        serde_json::from_str(&payload).map_err(|error| error.to_string())
+    })
+    .collect()
+}
+
+#[tauri::command]
+fn get_focus_goal(
+    owner_id: String,
+    state: State<'_, Mutex<Database>>,
+) -> Result<Option<serde_json::Value>, String> {
+    let database = state.lock().map_err(|_| "Database lock failed.")?;
+    let payload = database
+        .connection
+        .query_row(
+            "SELECT payload FROM focus_goals WHERE owner_id=?1",
+            [&owner_id],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()
+        .map_err(|error| error.to_string())?;
+    payload
+        .map(|value| serde_json::from_str(&value).map_err(|error| error.to_string()))
+        .transpose()
+}
+
+#[tauri::command]
+fn save_focus_session(
+    mut session: serde_json::Value,
+    state: State<'_, Mutex<Database>>,
+) -> Result<serde_json::Value, String> {
+    let id = json_text(&session, "id")?;
+    let owner_id = json_text(&session, "ownerId")?;
+    let status = json_text(&session, "status")?;
+    let phase = json_text(&session, "phase")?;
+    let mode = json_text(&session, "mode")?;
+    let started_at = json_text(&session, "startedAt")?;
+    if !matches!(
+        status.as_str(),
+        "running" | "paused" | "completed" | "cancelled"
+    ) || !matches!(phase.as_str(), "focus" | "short_break" | "long_break")
+        || !matches!(mode.as_str(), "stopwatch" | "countdown" | "pomodoro")
+    {
+        return Err("Invalid focus session.".into());
+    }
+    let mut database = state.lock().map_err(|_| "Database lock failed.")?;
+    let previous = database
+        .connection
+        .query_row(
+            "SELECT revision FROM focus_sessions WHERE id=?1 AND owner_id=?2",
+            params![id, owner_id],
+            |row| row.get::<_, i64>(0),
+        )
+        .optional()
+        .map_err(|error| error.to_string())?;
+    if previous.is_none() && matches!(status.as_str(), "running" | "paused") {
+        let active: i64 = database.connection.query_row(
+            "SELECT COUNT(*) FROM focus_sessions WHERE owner_id=?1 AND deleted_at IS NULL AND status IN ('running','paused')",
+            [&owner_id],
+            |row| row.get(0),
+        ).map_err(|error| error.to_string())?;
+        if active > 0 {
+            return Err("An active focus session already exists.".into());
+        }
+    }
+    let revision = previous.unwrap_or(0) + 1;
+    let timestamp = Utc::now().to_rfc3339();
+    session["revision"] = serde_json::json!(revision);
+    session["updatedAt"] = serde_json::json!(timestamp);
+    session["updatedByDeviceId"] = serde_json::json!(database.device_id.clone());
+    let payload = session.to_string();
+    let transaction = database
+        .connection
+        .transaction()
+        .map_err(|error| error.to_string())?;
+    transaction.execute(
+        "INSERT INTO focus_sessions(id,owner_id,payload,status,phase,started_at,ended_at,task_id,project_id,calendar_item_id,revision,updated_at,deleted_at) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload,status=excluded.status,phase=excluded.phase,started_at=excluded.started_at,ended_at=excluded.ended_at,task_id=excluded.task_id,project_id=excluded.project_id,calendar_item_id=excluded.calendar_item_id,revision=excluded.revision,updated_at=excluded.updated_at,deleted_at=excluded.deleted_at",
+        params![id,owner_id,payload,status,phase,started_at,session.get("endedAt").and_then(|v|v.as_str()),session.get("taskId").and_then(|v|v.as_str()),session.get("projectId").and_then(|v|v.as_str()),session.get("calendarItemId").and_then(|v|v.as_str()),revision,timestamp,session.get("deletedAt").and_then(|v|v.as_str())],
+    ).map_err(|error| error.to_string())?;
+    transaction.execute(
+        "INSERT INTO outbox(id,owner_id,entity_type,entity_id,operation,base_revision,revision,payload,created_at,status) VALUES(?1,?2,'focus',?3,'upsert',?4,?5,?6,?7,'pending')",
+        params![Uuid::new_v4().to_string(),owner_id,id,previous.unwrap_or(0),revision,payload,timestamp],
+    ).map_err(|error| error.to_string())?;
+    transaction.commit().map_err(|error| error.to_string())?;
+    Ok(session)
+}
+
+#[tauri::command]
+fn save_focus_goal(
+    mut goal: serde_json::Value,
+    state: State<'_, Mutex<Database>>,
+) -> Result<serde_json::Value, String> {
+    let owner_id = json_text(&goal, "ownerId")?;
+    let daily = goal
+        .get("dailyMinutes")
+        .and_then(|value| value.as_i64())
+        .ok_or("Daily goal is required.")?;
+    let weekly = goal
+        .get("weeklyMinutes")
+        .and_then(|value| value.as_i64())
+        .ok_or("Weekly goal is required.")?;
+    if !(0..=1440).contains(&daily) || !(0..=10080).contains(&weekly) {
+        return Err("Invalid focus goal.".into());
+    }
+    let mut database = state.lock().map_err(|_| "Database lock failed.")?;
+    let previous = database
+        .connection
+        .query_row(
+            "SELECT revision FROM focus_goals WHERE owner_id=?1",
+            [&owner_id],
+            |row| row.get::<_, i64>(0),
+        )
+        .optional()
+        .map_err(|error| error.to_string())?;
+    let revision = previous.unwrap_or(0) + 1;
+    let timestamp = Utc::now().to_rfc3339();
+    goal["revision"] = serde_json::json!(revision);
+    goal["updatedAt"] = serde_json::json!(timestamp);
+    goal["updatedByDeviceId"] = serde_json::json!(database.device_id.clone());
+    let payload = goal.to_string();
+    let transaction = database
+        .connection
+        .transaction()
+        .map_err(|error| error.to_string())?;
+    transaction.execute(
+        "INSERT INTO focus_goals(owner_id,payload,revision,updated_at) VALUES(?1,?2,?3,?4) ON CONFLICT(owner_id) DO UPDATE SET payload=excluded.payload,revision=excluded.revision,updated_at=excluded.updated_at",
+        params![owner_id,payload,revision,timestamp],
+    ).map_err(|error| error.to_string())?;
+    transaction.execute(
+        "INSERT INTO outbox(id,owner_id,entity_type,entity_id,operation,base_revision,revision,payload,created_at,status) VALUES(?1,?2,'focus_goal',?2,'upsert',?3,?4,?5,?6,'pending')",
+        params![Uuid::new_v4().to_string(),owner_id,previous.unwrap_or(0),revision,payload,timestamp],
+    ).map_err(|error| error.to_string())?;
+    transaction.commit().map_err(|error| error.to_string())?;
+    Ok(goal)
 }
 
 #[tauri::command]
@@ -1360,6 +1528,104 @@ fn apply_remote_calendar(
     Ok(pulled)
 }
 
+fn apply_remote_focus(
+    database: &Mutex<Database>,
+    remote_items: &[serde_json::Value],
+) -> Result<u32, String> {
+    let db = database.lock().map_err(|_| "Database lock failed.")?;
+    let mut pulled = 0;
+    for remote in remote_items {
+        let Some(fields) = remote.get("fields").and_then(|value| value.as_object()) else {
+            continue;
+        };
+        let payload = serde_json::Value::Object(
+            fields
+                .iter()
+                .map(|(key, value)| (key.clone(), decode_firestore_value(value)))
+                .collect(),
+        );
+        let id = json_text(&payload, "id")?;
+        let owner_id = json_text(&payload, "ownerId")?;
+        let revision = payload
+            .get("revision")
+            .and_then(|value| value.as_i64())
+            .unwrap_or(0);
+        let pending: bool = db.connection.query_row(
+            "SELECT EXISTS(SELECT 1 FROM outbox WHERE entity_type='focus' AND entity_id=?1 AND status='pending')",
+            [&id], |row| row.get(0),
+        ).map_err(|error| error.to_string())?;
+        let local: Option<i64> = db
+            .connection
+            .query_row(
+                "SELECT revision FROM focus_sessions WHERE id=?1 AND owner_id=?2",
+                params![id, owner_id],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(|error| error.to_string())?;
+        if pending || local.is_some_and(|value| value >= revision) {
+            continue;
+        }
+        let status = json_text(&payload, "status")?;
+        let phase = json_text(&payload, "phase")?;
+        let started_at = json_text(&payload, "startedAt")?;
+        let updated_at = json_text(&payload, "updatedAt")?;
+        db.connection.execute(
+            "INSERT INTO focus_sessions(id,owner_id,payload,status,phase,started_at,ended_at,task_id,project_id,calendar_item_id,revision,updated_at,deleted_at) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload,status=excluded.status,phase=excluded.phase,started_at=excluded.started_at,ended_at=excluded.ended_at,task_id=excluded.task_id,project_id=excluded.project_id,calendar_item_id=excluded.calendar_item_id,revision=excluded.revision,updated_at=excluded.updated_at,deleted_at=excluded.deleted_at",
+            params![id,owner_id,payload.to_string(),status,phase,started_at,payload.get("endedAt").and_then(|v|v.as_str()),payload.get("taskId").and_then(|v|v.as_str()),payload.get("projectId").and_then(|v|v.as_str()),payload.get("calendarItemId").and_then(|v|v.as_str()),revision,updated_at,payload.get("deletedAt").and_then(|v|v.as_str())],
+        ).map_err(|error| error.to_string())?;
+        pulled += 1;
+    }
+    Ok(pulled)
+}
+
+fn apply_remote_focus_goals(
+    database: &Mutex<Database>,
+    remote_items: &[serde_json::Value],
+) -> Result<u32, String> {
+    let db = database.lock().map_err(|_| "Database lock failed.")?;
+    let mut pulled = 0;
+    for remote in remote_items {
+        let Some(fields) = remote.get("fields").and_then(|value| value.as_object()) else {
+            continue;
+        };
+        let payload = serde_json::Value::Object(
+            fields
+                .iter()
+                .map(|(key, value)| (key.clone(), decode_firestore_value(value)))
+                .collect(),
+        );
+        let owner_id = json_text(&payload, "ownerId")?;
+        let revision = payload
+            .get("revision")
+            .and_then(|value| value.as_i64())
+            .unwrap_or(0);
+        let pending: bool = db.connection.query_row(
+            "SELECT EXISTS(SELECT 1 FROM outbox WHERE entity_type='focus_goal' AND entity_id=?1 AND status='pending')",
+            [&owner_id], |row| row.get(0),
+        ).map_err(|error| error.to_string())?;
+        let local: Option<i64> = db
+            .connection
+            .query_row(
+                "SELECT revision FROM focus_goals WHERE owner_id=?1",
+                [&owner_id],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(|error| error.to_string())?;
+        if pending || local.is_some_and(|value| value >= revision) {
+            continue;
+        }
+        let updated_at = json_text(&payload, "updatedAt")?;
+        db.connection.execute(
+            "INSERT INTO focus_goals(owner_id,payload,revision,updated_at) VALUES(?1,?2,?3,?4) ON CONFLICT(owner_id) DO UPDATE SET payload=excluded.payload,revision=excluded.revision,updated_at=excluded.updated_at",
+            params![owner_id,payload.to_string(),revision,updated_at],
+        ).map_err(|error| error.to_string())?;
+        pulled += 1;
+    }
+    Ok(pulled)
+}
+
 fn firestore_timestamp(value: &serde_json::Value) -> String {
     value
         .get("fields")
@@ -1459,6 +1725,8 @@ async fn sync_now(
             "document" => "documents",
             "task" => "tasks",
             "calendar" => "calendar",
+            "focus" => "focusSessions",
+            "focus_goal" => "focusGoals",
             _ => return Err("Desteklenmeyen desktop sync entity.".to_owned()),
         };
         let url = format!("https://firestore.googleapis.com/v1/projects/{project_id}/databases/(default)/documents/users/{}/{}/{}", session.uid, collection, event.entity_id);
@@ -1591,6 +1859,48 @@ async fn sync_now(
         pulled += apply_remote_calendar(&database, items)?;
     } else if calendar_response.status() != reqwest::StatusCode::NOT_FOUND {
         return Err(firebase_error(calendar_response).await);
+    }
+    let focus_url = format!("https://firestore.googleapis.com/v1/projects/{project_id}/databases/(default)/documents/users/{}/focusSessions?pageSize=100", session.uid);
+    let focus_response = client
+        .get(focus_url)
+        .bearer_auth(&session.id_token)
+        .send()
+        .await
+        .map_err(|error| format!("Firebase connection failed: {error}"))?;
+    if focus_response.status().is_success() {
+        let body = focus_response
+            .json::<serde_json::Value>()
+            .await
+            .map_err(|error| error.to_string())?;
+        let items = body
+            .get("documents")
+            .and_then(|value| value.as_array())
+            .map(Vec::as_slice)
+            .unwrap_or(&[]);
+        pulled += apply_remote_focus(&database, items)?;
+    } else if focus_response.status() != reqwest::StatusCode::NOT_FOUND {
+        return Err(firebase_error(focus_response).await);
+    }
+    let goal_url = format!("https://firestore.googleapis.com/v1/projects/{project_id}/databases/(default)/documents/users/{}/focusGoals?pageSize=10", session.uid);
+    let goal_response = client
+        .get(goal_url)
+        .bearer_auth(&session.id_token)
+        .send()
+        .await
+        .map_err(|error| format!("Firebase connection failed: {error}"))?;
+    if goal_response.status().is_success() {
+        let body = goal_response
+            .json::<serde_json::Value>()
+            .await
+            .map_err(|error| error.to_string())?;
+        let items = body
+            .get("documents")
+            .and_then(|value| value.as_array())
+            .map(Vec::as_slice)
+            .unwrap_or(&[]);
+        pulled += apply_remote_focus_goals(&database, items)?;
+    } else if goal_response.status() != reqwest::StatusCode::NOT_FOUND {
+        return Err(firebase_error(goal_response).await);
     }
     Ok(SyncSummary {
         pushed,

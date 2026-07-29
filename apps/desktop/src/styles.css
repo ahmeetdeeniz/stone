@@ -1241,3 +1241,50 @@ nav {
   min-height: 72px;
   resize: vertical;
 }
+.focus-workspace {
+  display: grid;
+  gap: 20px;
+  padding: 24px;
+  overflow: auto;
+}
+
+.focus-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.focus-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+.focus-timer-card {
+  display: grid;
+  gap: 16px;
+  text-align: center;
+}
+
+.focus-timer {
+  display: block;
+  font-size: clamp(3rem, 9vw, 6.5rem);
+  line-height: 1;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.focus-actions,
+.focus-summary {
+  display: grid;
+  gap: 10px;
+}
+
+.focus-history-row {
+  display: grid;
+  gap: 4px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}

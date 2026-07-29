@@ -26,6 +26,7 @@ import {
   type CalendarRecurrenceEditScope,
 } from "@stone/domain";
 import GithubPanel from "./GithubPanel";
+import FocusPanel from "./FocusPanel";
 import {
   buildProjectSummaries,
   buildTodayItems,
@@ -52,7 +53,7 @@ import {
 } from "./desktop-api";
 import { useI18n } from "./i18n";
 
-type Section = "notes" | "projects" | "tasks" | "calendar" | "today" | "settings";
+type Section = "notes" | "projects" | "tasks" | "calendar" | "today" | "focus" | "settings";
 type Theme = "system" | "light" | "dark";
 function titleFromMarkdown(markdown: string, fallback: string): string {
   const heading = markdown.match(/^#\s+(.+)$/m)?.[1]?.trim();
@@ -505,7 +506,9 @@ function StoneShell({ session, onSignedOut }: { session: AuthSession; onSignedOu
             ? t("tabs.calendar")
             : section === "today"
               ? t("tabs.today")
-              : t("tabs.settings");
+              : section === "focus"
+                ? t("tabs.focus")
+                : t("tabs.settings");
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -536,6 +539,9 @@ function StoneShell({ session, onSignedOut }: { session: AuthSession; onSignedOu
           </NavButton>
           <NavButton active={section === "today"} onClick={() => setSection("today")} icon="◷">
             {t("tabs.today")}
+          </NavButton>
+          <NavButton active={section === "focus"} onClick={() => setSection("focus")} icon="◉">
+            {t("tabs.focus")}
           </NavButton>
           <NavButton
             active={section === "settings"}
@@ -696,6 +702,7 @@ function StoneShell({ session, onSignedOut }: { session: AuthSession; onSignedOu
             onOpenTasks={() => setSection("tasks")}
           />
         )}
+        {section === "focus" && <FocusPanel ownerId={session.uid} />}
         {section === "settings" && (
           <section className="settings-panel">
             <div className="settings-card">
