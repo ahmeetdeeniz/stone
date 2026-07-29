@@ -4,41 +4,42 @@ import android.content.Context
 import android.os.SystemClock
 import android.widget.RemoteViews
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.glance.GlanceModifier
 import androidx.glance.action.actionParametersOf
-import androidx.glance.action.actionStartActivity
+import androidx.glance.appwidget.AndroidRemoteViews
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetReceiver
-import androidx.glance.appwidget.AndroidRemoteViews
+import androidx.glance.appwidget.SizeMode
+import androidx.glance.appwidget.action.actionStartActivity
 import androidx.glance.appwidget.action.actionRunCallback
 import androidx.glance.appwidget.provideContent
 import androidx.glance.background
+import androidx.glance.color.ColorProvider
 import androidx.glance.layout.Column
 import androidx.glance.layout.Row
 import androidx.glance.layout.Spacer
 import androidx.glance.layout.fillMaxSize
-import androidx.glance.layout.defaultWeight
 import androidx.glance.layout.height
 import androidx.glance.layout.padding
 import androidx.glance.layout.width
 import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
-import androidx.glance.unit.ColorProvider
 import androidx.glance.Button
 import androidx.glance.action.clickable
 import androidx.glance.layout.Alignment
-import androidx.glance.layout.SizeMode
 import org.json.JSONObject
 
-private val surface = ColorProvider(0xFFF7F4EF.toInt(), 0xFF1E1F22.toInt())
-private val text = ColorProvider(0xFF272522.toInt(), 0xFFF1EEE8.toInt())
-private val accent = ColorProvider(0xFF46624D.toInt(), 0xFF9EC5A5.toInt())
+private val surface = ColorProvider(Color(0xFFF7F4EF), Color(0xFF1E1F22))
+private val text = ColorProvider(Color(0xFF272522), Color(0xFFF1EEE8))
+private val accent = ColorProvider(Color(0xFF46624D), Color(0xFF9EC5A5))
 
-internal abstract class StoneGlanceWidget : GlanceAppWidget() {
+abstract class StoneGlanceWidget : GlanceAppWidget() {
   override val sizeMode = SizeMode.Exact
 
+  @Composable
   abstract fun content(context: Context, snapshot: JSONObject?)
 
   override suspend fun provideGlance(context: Context, id: androidx.glance.GlanceId) {

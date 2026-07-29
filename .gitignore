@@ -24,6 +24,7 @@ coverage/
 GoogleService-Info.plist
 google-services.json
 android/app/build/
+/packages/native-widgets/android/build/
 apps/mobile/android/
 apps/mobile/ios/
 ios/build/

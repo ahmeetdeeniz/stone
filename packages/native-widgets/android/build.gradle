@@ -1,14 +1,25 @@
+buildscript {
+  dependencies {
+    classpath "org.jetbrains.kotlin.plugin.compose:org.jetbrains.kotlin.plugin.compose.gradle.plugin:${rootProject.ext.kotlinVersion}"
+  }
+}
+
 plugins {
   id 'com.android.library'
   id 'expo-module-gradle-plugin'
-  id 'org.jetbrains.kotlin.plugin.compose'
 }
+
+apply plugin: 'org.jetbrains.kotlin.plugin.compose'
 
 group = 'expo.modules.stonewidgets'
 version = '0.1.0'
 
 android {
   namespace "expo.modules.stonewidgets"
+  defaultConfig {
+    versionCode 1
+    versionName version
+  }
   buildFeatures {
     compose true
   }
