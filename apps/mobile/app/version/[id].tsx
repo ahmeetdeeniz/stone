@@ -2,19 +2,22 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import type { ProjectTask, ProjectVersion, PlatformReleaseStatus } from "@stone/domain";
-import { platformReleaseStatuses, projectStatuses, projectStatusLabels } from "@stone/domain";
+import { platformReleaseStatuses, projectStatuses } from "@stone/domain";
+import { formatProjectStatus, formatReleaseStatus } from "@stone/i18n";
 import { ErrorState, LoadingState } from "../../src/components/states";
 import { ResponsiveContent } from "../../src/components/responsive";
 import { Screen, StoneButton, StoneInput, StoneText, Surface } from "../../src/components/ui";
 import { spacing } from "../../src/design/tokens";
 import { useAuth } from "../../src/providers/auth-provider";
 import { useAppServices } from "../../src/providers/app-provider";
+import { useI18n } from "../../src/i18n/provider";
 
 export default function VersionDetailScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
   const router = useRouter();
   const { user } = useAuth();
   const { projectUseCases, deviceId } = useAppServices();
+  const { locale, t } = useI18n();
   const [version, setVersion] = useState<ProjectVersion | null>(null);
   const [tasks, setTasks] = useState<readonly ProjectTask[]>([]);
   const [targetDate, setTargetDate] = useState("");
@@ -29,7 +32,7 @@ export default function VersionDetailScreen() {
     setLoading(true);
     try {
       const loaded = await projectUseCases.getVersion(user.uid, id);
-      if (!loaded) throw new Error("Sürüm bulunamadı.");
+      if (!loaded) throw new Error(t("versions.notFound"));
       setVersion(loaded);
       setTasks(
         (await projectUseCases.tasks(user.uid, loaded.projectId)).filter(
@@ -42,7 +45,7 @@ export default function VersionDetailScreen() {
       setIosStatus(loaded.iosStatus);
       setError(null);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Sürüm yüklenemedi.");
+      setError(caught instanceof Error ? caught.message : t("versions.loadFailed"));
     } finally {
       setLoading(false);
     }
@@ -60,11 +63,11 @@ export default function VersionDetailScreen() {
         deviceId,
       );
       setVersion(updated);
-      Alert.alert("Sürüm kaydedildi", "Version.md frontmatter güncellendi.");
+      Alert.alert(t("versions.saved"), t("versions.savedDetail"));
     } catch (caught) {
       Alert.alert(
-        "Sürüm kaydedilemedi",
-        caught instanceof Error ? caught.message : "Tekrar deneyin.",
+        t("versions.saveFailed"),
+        caught instanceof Error ? caught.message : t("app.unknownError"),
       );
     }
   };
@@ -72,13 +75,13 @@ export default function VersionDetailScreen() {
   if (loading)
     return (
       <Screen>
-        <LoadingState label="Sürüm hazırlanıyor" />
+        <LoadingState label={t("versions.preparing")} />
       </Screen>
     );
   if (error || !version)
     return (
       <Screen>
-        <ErrorState message={error ?? "Sürüm bulunamadı."} onRetry={() => void load()} />
+        <ErrorState message={error ?? t("versions.notFound")} onRetry={() => void load()} />
       </Screen>
     );
 
@@ -86,41 +89,48 @@ export default function VersionDetailScreen() {
     <Screen>
       <ResponsiveContent>
         <ScrollView contentContainerStyle={styles.content}>
-          <StoneButton label="Geri" variant="quiet" onPress={() => router.back()} />
+          <StoneButton label={t("common.back")} variant="quiet" onPress={() => router.back()} />
           <StoneText variant="title1">v{version.version}</StoneText>
           <StoneText variant="bodySmall">
-            {version.completedTasks}/{version.totalTasks} görev tamamlandı
+            {t("versions.tasksProgress", {
+              completed: version.completedTasks,
+              total: version.totalTasks,
+            })}
           </StoneText>
           <Surface>
-            <StoneText variant="title3">Version.md frontmatter</StoneText>
-            <StoneText variant="label">Sürüm durumu</StoneText>
+            <StoneText variant="title3">{t("versions.frontmatter")}</StoneText>
+            <StoneText variant="label">{t("versions.status")}</StoneText>
             <View style={styles.choices}>
               {projectStatuses.map((option) => (
                 <StoneButton
                   key={option}
-                  label={projectStatusLabels[option]}
+                  label={formatProjectStatus(locale, option)}
                   variant={status === option ? "primary" : "secondary"}
                   onPress={() => setStatus(option)}
                 />
               ))}
             </View>
             <StoneInput
-              label="Hedef tarih (YYYY-MM-DD)"
+              label={t("projects.targetDateField")}
               value={targetDate}
               onChangeText={setTargetDate}
             />
             <PlatformStatus
-              label="Android release durumu"
+              label={t("versions.androidStatus")}
               value={androidStatus}
               onChange={setAndroidStatus}
             />
-            <PlatformStatus label="iOS release durumu" value={iosStatus} onChange={setIosStatus} />
-            <StoneButton label="Sürümü kaydet" onPress={() => void save()} />
+            <PlatformStatus
+              label={t("versions.iosStatus")}
+              value={iosStatus}
+              onChange={setIosStatus}
+            />
+            <StoneButton label={t("versions.save")} onPress={() => void save()} />
           </Surface>
           <Surface>
-            <StoneText variant="title3">Sürüm görevleri</StoneText>
+            <StoneText variant="title3">{t("versions.tasks")}</StoneText>
             {tasks.length === 0 ? (
-              <StoneText variant="bodySmall">Henüz görev yok.</StoneText>
+              <StoneText variant="bodySmall">{t("projects.noTasks")}</StoneText>
             ) : (
               tasks.map((task) => (
                 <Pressable
@@ -133,8 +143,8 @@ export default function VersionDetailScreen() {
                       .then(load)
                       .catch((caught: unknown) =>
                         Alert.alert(
-                          "Görev güncellenemedi",
-                          caught instanceof Error ? caught.message : "Tekrar deneyin.",
+                          t("projects.taskUpdateFailed"),
+                          caught instanceof Error ? caught.message : t("app.unknownError"),
                         ),
                       )
                   }
@@ -162,6 +172,7 @@ function PlatformStatus({
   value: PlatformReleaseStatus;
   onChange: (value: PlatformReleaseStatus) => void;
 }) {
+  const { locale } = useI18n();
   return (
     <View style={styles.platform}>
       <StoneText variant="label">{label}</StoneText>
@@ -173,7 +184,7 @@ function PlatformStatus({
         {platformReleaseStatuses.map((status) => (
           <StoneButton
             key={status}
-            label={status}
+            label={formatReleaseStatus(locale, status)}
             variant={value === status ? "primary" : "secondary"}
             onPress={() => onChange(status)}
           />
