@@ -15,8 +15,10 @@ import { AuthProvider } from "./auth-provider";
 import { registerBackgroundSync } from "../services/background-sync";
 import { WidgetLifecycle } from "../widgets/widget-lifecycle";
 import { NativeDeepLinkRouter } from "../widgets/native-deep-links";
+import { useI18n } from "../i18n/provider";
 
 export function AppProvider({ children }: PropsWithChildren) {
+  const { t } = useI18n();
   const [services, setServices] = useState<AppServices | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
@@ -25,10 +27,8 @@ export function AppProvider({ children }: PropsWithChildren) {
         setServices(nextServices);
         void registerBackgroundSync().catch(() => undefined);
       })
-      .catch((caught: unknown) =>
-        setError(caught instanceof Error ? caught.message : "Yerel altyapı başlatılamadı."),
-      );
-  }, []);
+      .catch(() => setError(t("app.unknownError")));
+  }, [t]);
   const bindDeviceOwner = useCallback(
     (user: AuthUser | null) =>
       services && user ? services.device.bindOwner(services.deviceId, user.uid) : undefined,
@@ -51,7 +51,7 @@ export function AppProvider({ children }: PropsWithChildren) {
       ) : error ? (
         <ErrorState message={error} />
       ) : (
-        <LoadingState label="Stone hazırlanıyor" />
+        <LoadingState label={t("app.loading")} />
       )}
     </ThemeProvider>
   );

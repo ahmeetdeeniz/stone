@@ -21,8 +21,8 @@ export default function ResetPasswordScreen() {
     try {
       await service.sendPasswordReset(email);
       setMessage(t("auth.resetSent"));
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : t("auth.sendLinkFailed"));
+    } catch {
+      setError(t("auth.sendLinkFailed"));
     } finally {
       setBusy(false);
     }

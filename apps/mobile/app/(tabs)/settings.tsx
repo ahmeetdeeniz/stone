@@ -14,6 +14,7 @@ import { useI18n } from "../../src/i18n/provider";
 import type { WidgetPrivacy } from "@stone/widgets";
 import { readWidgetPrivacy, writeWidgetPrivacy } from "../../src/widgets/widget-lifecycle";
 import { refreshNativeWidgets } from "../../src/widgets/snapshot";
+import { clearWidgetsForAccountLifecycle } from "../../src/widgets/snapshot";
 
 export default function SettingsScreen() {
   const router = useRouter();
@@ -105,6 +106,7 @@ export default function SettingsScreen() {
     if (!service) return;
     setBusy(true);
     try {
+      await clearWidgetsForAccountLifecycle();
       await service.signOut();
     } catch (error) {
       Alert.alert(
@@ -173,9 +175,10 @@ export default function SettingsScreen() {
           void (async () => {
             setBusy(true);
             try {
+              await clearWidgetsForAccountLifecycle();
               await services.deleteRemoteData(user.uid);
-              await service.deleteAccount();
               await services.purgeLocalData(user.uid);
+              await service.deleteAccount();
             } catch (error) {
               Alert.alert(
                 t("settings.deleteAccountFailed"),

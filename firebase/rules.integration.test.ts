@@ -288,6 +288,6 @@ describe("Firestore owner isolation rules", () => {
         lastEventId: "device-1:focus_goal:owner:1",
       }),
     );
-    await assertFails(other.doc("users/other/focusGoals/owner").get());
+    await assertFails(other.doc(goal.path).get());
   });
 });

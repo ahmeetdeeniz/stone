@@ -20,8 +20,8 @@ export default function SignUpScreen() {
     try {
       await service.signUp(email, password);
       router.replace("/(tabs)/notes");
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : t("auth.createFailed"));
+    } catch {
+      setError(t("auth.createFailed"));
     } finally {
       setBusy(false);
     }

@@ -10,6 +10,7 @@ import {
 import { AppState } from "react-native";
 import type { AuthService, AuthUser } from "../infrastructure/firebase/auth";
 import { createFirebaseAuthService } from "../infrastructure/firebase/auth";
+import { useI18n } from "../i18n/provider";
 
 interface AuthContextValue {
   status: "loading" | "ready" | "error";
@@ -26,6 +27,7 @@ interface AuthProviderProps extends PropsWithChildren {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children, onUserChanged, onSyncRequested }: AuthProviderProps) {
+  const { t } = useI18n();
   const [service, setService] = useState<AuthService | null>(null);
   const [status, setStatus] = useState<AuthContextValue["status"]>("loading");
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -43,29 +45,25 @@ export function AuthProvider({ children, onUserChanged, onSyncRequested }: AuthP
         setStatus("ready");
         void Promise.resolve(onUserChanged?.(nextUser))
           .then(() => (nextUser ? onSyncRequested?.(nextUser.uid) : undefined))
-          .catch((caught: unknown) => {
-            setError(caught instanceof Error ? caught.message : "Cihaz kimliği güncellenemedi.");
-          });
+          .catch(() => setError(t("app.unknownError")));
       });
-    } catch (caught) {
+    } catch {
       setStatus("error");
-      setError(caught instanceof Error ? caught.message : "Kimlik doğrulama başlatılamadı.");
+      setError(t("auth.firebaseUnavailable"));
     }
     return () => unsubscribe?.();
-  }, [onSyncRequested, onUserChanged]);
+  }, [onSyncRequested, onUserChanged, t]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (nextState) => {
       if (nextState === "active" && currentUserRef.current) {
-        void Promise.resolve(onSyncRequested?.(currentUserRef.current.uid)).catch(
-          (caught: unknown) => {
-            setError(caught instanceof Error ? caught.message : "Senkronizasyon başlatılamadı.");
-          },
+        void Promise.resolve(onSyncRequested?.(currentUserRef.current.uid)).catch(() =>
+          setError(t("app.unknownError")),
         );
       }
     });
     return () => subscription.remove();
-  }, [onSyncRequested]);
+  }, [onSyncRequested, t]);
 
   const value = useMemo(() => ({ status, user, error, service }), [error, service, status, user]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

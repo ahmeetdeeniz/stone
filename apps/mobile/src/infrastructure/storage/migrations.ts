@@ -148,3 +148,10 @@ export const migrations: readonly Migration[] = [
     ],
   },
 ];
+
+export const latestMigrationVersion = migrations.at(-1)?.version ?? 0;
+
+export function assertSupportedMigrationVersion(version: number): void {
+  if (!Number.isInteger(version) || version < 0 || version > latestMigrationVersion)
+    throw new Error("Local database schema is newer than this Stone build.");
+}

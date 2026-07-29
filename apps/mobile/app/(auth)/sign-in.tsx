@@ -21,8 +21,8 @@ export default function SignInScreen() {
     try {
       await service.signIn(email, password);
       router.replace("/(tabs)/notes");
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : t("auth.signInFailed"));
+    } catch {
+      setError(t("auth.signInFailed"));
     } finally {
       setBusy(false);
     }

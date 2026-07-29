@@ -345,13 +345,21 @@ function html(response: ServerResponse, status: number, value: string): void {
   response.end(value);
 }
 function sendError(response: ServerResponse, error: unknown): void {
-  const status =
-    error instanceof McpUnauthorizedError ? 401 : error instanceof McpRateLimitError ? 429 : 400;
-  json(response, status, { error: error instanceof Error ? error.message : "request_failed" });
+  const safeError = toSafeHttpError(error);
+  json(response, safeError.status, { error: safeError.message });
+}
+export function toSafeHttpError(error: unknown): { status: number; message: string } {
+  if (error instanceof McpUnauthorizedError) {
+    return { status: 401, message: error.message };
+  }
+  if (error instanceof McpRateLimitError) {
+    return { status: 429, message: error.message };
+  }
+  return { status: 400, message: "request_failed" };
 }
 function escapeHtml(value: string): string {
   return value.replace(
-    /[&<>\"']/gu,
+    /[&<>"']/gu,
     (character) =>
       ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character] ??
       character,
