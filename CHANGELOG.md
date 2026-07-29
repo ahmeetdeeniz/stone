@@ -7,6 +7,11 @@ tag, so no release date or semantic version is claimed.
 
 ### Added
 
+- Local-first stopwatch, countdown and Pomodoro focus tracking across mobile and Windows, durable
+  pause/resume state, manual history, task/project/document/calendar links, offline goals,
+  timezone-aware overlap-safe productivity analytics, Firestore sync/rules, workspace export, and
+  twelve owner-scoped revision-safe MCP tools.
+
 - English-default internationalization with bundled Turkish across mobile and Windows, pre-auth
   System/English/Türkçe preference, locale-aware date/number/duration/recurrence presentation, and
   CI verification for resource parity, interpolation parameters, duplicate keys, and selected UI
@@ -36,6 +41,6 @@ tag, so no release date or semantic version is claimed.
 - Physical Android/iPhone/tablet, private TestFlight, final visual/accessibility, and live
   credential-restart acceptance remain pending.
 - Desktop does not provide complete mobile project/drawing/recovery parity.
-- Task due times and events do not schedule native notifications. Full-workspace restore beyond
-  calendar data, Agenda virtualization, focus analytics and native widgets remain planned rather
-  than implemented.
+- Task due times, events, and focus completion do not schedule native notifications.
+  Full-workspace restore beyond supported workspace data, Agenda virtualization, and native
+  widgets remain planned rather than implemented.

@@ -38,6 +38,8 @@ yollarını, repository adlarını veya içe aktarılan veriyi çevirmez ya da y
   birlikte çalışır.
 - Takvim etkinlikleri ve görev zaman blokları local-first kalır; due date’ler zaman bloklarından
   ayrıdır ve tekrar kapsamları açıktır.
+- Kronometre, geri sayım ve Pomodoro odak oturumları mobil ve Windows’ta local-first çalışır;
+  duraklatma, manuel kayıt, çevrimdışı hedefler ve çakışmayı çift saymayan analizler desteklenir.
 - `.stoneink` vektör kaynağı ve PNG önizleme ile çizimler düzenlenebilir kalır.
 - Firebase, GitHub, imzalama hesapları ve MCP dağıtımı self-hoster’a aittir.
 
@@ -49,7 +51,7 @@ yollarını, repository adlarını veya içe aktarılan veriyi çevirmez ya da y
 
 Windows henüz mobil proje düzenleme/Kanban, çizim, çöp, revision ve conflict UI parity’sine sahip
 değildir. macOS/Linux masaüstü uygulamaları desteklenmez. Native hatırlatıcı, harici takvim hesabı,
-davet, focus timer ve widget bu sürümde yoktur.
+davet, native odak bildirimi ve widget bu sürümde yoktur.
 
 ## Hızlı başlangıç
 

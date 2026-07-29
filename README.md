@@ -100,7 +100,16 @@ presented as product evidence.
 - Explicit occurrence/future/series recurrence editing; workspace-calendar restore and a
   standards-conscious `.ics` subset for basic VEVENT, all-day, supported recurrence and
   cancellation dates
-- No native reminders, external calendar accounts, invitations, focus timer or widgets
+- No native reminders, external calendar accounts, invitations, or widgets
+
+### Focus and productivity
+
+- Durable local-first stopwatch, countdown, and Pomodoro focus sessions on mobile and Windows
+- Pause/resume, cancellation history, manual entries, task/project/note/calendar links, and
+  revision-safe sync without per-second database writes
+- Offline daily/weekly goals and timezone-aware daily, weekly, 7/30-day, task, project, category,
+  and time-of-day aggregation with overlap/conflict exclusion
+- In-app completion feedback is available; native background notifications are not claimed
 
 ### Desktop, GitHub, and MCP
 
@@ -109,7 +118,8 @@ presented as product evidence.
 - GitHub Device Flow, repository listing/linking, clone, pull, status, reviewed commit/push, and
   restore; destructive Git operations are intentionally excluded
 - Provider-neutral remote MCP service with OAuth, scoped tools, revisions, idempotency, audit
-  records, bounded task CRUD/Today/Overdue, calendar/Agenda and safe recurrence-scope tools;
+  records, bounded task CRUD/Today/Overdue, calendar/Agenda, safe recurrence-scope tools, and
+  revision-safe focus timer/history/goal/analytics tools;
   deployment/provider publication is operator-owned
 
 ## Platform and parity
