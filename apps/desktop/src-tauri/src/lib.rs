@@ -592,6 +592,13 @@ fn save_focus_session(
         )
         .optional()
         .map_err(|error| error.to_string())?;
+    let proposed_revision = session
+        .get("revision")
+        .and_then(|value| value.as_i64())
+        .ok_or("Focus session revision is required.")?;
+    if proposed_revision != previous.unwrap_or(0) + 1 {
+        return Err("Focus session revision conflict.".into());
+    }
     if previous.is_none() && matches!(status.as_str(), "running" | "paused") {
         let active: i64 = database.connection.query_row(
             "SELECT COUNT(*) FROM focus_sessions WHERE owner_id=?1 AND deleted_at IS NULL AND status IN ('running','paused')",
@@ -616,9 +623,18 @@ fn save_focus_session(
         "INSERT INTO focus_sessions(id,owner_id,payload,status,phase,started_at,ended_at,task_id,project_id,calendar_item_id,revision,updated_at,deleted_at) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload,status=excluded.status,phase=excluded.phase,started_at=excluded.started_at,ended_at=excluded.ended_at,task_id=excluded.task_id,project_id=excluded.project_id,calendar_item_id=excluded.calendar_item_id,revision=excluded.revision,updated_at=excluded.updated_at,deleted_at=excluded.deleted_at",
         params![id,owner_id,payload,status,phase,started_at,session.get("endedAt").and_then(|v|v.as_str()),session.get("taskId").and_then(|v|v.as_str()),session.get("projectId").and_then(|v|v.as_str()),session.get("calendarItemId").and_then(|v|v.as_str()),revision,timestamp,session.get("deletedAt").and_then(|v|v.as_str())],
     ).map_err(|error| error.to_string())?;
+    let operation = if session
+        .get("deletedAt")
+        .and_then(|value| value.as_str())
+        .is_some()
+    {
+        "delete"
+    } else {
+        "upsert"
+    };
     transaction.execute(
-        "INSERT INTO outbox(id,owner_id,entity_type,entity_id,operation,base_revision,revision,payload,created_at,status) VALUES(?1,?2,'focus',?3,'upsert',?4,?5,?6,?7,'pending')",
-        params![Uuid::new_v4().to_string(),owner_id,id,previous.unwrap_or(0),revision,payload,timestamp],
+        "INSERT INTO outbox(id,owner_id,entity_type,entity_id,operation,base_revision,revision,payload,created_at,status) VALUES(?1,?2,'focus',?3,?4,?5,?6,?7,?8,'pending')",
+        params![Uuid::new_v4().to_string(),owner_id,id,operation,previous.unwrap_or(0),revision,payload,timestamp],
     ).map_err(|error| error.to_string())?;
     transaction.commit().map_err(|error| error.to_string())?;
     Ok(session)

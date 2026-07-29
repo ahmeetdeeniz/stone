@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  adjustFocusSession,
   aggregateFocusSessions,
   cancelFocusSession,
   createManualFocusSession,
@@ -34,6 +35,8 @@ export default function FocusPanel({ ownerId }: { ownerId: string }) {
   const [weeklyGoal, setWeeklyGoal] = useState(300);
   const [manualStart, setManualStart] = useState("");
   const [manualEnd, setManualEnd] = useState("");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [correctionMinutes, setCorrectionMinutes] = useState(1);
   const [category, setCategory] = useState("");
   const [note, setNote] = useState("");
   const [now, setNow] = useState(() => new Date().toISOString());
@@ -159,6 +162,39 @@ export default function FocusPanel({ ownerId }: { ownerId: string }) {
       setMessage(t("focus.goalSaved"));
     } catch {
       setMessage(t("focus.goalFailed"));
+    }
+  };
+
+  const correctSession = async () => {
+    const session = sessions.find((candidate) => candidate.id === editingId);
+    if (!session || !Number.isFinite(correctionMinutes) || correctionMinutes <= 0) {
+      setMessage(t("focus.correctionFailed"));
+      return;
+    }
+    try {
+      await desktopApi.saveFocusSession(
+        adjustFocusSession(session, Math.round(correctionMinutes * 60), session.note, {
+          now: () => new Date().toISOString(),
+        }),
+      );
+      setEditingId(null);
+      await load();
+    } catch {
+      setMessage(t("focus.correctionFailed"));
+    }
+  };
+
+  const deleteSession = async (session: FocusSession) => {
+    if (!window.confirm(`${t("focus.deleteConfirm")}\n${t("focus.deleteDetail")}`)) return;
+    try {
+      await desktopApi.saveFocusSession({
+        ...session,
+        deletedAt: new Date().toISOString(),
+        revision: session.revision + 1,
+      });
+      await load();
+    } catch {
+      setMessage(t("focus.updateFailed"));
     }
   };
 
@@ -396,6 +432,37 @@ export default function FocusPanel({ ownerId }: { ownerId: string }) {
                 {formatDuration(locale, Math.max(1, Math.round(session.actualFocusSeconds / 60)))}
               </span>
               {session.category && <span>{session.category}</span>}
+              {session.manuallyAdjustedSeconds !== null && <span>{t("focus.manualBadge")}</span>}
+              {editingId === session.id ? (
+                <>
+                  <label>
+                    {t("focus.correctionMinutes")}
+                    <input
+                      type="number"
+                      min="1"
+                      max="525600"
+                      value={correctionMinutes}
+                      onChange={(event) => setCorrectionMinutes(Number(event.target.value))}
+                    />
+                  </label>
+                  <button className="secondary-button" onClick={() => void correctSession()}>
+                    {t("focus.saveCorrection")}
+                  </button>
+                </>
+              ) : (
+                <button
+                  className="secondary-button"
+                  onClick={() => {
+                    setEditingId(session.id);
+                    setCorrectionMinutes(Math.max(1, Math.round(session.actualFocusSeconds / 60)));
+                  }}
+                >
+                  {t("focus.correct")}
+                </button>
+              )}
+              <button className="secondary-button" onClick={() => void deleteSession(session)}>
+                {t("focus.delete")}
+              </button>
             </div>
           ))}
         </div>

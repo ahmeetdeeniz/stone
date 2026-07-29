@@ -3,6 +3,7 @@ import { useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import {
+  adjustFocusSession,
   aggregateFocusSessions,
   cancelFocusSession,
   createManualFocusSession,
@@ -54,6 +55,8 @@ export default function FocusScreen() {
   const [weeklyGoal, setWeeklyGoal] = useState("300");
   const [manualStart, setManualStart] = useState("");
   const [manualEnd, setManualEnd] = useState("");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [correctionMinutes, setCorrectionMinutes] = useState("");
   const [now, setNow] = useState(() => new Date().toISOString());
 
   const load = useCallback(async () => {
@@ -182,6 +185,43 @@ export default function FocusScreen() {
     } catch {
       Alert.alert(t("focus.manualFailed"), t("app.unknownError"));
     }
+  };
+
+  const saveCorrection = async () => {
+    if (!user || !editingId) return;
+    const session = sessions.find((candidate) => candidate.id === editingId);
+    const seconds = Math.round(Number(correctionMinutes) * 60);
+    if (!session || !Number.isFinite(seconds) || seconds <= 0) {
+      Alert.alert(t("focus.correctionFailed"));
+      return;
+    }
+    try {
+      await focus.save(
+        user.uid,
+        adjustFocusSession(session, seconds, session.note, {
+          now: () => new Date().toISOString(),
+        }),
+        session.revision,
+        deviceId,
+      );
+      setEditingId(null);
+      setCorrectionMinutes("");
+      await load();
+    } catch {
+      Alert.alert(t("focus.correctionFailed"), t("app.unknownError"));
+    }
+  };
+
+  const deleteSession = (session: FocusSession) => {
+    if (!user) return;
+    Alert.alert(t("focus.deleteConfirm"), t("focus.deleteDetail"), [
+      { text: t("common.cancel"), style: "cancel" },
+      {
+        text: t("focus.delete"),
+        style: "destructive",
+        onPress: () => void focus.softDelete(user.uid, session.id, deviceId).then(load),
+      },
+    ]);
   };
 
   const saveGoal = async () => {
@@ -481,6 +521,39 @@ export default function FocusScreen() {
                       )}
                     </StoneText>
                     {session.category ? <StoneText>{session.category}</StoneText> : null}
+                    {session.manuallyAdjustedSeconds !== null ? (
+                      <StoneText variant="caption">{t("focus.manualBadge")}</StoneText>
+                    ) : null}
+                    {editingId === session.id ? (
+                      <>
+                        <StoneInput
+                          label={t("focus.correctionMinutes")}
+                          keyboardType="number-pad"
+                          value={correctionMinutes}
+                          onChangeText={setCorrectionMinutes}
+                        />
+                        <StoneButton
+                          label={t("focus.saveCorrection")}
+                          onPress={() => void saveCorrection()}
+                        />
+                      </>
+                    ) : (
+                      <StoneButton
+                        label={t("focus.correct")}
+                        variant="secondary"
+                        onPress={() => {
+                          setEditingId(session.id);
+                          setCorrectionMinutes(
+                            String(Math.max(1, Math.round(session.actualFocusSeconds / 60))),
+                          );
+                        }}
+                      />
+                    )}
+                    <StoneButton
+                      label={t("focus.delete")}
+                      variant="secondary"
+                      onPress={() => deleteSession(session)}
+                    />
                   </View>
                 </Surface>
               ))}
