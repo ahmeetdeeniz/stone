@@ -19,6 +19,7 @@ import {
   type MarkdownBlock,
   type MarkdownInlineToken,
 } from "@stone/markdown";
+import { translate, translatePlural, type Locale } from "@stone/i18n";
 
 export const EDITOR_BRIDGE_PROTOCOL_VERSION = 1 as const;
 export const editableCompartment = new Compartment();
@@ -42,7 +43,7 @@ export type EditorBridgeMessage =
   | {
       protocolVersion: 1;
       type: "initialize";
-      payload: { documentId: string; markdown: string; readOnly?: boolean };
+      payload: { documentId: string; markdown: string; readOnly?: boolean; locale?: Locale };
     }
   | { protocolVersion: 1; type: "setDocument"; payload: { markdown: string; documentId?: string } }
   | { protocolVersion: 1; type: "setTheme"; payload: { theme: "light" | "dark" } }
@@ -133,7 +134,8 @@ export function isEditorBridgeMessage(value: unknown): value is EditorBridgeMess
       isRecord(payload) &&
       typeof payload.documentId === "string" &&
       typeof payload.markdown === "string" &&
-      (payload.readOnly === undefined || typeof payload.readOnly === "boolean")
+      (payload.readOnly === undefined || typeof payload.readOnly === "boolean") &&
+      (payload.locale === undefined || payload.locale === "en" || payload.locale === "tr")
     );
   }
   if (message.type === "setTheme") {
@@ -193,6 +195,7 @@ export function createEditorState(
   source: string,
   readOnly = false,
   extraExtensions: readonly Extension[] = [],
+  locale: Locale = "en",
 ): EditorState {
   return EditorState.create({
     doc: source,
@@ -201,24 +204,24 @@ export function createEditorState(
       editableCompartment.of(EditorView.editable.of(!readOnly)),
       search(),
       highlightSelectionMatches(),
-      livePreviewExtension(),
+      livePreviewExtension(locale),
       ...extraExtensions,
     ],
   });
 }
 
-export function livePreviewExtension(): Extension {
+export function livePreviewExtension(locale: Locale = "en"): Extension {
   return ViewPlugin.fromClass(
     class {
       public decorations: DecorationSet;
 
       public constructor(public readonly view: EditorView) {
-        this.decorations = buildLivePreviewDecorations(view.state);
+        this.decorations = buildLivePreviewDecorations(view.state, locale);
       }
 
       public update(update: ViewUpdate): void {
         if (update.docChanged || update.selectionSet) {
-          this.decorations = buildLivePreviewDecorations(update.state);
+          this.decorations = buildLivePreviewDecorations(update.state, locale);
         }
       }
     },
@@ -226,13 +229,16 @@ export function livePreviewExtension(): Extension {
   );
 }
 
-export function buildLivePreviewDecorations(state: EditorState): DecorationSet {
+export function buildLivePreviewDecorations(
+  state: EditorState,
+  locale: Locale = "en",
+): DecorationSet {
   const syntax = parseSyntaxTree(state.doc.toString());
   const activeLine = state.doc.lineAt(state.selection.main.head).number - 1;
   const ranges: Array<{ from: number; to: number; decoration: Decoration }> = [];
   for (const block of syntax.blocks) {
     if (activeLine >= block.lineFrom && activeLine <= block.lineTo) continue;
-    addBlockDecorations(ranges, state, block);
+    addBlockDecorations(ranges, state, block, locale);
     for (const token of block.inline) addInlineDecorations(ranges, state, token);
   }
   ranges.sort((left, right) => left.from - right.from || left.to - right.to);
@@ -313,19 +319,26 @@ class TextWidget extends WidgetType {
 }
 
 class FrontmatterWidget extends WidgetType {
-  public constructor(private readonly propertyCount: number) {
+  public constructor(
+    private readonly propertyCount: number,
+    private readonly locale: Locale,
+  ) {
     super();
   }
 
   public override eq(other: FrontmatterWidget): boolean {
-    return this.propertyCount === other.propertyCount;
+    return this.propertyCount === other.propertyCount && this.locale === other.locale;
   }
 
   public override toDOM(): HTMLElement {
     const element = document.createElement("div");
     element.className = "stone-frontmatter-summary";
-    element.setAttribute("aria-label", "Belge özellikleri");
-    element.textContent = `Belge özellikleri · ${this.propertyCount} alan`;
+    element.setAttribute("aria-label", translate(this.locale, "editor.documentProperties"));
+    element.textContent = translatePlural(
+      this.locale,
+      "editor.documentPropertiesCount",
+      this.propertyCount,
+    );
     return element;
   }
 }
@@ -335,12 +348,18 @@ class TaskCheckboxWidget extends WidgetType {
     private readonly checked: boolean,
     private readonly from: number,
     private readonly to: number,
+    private readonly locale: Locale,
   ) {
     super();
   }
 
   public override eq(other: TaskCheckboxWidget): boolean {
-    return this.checked === other.checked && this.from === other.from && this.to === other.to;
+    return (
+      this.checked === other.checked &&
+      this.from === other.from &&
+      this.to === other.to &&
+      this.locale === other.locale
+    );
   }
 
   public override toDOM(): HTMLElement {
@@ -351,7 +370,7 @@ class TaskCheckboxWidget extends WidgetType {
     checkbox.dataset.stoneTaskTo = String(this.to);
     checkbox.setAttribute(
       "aria-label",
-      this.checked ? "Görevi tamamlandı olarak işaretle" : "Görevi tamamla",
+      translate(this.locale, this.checked ? "a11y.task.reopen" : "a11y.task.complete"),
     );
     checkbox.className = "stone-task-checkbox";
     return checkbox;
@@ -366,6 +385,7 @@ function addBlockDecorations(
   ranges: Array<{ from: number; to: number; decoration: Decoration }>,
   state: EditorState,
   block: MarkdownBlock,
+  locale: Locale,
 ): void {
   const line = state.doc.line(block.lineFrom + 1);
   const text = line.text;
@@ -377,7 +397,7 @@ function addBlockDecorations(
       from: block.from,
       to: block.to,
       decoration: Decoration.replace({
-        widget: new FrontmatterWidget(propertyCount),
+        widget: new FrontmatterWidget(propertyCount, locale),
         block: true,
       }),
     });
@@ -418,6 +438,7 @@ function addBlockDecorations(
             block.task.checked,
             block.task.markerFrom,
             block.task.markerTo,
+            locale,
           ),
         }),
       });
