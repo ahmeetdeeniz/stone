@@ -1,7 +1,15 @@
-import { validateCalendarItem, type CalendarItem, type ExportedProjectFile } from "@stone/domain";
+import {
+  validateCalendarItem,
+  validateFocusGoal,
+  validateFocusSession,
+  type CalendarItem,
+  type ExportedProjectFile,
+  type FocusGoal,
+  type FocusSession,
+} from "@stone/domain";
 
 interface WorkspaceBundle {
-  schema: 1 | 2;
+  schema: 1 | 2 | 3;
   format: "stone-workspace";
   files: readonly WorkspaceBundleFile[];
 }
@@ -30,7 +38,7 @@ export function serializeWorkspaceBundle(files: readonly ExportedProjectFile[]):
       mimeType: file.mimeType ?? (path.endsWith(".md") ? "text/markdown" : "text/plain"),
     };
   });
-  const bundle: WorkspaceBundle = { schema: 2, format: "stone-workspace", files: normalized };
+  const bundle: WorkspaceBundle = { schema: 3, format: "stone-workspace", files: normalized };
   return `${JSON.stringify(bundle, null, 2)}\n`;
 }
 
@@ -43,7 +51,7 @@ export function parseWorkspaceBundle(source: string): readonly ExportedProjectFi
   }
   if (
     !isRecord(parsed) ||
-    (parsed.schema !== 1 && parsed.schema !== 2) ||
+    (parsed.schema !== 1 && parsed.schema !== 2 && parsed.schema !== 3) ||
     parsed.format !== "stone-workspace"
   ) {
     throw new Error("Workspace export schema is not supported.");
@@ -147,6 +155,93 @@ export async function restoreCalendarWorkspaceFile(
   return { created, duplicates, detachedRelationships };
 }
 
+export interface FocusWorkspaceData {
+  sessions: readonly FocusSession[];
+  goal: FocusGoal | null;
+}
+
+export function parseFocusWorkspaceFile(source: string, ownerId: string): FocusWorkspaceData {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(source);
+  } catch {
+    throw new Error("Focus workspace data is not valid JSON.");
+  }
+  if (
+    !isRecord(parsed) ||
+    parsed.schema !== 1 ||
+    !Array.isArray(parsed.sessions) ||
+    parsed.sessions.length > 50_000
+  )
+    throw new Error("Focus workspace schema is not supported.");
+  const ids = new Set<string>();
+  const sessions = parsed.sessions.map((value) => {
+    if (!isRecord(value) || value.ownerId !== ownerId)
+      throw new Error("Focus workspace contains a foreign or invalid owner.");
+    const session = validateFocusSession(value as unknown as FocusSession);
+    if (ids.has(session.id)) throw new Error("Focus workspace contains duplicate session IDs.");
+    ids.add(session.id);
+    return session;
+  });
+  const goal =
+    parsed.goal === null
+      ? null
+      : isRecord(parsed.goal) && parsed.goal.ownerId === ownerId
+        ? validateFocusGoal(parsed.goal as unknown as FocusGoal)
+        : invalidFocusGoal();
+  return { sessions, goal };
+}
+
+export interface FocusRestoreRepository {
+  getById(ownerId: string, id: string, includeDeleted?: boolean): Promise<FocusSession | null>;
+  create(session: FocusSession): Promise<FocusSession>;
+  getGoal(ownerId: string): Promise<FocusGoal | null>;
+  saveGoal(goal: FocusGoal, expectedRevision: number | null): Promise<FocusGoal>;
+}
+
+export interface FocusRestoreRelationships {
+  taskIds: ReadonlySet<string>;
+  projectIds: ReadonlySet<string>;
+  documentIds: ReadonlySet<string>;
+  calendarItemIds: ReadonlySet<string>;
+}
+
+export async function restoreFocusWorkspaceFile(
+  source: string,
+  ownerId: string,
+  repository: FocusRestoreRepository,
+  relationships: FocusRestoreRelationships,
+): Promise<CalendarRestoreSummary> {
+  const data = parseFocusWorkspaceFile(source, ownerId);
+  let created = 0;
+  let duplicates = 0;
+  let detachedRelationships = 0;
+  for (const session of data.sessions) {
+    if (await repository.getById(ownerId, session.id, true)) {
+      duplicates += 1;
+      continue;
+    }
+    const next = {
+      ...session,
+      taskId: retainedRelationship(session.taskId, relationships.taskIds),
+      projectId: retainedRelationship(session.projectId, relationships.projectIds),
+      sourceDocumentId: retainedRelationship(session.sourceDocumentId, relationships.documentIds),
+      calendarItemId: retainedRelationship(session.calendarItemId, relationships.calendarItemIds),
+    };
+    detachedRelationships +=
+      Number(next.taskId !== session.taskId) +
+      Number(next.projectId !== session.projectId) +
+      Number(next.sourceDocumentId !== session.sourceDocumentId) +
+      Number(next.calendarItemId !== session.calendarItemId);
+    await repository.create(next);
+    created += 1;
+  }
+  if (data.goal && !(await repository.getGoal(ownerId))) {
+    await repository.saveGoal(data.goal, null);
+  }
+  return { created, duplicates, detachedRelationships };
+}
+
 function retainedRelationship(value: string | null, existing: ReadonlySet<string>): string | null {
   return value && existing.has(value) ? value : null;
 }
@@ -173,4 +268,8 @@ function isBase64(value: string): boolean {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function invalidFocusGoal(): never {
+  throw new Error("Focus workspace goal is invalid.");
 }

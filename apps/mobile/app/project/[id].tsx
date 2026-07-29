@@ -315,6 +315,16 @@ export default function ProjectDetailScreen() {
           <View style={styles.topbar}>
             <StoneButton label={t("common.back")} variant="quiet" onPress={() => router.back()} />
             <StoneButton
+              label={t("focus.startLinked")}
+              variant="secondary"
+              onPress={() =>
+                router.push({
+                  pathname: "/(tabs)/focus" as never,
+                  params: { projectId: project.id },
+                })
+              }
+            />
+            <StoneButton
               label={t("projects.exportMarkdown")}
               variant="secondary"
               onPress={() => void exportProject()}

@@ -12,6 +12,8 @@ export class SQLitePrivacyRepository {
         "task_occurrences",
         "tasks",
         "calendar_items",
+        "focus_sessions",
+        "focus_goals",
         "project_blockers",
         "projects",
         "versions",

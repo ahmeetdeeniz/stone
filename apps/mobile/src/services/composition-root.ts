@@ -19,6 +19,7 @@ import { exportWorkspace } from "../infrastructure/storage/workspace-export";
 import { SQLiteDrawingRepository } from "../infrastructure/storage/drawings";
 import { SQLiteTaskRepository } from "../infrastructure/storage/tasks";
 import { SQLiteCalendarRepository } from "../infrastructure/storage/calendar";
+import { SQLiteFocusRepository } from "../infrastructure/storage/focus";
 
 export interface AppServices {
   database: StoneDatabase;
@@ -30,6 +31,7 @@ export interface AppServices {
   projectUseCases: ProjectUseCases;
   tasks: SQLiteTaskRepository;
   calendar: SQLiteCalendarRepository;
+  focus: SQLiteFocusRepository;
   taskUseCases: TaskUseCases;
   drawings: SQLiteDrawingRepository;
   device: SQLiteDeviceRepository;
@@ -51,6 +53,7 @@ export async function createAppServices(): Promise<AppServices> {
   const projectUseCases = new ProjectUseCases(projects);
   const tasks = new SQLiteTaskRepository(database);
   const calendar = new SQLiteCalendarRepository(database);
+  const focus = new SQLiteFocusRepository(database);
   const taskUseCases = new TaskUseCases(tasks);
   const drawings = new SQLiteDrawingRepository(database);
   const device = new SQLiteDeviceRepository(database);
@@ -90,6 +93,7 @@ export async function createAppServices(): Promise<AppServices> {
     projectUseCases,
     tasks,
     calendar,
+    focus,
     taskUseCases,
     drawings,
     device,

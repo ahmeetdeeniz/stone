@@ -3,6 +3,10 @@ import {
   validateCalendarItem,
   type CalendarItem,
   type ExportedProjectFile,
+  validateFocusGoal,
+  validateFocusSession,
+  type FocusGoal,
+  type FocusSession,
 } from "@stone/domain";
 import { File } from "expo-file-system";
 import { normalizeMarkdown, sanitizeFileName } from "@stone/markdown";
@@ -100,11 +104,31 @@ export async function exportWorkspace(
     content: JSON.stringify({ schema: 1, items: calendar }, null, 2),
     mimeType: "application/json",
   };
+  const focusRows = await database.getAllAsync<{ payload: string }>(
+    "SELECT payload FROM focus_sessions WHERE owner_id = ? ORDER BY started_at, id",
+    ownerId,
+  );
+  const focusGoalRow = await database.getFirstAsync<{ payload: string }>(
+    "SELECT payload FROM focus_goals WHERE owner_id = ?",
+    ownerId,
+  );
+  const focus = focusRows.map((row) =>
+    validateFocusSession(JSON.parse(row.payload) as FocusSession),
+  );
+  const focusGoal = focusGoalRow
+    ? validateFocusGoal(JSON.parse(focusGoalRow.payload) as FocusGoal)
+    : null;
+  const focusExport: ExportedProjectFile = {
+    path: "focus.json",
+    content: JSON.stringify({ schema: 1, sessions: focus, goal: focusGoal }, null, 2),
+    mimeType: "application/json",
+  };
   return [
     ...documents,
     ...assets,
     taskExport,
     calendarExport,
+    focusExport,
     {
       path: "calendar.ics",
       content: exportCalendarIcs(calendar),
@@ -122,6 +146,7 @@ export async function exportWorkspace(
           })),
           tasks: "tasks.json",
           calendar: "calendar.json",
+          focus: "focus.json",
         },
         null,
         2,

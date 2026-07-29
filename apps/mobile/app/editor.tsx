@@ -250,6 +250,18 @@ export default function EditorScreen() {
                 variant="quiet"
                 onPress={() => void shareExport()}
               />
+              {note ? (
+                <StoneButton
+                  label={t("focus.startLinked")}
+                  variant="quiet"
+                  onPress={() =>
+                    router.push({
+                      pathname: "/(tabs)/focus" as never,
+                      params: { documentId: note.id, projectId: note.projectId ?? undefined },
+                    })
+                  }
+                />
+              ) : null}
               <StoneButton label={t("notes.moveToTrash")} variant="quiet" onPress={moveToTrash} />
             </View>
           </View>

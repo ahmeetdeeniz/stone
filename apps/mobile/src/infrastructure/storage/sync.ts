@@ -181,6 +181,12 @@ export class SQLiteSyncStore implements SyncLocalStore {
         case "calendar":
           await this.applyCalendar(change);
           break;
+        case "focus":
+          await this.applyFocus(change);
+          break;
+        case "focus_goal":
+          await this.applyFocusGoal(change);
+          break;
         case "device":
           await this.applyDevice(change);
           break;
@@ -316,8 +322,9 @@ export class SQLiteSyncStore implements SyncLocalStore {
     entityId: string,
   ): Promise<number> {
     const table = tableForEntity(entityType);
+    const identityColumn = entityType === "focus_goal" ? "owner_id" : "id";
     const row = await this.database.getFirstAsync<{ revision: number }>(
-      `SELECT revision FROM ${table} WHERE owner_id = ? AND id = ?`,
+      `SELECT revision FROM ${table} WHERE owner_id = ? AND ${identityColumn} = ?`,
       ownerId,
       entityId,
     );
@@ -367,8 +374,9 @@ export class SQLiteSyncStore implements SyncLocalStore {
     ownerId: string,
   ): Promise<Record<string, unknown> | null> {
     const table = tableForEntity(entityType);
+    const identityColumn = entityType === "focus_goal" ? "owner_id" : "id";
     const row = await this.database.getFirstAsync<Record<string, unknown>>(
-      `SELECT * FROM ${table} WHERE owner_id = ? AND id = ?`,
+      `SELECT * FROM ${table} WHERE owner_id = ? AND ${identityColumn} = ?`,
       ownerId,
       entityId,
     );
@@ -549,6 +557,44 @@ export class SQLiteSyncStore implements SyncLocalStore {
     );
   }
 
+  private async applyFocus(change: RemoteChange): Promise<void> {
+    const p = change.payload;
+    await this.database.runAsync(
+      "INSERT INTO focus_sessions (id, owner_id, schema_version, mode, status, phase, started_at, ended_at, task_id, project_id, source_document_id, calendar_item_id, active_device_id, conflict_state, revision, updated_at, deleted_at, payload) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET owner_id=excluded.owner_id, schema_version=excluded.schema_version, mode=excluded.mode, status=excluded.status, phase=excluded.phase, started_at=excluded.started_at, ended_at=excluded.ended_at, task_id=excluded.task_id, project_id=excluded.project_id, source_document_id=excluded.source_document_id, calendar_item_id=excluded.calendar_item_id, active_device_id=excluded.active_device_id, conflict_state=excluded.conflict_state, revision=excluded.revision, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, payload=excluded.payload",
+      asText(p.id),
+      asText(p.ownerId),
+      Number(p.schemaVersion),
+      asText(p.mode),
+      asText(p.status),
+      asText(p.phase),
+      asText(p.startedAt),
+      nullableText(p.endedAt),
+      nullableText(p.taskId),
+      nullableText(p.projectId),
+      nullableText(p.sourceDocumentId),
+      nullableText(p.calendarItemId),
+      asText(p.activeDeviceId),
+      asText(p.conflictState),
+      Number(p.revision),
+      asText(p.updatedAt),
+      nullableText(p.deletedAt),
+      JSON.stringify(p),
+    );
+  }
+
+  private async applyFocusGoal(change: RemoteChange): Promise<void> {
+    const p = change.payload;
+    await this.database.runAsync(
+      "INSERT INTO focus_goals (owner_id, effective_from_date, timezone, revision, updated_at, payload) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(owner_id) DO UPDATE SET effective_from_date=excluded.effective_from_date, timezone=excluded.timezone, revision=excluded.revision, updated_at=excluded.updated_at, payload=excluded.payload",
+      asText(p.ownerId),
+      asText(p.effectiveFromDate),
+      asText(p.timezone),
+      Number(p.revision),
+      asText(p.updatedAt),
+      JSON.stringify(p),
+    );
+  }
+
   private async applyDevice(change: RemoteChange): Promise<void> {
     const p = change.payload;
     await this.database.runAsync(
@@ -691,6 +737,10 @@ export class SQLiteSyncStore implements SyncLocalStore {
         return this.applyTask(change);
       case "calendar":
         return this.applyCalendar(change);
+      case "focus":
+        return this.applyFocus(change);
+      case "focus_goal":
+        return this.applyFocusGoal(change);
       case "device":
         return this.applyDevice(change);
       case "settings":
@@ -758,6 +808,10 @@ function tableForEntity(entityType: SyncEntityType): string {
       return "tasks";
     case "calendar":
       return "calendar_items";
+    case "focus":
+      return "focus_sessions";
+    case "focus_goal":
+      return "focus_goals";
     case "device":
       return "devices";
     case "settings":
@@ -771,6 +825,9 @@ function normalizeSqlPayload(
   entityType: SyncEntityType,
   row: Record<string, unknown>,
 ): Record<string, unknown> {
+  if ((entityType === "focus" || entityType === "focus_goal") && typeof row.payload === "string") {
+    return parsePayload(row.payload);
+  }
   if (entityType === "document") {
     return {
       id: row.id,

@@ -53,6 +53,15 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
+        name="focus"
+        options={{
+          title: t("tabs.focus"),
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="timer-outline" color={color} size={size} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="settings"
         options={{
           title: t("tabs.settings"),

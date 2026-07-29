@@ -200,6 +200,82 @@ service cloud.firestore {
         && request.resource.data.lastEventId is string;
     }
 
+    function validFocusSession(uid, sessionId) {
+      return signedIn(uid)
+        && request.resource.data.keys().hasOnly([
+          'id', 'ownerId', 'schemaVersion', 'mode', 'status', 'phase', 'startedAt', 'endedAt',
+          'plannedDurationSeconds', 'actualFocusSeconds', 'accumulatedPausedSeconds', 'pauses',
+          'manuallyAdjustedSeconds', 'taskId', 'projectId', 'sourceDocumentId', 'calendarItemId',
+          'category', 'tags', 'note', 'pomodoroGroupId', 'pomodoroCycle', 'activeDeviceId',
+          'conflictState', 'revision', 'createdAt', 'updatedAt', 'deletedAt', 'updatedByDeviceId',
+          'idempotencyKey', 'lastEventId'
+        ])
+        && request.resource.data.id == sessionId
+        && request.resource.data.ownerId == uid
+        && request.resource.data.schemaVersion == 1
+        && request.resource.data.mode in ['stopwatch', 'countdown', 'pomodoro']
+        && request.resource.data.status in ['running', 'paused', 'completed', 'cancelled']
+        && request.resource.data.phase in ['focus', 'short_break', 'long_break']
+        && request.resource.data.startedAt is string
+        && nullableString(request.resource.data.endedAt)
+        && (request.resource.data.plannedDurationSeconds == null || request.resource.data.plannedDurationSeconds is int)
+        && request.resource.data.actualFocusSeconds is int
+        && request.resource.data.actualFocusSeconds >= 0
+        && request.resource.data.accumulatedPausedSeconds is int
+        && request.resource.data.accumulatedPausedSeconds >= 0
+        && request.resource.data.pauses is list
+        && request.resource.data.pauses.size() <= 1000
+        && (request.resource.data.manuallyAdjustedSeconds == null || request.resource.data.manuallyAdjustedSeconds is int)
+        && nullableString(request.resource.data.taskId)
+        && nullableString(request.resource.data.projectId)
+        && nullableString(request.resource.data.sourceDocumentId)
+        && nullableString(request.resource.data.calendarItemId)
+        && nullableString(request.resource.data.category)
+        && request.resource.data.tags is list
+        && request.resource.data.tags.size() <= 50
+        && nullableString(request.resource.data.note)
+        && nullableString(request.resource.data.pomodoroGroupId)
+        && (request.resource.data.pomodoroCycle == null || request.resource.data.pomodoroCycle is int)
+        && request.resource.data.activeDeviceId is string
+        && request.resource.data.conflictState in ['none', 'overlap_unresolved', 'resolved_include', 'resolved_exclude']
+        && request.resource.data.revision is int
+        && request.resource.data.createdAt is string
+        && request.resource.data.updatedAt is string
+        && nullableString(request.resource.data.deletedAt)
+        && request.resource.data.updatedByDeviceId is string
+        && request.resource.data.idempotencyKey is string
+        && request.resource.data.lastEventId is string;
+    }
+
+    function validFocusGoal(uid, goalId) {
+      return signedIn(uid)
+        && request.resource.data.keys().hasOnly([
+          'id', 'ownerId', 'schemaVersion', 'timezone', 'dailyMinutes', 'weeklyMinutes',
+          'effectiveFromDate', 'streakVisible', 'revision', 'createdAt', 'updatedAt', 'deletedAt',
+          'updatedByDeviceId', 'idempotencyKey', 'lastEventId'
+        ])
+        && goalId == uid
+        && request.resource.data.id == uid
+        && request.resource.data.ownerId == uid
+        && request.resource.data.schemaVersion == 1
+        && request.resource.data.timezone is string
+        && request.resource.data.dailyMinutes is int
+        && request.resource.data.dailyMinutes >= 0
+        && request.resource.data.dailyMinutes <= 1440
+        && request.resource.data.weeklyMinutes is int
+        && request.resource.data.weeklyMinutes >= 0
+        && request.resource.data.weeklyMinutes <= 10080
+        && request.resource.data.effectiveFromDate is string
+        && request.resource.data.streakVisible is bool
+        && request.resource.data.revision is int
+        && request.resource.data.createdAt is string
+        && request.resource.data.updatedAt is string
+        && nullableString(request.resource.data.deletedAt)
+        && request.resource.data.updatedByDeviceId is string
+        && request.resource.data.idempotencyKey is string
+        && request.resource.data.lastEventId is string;
+    }
+
     function validDevice(uid, deviceId) {
       return signedIn(uid)
         && request.resource.data.keys().hasOnly([
@@ -280,7 +356,7 @@ service cloud.firestore {
         && request.resource.data.revision is int
         && request.resource.data.payloadVersion == 1
         && request.resource.data.payload is map
-        && request.resource.data.payload.size() <= 32
+        && request.resource.data.payload.size() <= 40
         && request.resource.data.createdAt is string
         && request.resource.data.serverUpdatedAt is timestamp;
     }
@@ -321,6 +397,20 @@ service cloud.firestore {
         allow read: if signedIn(uid);
         allow create: if validCalendar(uid, calendarId) && ownerCreate(uid);
         allow update: if validCalendar(uid, calendarId) && ownerUpdate(uid);
+        allow delete: if signedIn(uid) && resource.data.ownerId == uid;
+      }
+
+      match /focusSessions/{sessionId} {
+        allow read: if signedIn(uid);
+        allow create: if validFocusSession(uid, sessionId) && ownerCreate(uid);
+        allow update: if validFocusSession(uid, sessionId) && ownerUpdate(uid);
+        allow delete: if signedIn(uid) && resource.data.ownerId == uid;
+      }
+
+      match /focusGoals/{goalId} {
+        allow read: if signedIn(uid);
+        allow create: if validFocusGoal(uid, goalId) && ownerCreate(uid);
+        allow update: if validFocusGoal(uid, goalId) && ownerUpdate(uid);
         allow delete: if signedIn(uid) && resource.data.ownerId == uid;
       }
 

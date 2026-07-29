@@ -1,7 +1,16 @@
 export type SyncStatus = "saved" | "syncing" | "offline" | "error" | "conflict";
 
 export type SyncEntityType =
-  "document" | "project" | "version" | "task" | "calendar" | "device" | "settings" | "drawing";
+  | "document"
+  | "project"
+  | "version"
+  | "task"
+  | "calendar"
+  | "focus"
+  | "focus_goal"
+  | "device"
+  | "settings"
+  | "drawing";
 export type SyncOperation = "upsert" | "delete";
 
 export interface OutboxEvent {

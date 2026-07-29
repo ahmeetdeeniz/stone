@@ -351,6 +351,21 @@ export default function CalendarDetailScreen() {
               }
             />
           ) : null}
+          <StoneButton
+            label={t("focus.startLinked")}
+            variant="secondary"
+            onPress={() =>
+              router.push({
+                pathname: "/(tabs)/focus" as never,
+                params: {
+                  calendarItemId: item.id,
+                  taskId: item.taskId ?? undefined,
+                  projectId: item.projectId ?? undefined,
+                  documentId: item.sourceDocumentId ?? undefined,
+                },
+              })
+            }
+          />
           <StoneText variant="caption">{t("calendar.noNotifications")}</StoneText>
           <StoneButton
             label={saving ? t("calendar.saving") : t("common.save")}

@@ -393,6 +393,16 @@ export default function TaskDetailScreen() {
             variant="secondary"
             onPress={() => void scheduleTask()}
           />
+          <StoneButton
+            label={t("focus.startLinked")}
+            variant="secondary"
+            onPress={() =>
+              router.push({
+                pathname: "/(tabs)/focus" as never,
+                params: { taskId: task.id, projectId: task.projectId ?? undefined },
+              })
+            }
+          />
           <StoneText variant="caption">{t("tasks.blockDistinct")}</StoneText>
           <View style={styles.subtasks}>
             <StoneText variant="title3">{t("tasks.subtasks")}</StoneText>

@@ -146,6 +146,8 @@ export class FirebaseSyncRemote implements SyncRemote {
         "versions",
         "tasks",
         "calendar",
+        "focusSessions",
+        "focusGoals",
         "devices",
         "settings",
         "drawings",
@@ -216,6 +218,10 @@ function collectionFor(entityType: SyncEntityType): string {
       return "tasks";
     case "calendar":
       return "calendar";
+    case "focus":
+      return "focusSessions";
+    case "focus_goal":
+      return "focusGoals";
     case "device":
       return "devices";
     case "settings":

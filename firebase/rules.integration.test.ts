@@ -225,4 +225,69 @@ describe("Firestore owner isolation rules", () => {
     await assertFails(reference.update({ ...event, revision: 3, category: "pink" }));
     await assertFails(other.doc("users/owner/calendar/event-2").set({ ...event, id: "event-2" }));
   });
+
+  it("isolates focus sessions and goals with constrained lifecycle data", async () => {
+    const owner = environment.authenticatedContext("owner").firestore();
+    const other = environment.authenticatedContext("other").firestore();
+    const reference = owner.doc("users/owner/focusSessions/focus-1");
+    const session = {
+      id: "focus-1",
+      ownerId: "owner",
+      schemaVersion: 1,
+      mode: "countdown",
+      status: "running",
+      phase: "focus",
+      startedAt: "2026-07-29T09:00:00.000Z",
+      endedAt: null,
+      plannedDurationSeconds: 1500,
+      actualFocusSeconds: 0,
+      accumulatedPausedSeconds: 0,
+      pauses: [],
+      manuallyAdjustedSeconds: null,
+      taskId: null,
+      projectId: null,
+      sourceDocumentId: null,
+      calendarItemId: null,
+      category: null,
+      tags: [],
+      note: null,
+      pomodoroGroupId: null,
+      pomodoroCycle: null,
+      activeDeviceId: "device-1",
+      conflictState: "none",
+      revision: 1,
+      createdAt: "2026-07-29T09:00:00.000Z",
+      updatedAt: "2026-07-29T09:00:00.000Z",
+      deletedAt: null,
+      updatedByDeviceId: "device-1",
+      idempotencyKey: "device-1:focus:focus-1:1",
+      lastEventId: "device-1:focus:focus-1:1",
+    };
+    await assertSucceeds(reference.set(session));
+    await assertFails(other.doc(reference.path).get());
+    await assertSucceeds(reference.update({ ...session, status: "paused", revision: 2 }));
+    await assertFails(reference.update({ ...session, mode: "invalid", revision: 3 }));
+
+    const goal = owner.doc("users/owner/focusGoals/owner");
+    await assertSucceeds(
+      goal.set({
+        id: "owner",
+        ownerId: "owner",
+        schemaVersion: 1,
+        timezone: "Europe/Istanbul",
+        dailyMinutes: 60,
+        weeklyMinutes: 300,
+        effectiveFromDate: "2026-07-29",
+        streakVisible: false,
+        revision: 1,
+        createdAt: "2026-07-29T00:00:00.000Z",
+        updatedAt: "2026-07-29T00:00:00.000Z",
+        deletedAt: null,
+        updatedByDeviceId: "device-1",
+        idempotencyKey: "device-1:focus_goal:owner:1",
+        lastEventId: "device-1:focus_goal:owner:1",
+      }),
+    );
+    await assertFails(other.doc("users/other/focusGoals/owner").get());
+  });
 });

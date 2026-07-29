@@ -135,4 +135,16 @@ export const migrations: readonly Migration[] = [
       "CREATE INDEX IF NOT EXISTS calendar_owner_series_idx ON calendar_items (owner_id, recurrence_series_id, deleted_at)",
     ],
   },
+  {
+    version: 9,
+    statements: [
+      "CREATE TABLE IF NOT EXISTS focus_sessions (id TEXT PRIMARY KEY NOT NULL, owner_id TEXT NOT NULL, schema_version INTEGER NOT NULL DEFAULT 1, mode TEXT NOT NULL, status TEXT NOT NULL, phase TEXT NOT NULL, started_at TEXT NOT NULL, ended_at TEXT, task_id TEXT, project_id TEXT, source_document_id TEXT, calendar_item_id TEXT, active_device_id TEXT NOT NULL, conflict_state TEXT NOT NULL DEFAULT 'none', revision INTEGER NOT NULL, updated_at TEXT NOT NULL, deleted_at TEXT, payload TEXT NOT NULL)",
+      "CREATE TABLE IF NOT EXISTS focus_goals (owner_id TEXT PRIMARY KEY NOT NULL, effective_from_date TEXT NOT NULL, timezone TEXT NOT NULL, revision INTEGER NOT NULL, updated_at TEXT NOT NULL, payload TEXT NOT NULL)",
+      "CREATE INDEX IF NOT EXISTS focus_owner_active_idx ON focus_sessions (owner_id, status, deleted_at, updated_at DESC)",
+      "CREATE INDEX IF NOT EXISTS focus_owner_range_idx ON focus_sessions (owner_id, deleted_at, started_at, ended_at)",
+      "CREATE INDEX IF NOT EXISTS focus_owner_task_range_idx ON focus_sessions (owner_id, task_id, deleted_at, started_at)",
+      "CREATE INDEX IF NOT EXISTS focus_owner_project_range_idx ON focus_sessions (owner_id, project_id, deleted_at, started_at)",
+      "CREATE INDEX IF NOT EXISTS focus_owner_block_range_idx ON focus_sessions (owner_id, calendar_item_id, deleted_at, started_at)",
+    ],
+  },
 ];
