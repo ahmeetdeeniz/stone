@@ -1,6 +1,8 @@
+import type { ReactNode } from "react";
+import Ionicons from "@expo/vector-icons/Ionicons";
 import { ActivityIndicator, StyleSheet, View } from "react-native";
-import { StoneButton, StoneText } from "./ui";
-import { spacing } from "../design/tokens";
+import { StoneButton, StoneText, type IconName } from "./ui";
+import { hairline, radii, spacing } from "../design/tokens";
 import { useTheme } from "../design/theme";
 import { useI18n } from "../i18n/provider";
 
@@ -11,52 +13,80 @@ export function LoadingState({ label }: { label?: string }) {
   return (
     <View style={styles.center}>
       <ActivityIndicator color={colors.primary} accessibilityLabel={visibleLabel} />
-      <StoneText variant="bodySmall" style={{ color: colors.textSecondary }}>
+      <StoneText variant="bodySmall" tone="secondary">
         {visibleLabel}
       </StoneText>
     </View>
   );
 }
 
-export function EmptyState({ title, description }: { title: string; description: string }) {
+export function EmptyState({
+  title,
+  description,
+  icon = "sparkles-outline",
+  action,
+}: {
+  title: string;
+  description: string;
+  icon?: IconName;
+  action?: ReactNode;
+}) {
+  const { colors } = useTheme();
   return (
     <View style={styles.center}>
-      <StoneText variant="display" style={styles.centerText}>
+      <View
+        style={[styles.emptyIcon, { backgroundColor: colors.surface, borderColor: colors.border }]}
+      >
+        <Ionicons name={icon} size={26} color={colors.primaryText} />
+      </View>
+      <StoneText variant="title3" style={styles.centerText}>
         {title}
       </StoneText>
-      <StoneText variant="body" style={styles.centerText}>
+      <StoneText variant="bodySmall" tone="secondary" style={[styles.centerText, styles.emptyCopy]}>
         {description}
       </StoneText>
+      {action}
     </View>
   );
 }
 
 export function OfflineState() {
-  const { colors } = useTheme();
+  const { colors, tones } = useTheme();
   const { t } = useI18n();
   return (
     <View
-      style={[
-        styles.banner,
-        { backgroundColor: colors.backgroundSecondary, borderColor: colors.border },
-      ]}
+      style={[styles.banner, { backgroundColor: tones.info.bg, borderColor: tones.info.border }]}
     >
-      <StoneText variant="bodySmall">{t("app.offlinePreserved")}</StoneText>
+      <Ionicons name="cloud-offline-outline" size={16} color={tones.info.fg} />
+      <StoneText variant="bodySmall" style={{ color: colors.text }}>
+        {t("app.offlinePreserved")}
+      </StoneText>
     </View>
   );
 }
 
 export function ErrorState({ message, onRetry }: { message: string; onRetry?: () => void }) {
+  const { tones } = useTheme();
   const { t } = useI18n();
   return (
     <View style={styles.center}>
+      <View
+        style={[
+          styles.emptyIcon,
+          { backgroundColor: tones.danger.bg, borderColor: tones.danger.border },
+        ]}
+      >
+        <Ionicons name="alert-circle-outline" size={26} color={tones.danger.fg} />
+      </View>
       <StoneText variant="title3" style={styles.centerText}>
         {t("app.errorTitle")}
       </StoneText>
-      <StoneText variant="body" style={styles.centerText}>
+      <StoneText variant="bodySmall" tone="secondary" style={[styles.centerText, styles.emptyCopy]}>
         {message}
       </StoneText>
-      {onRetry ? <StoneButton label={t("app.retry")} onPress={onRetry} /> : null}
+      {onRetry ? (
+        <StoneButton label={t("app.retry")} variant="secondary" icon="refresh" onPress={onRetry} />
+      ) : null}
     </View>
   );
 }
@@ -70,5 +100,23 @@ const styles = StyleSheet.create({
     padding: spacing.xxl,
   },
   centerText: { textAlign: "center" },
-  banner: { borderWidth: 1, borderRadius: 10, padding: spacing.md },
+  emptyCopy: { maxWidth: 320 },
+  emptyIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: radii.xl,
+    borderWidth: hairline,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: spacing.xxs,
+  },
+  banner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    borderWidth: hairline,
+    borderRadius: radii.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
 });

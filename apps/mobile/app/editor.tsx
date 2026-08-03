@@ -236,10 +236,7 @@ export default function EditorScreen() {
               containerStyle={styles.titleInput}
             />
             <View style={styles.toolbarActions}>
-              <StoneText
-                variant="caption"
-                style={{ color: status === "error" ? "#C95B67" : colors.textMuted }}
-              >
+              <StoneText variant="caption" tone={status === "error" ? "danger" : "muted"}>
                 {statusLabel(status, t)}
               </StoneText>
               {status === "saving" ? (
@@ -370,7 +367,7 @@ export default function EditorScreen() {
               onPress={() => setError(null)}
               style={styles.error}
             >
-              <StoneText variant="caption" style={{ color: "#C95B67" }}>
+              <StoneText variant="caption" tone="danger">
                 {error}
               </StoneText>
             </Pressable>

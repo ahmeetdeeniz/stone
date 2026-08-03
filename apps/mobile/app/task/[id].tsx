@@ -1,7 +1,7 @@
 import * as Crypto from "expo-crypto";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
-import { Alert, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { Alert, ScrollView, StyleSheet, View } from "react-native";
 import {
   zonedWallTimeToInstant,
   type Project,
@@ -11,7 +11,15 @@ import {
 import { formatTaskPriority, type TranslationKey } from "@stone/i18n";
 import { ResponsiveContent } from "../../src/components/responsive";
 import { ErrorState, LoadingState } from "../../src/components/states";
-import { Screen, StoneButton, StoneInput, StoneText, Surface } from "../../src/components/ui";
+import {
+  Chip,
+  Overline,
+  Screen,
+  StoneButton,
+  StoneInput,
+  StoneText,
+  Surface,
+} from "../../src/components/ui";
 import { spacing } from "../../src/design/tokens";
 import { useAuth } from "../../src/providers/auth-provider";
 import { useAppServices } from "../../src/providers/app-provider";
@@ -337,14 +345,14 @@ export default function TaskDetailScreen() {
             onChangeText={setEstimate}
             keyboardType="number-pad"
           />
-          <ChoiceSection
+          <ChipSection
             title={t("tasks.priority")}
             values={["none", "low", "medium", "high"]}
             selected={task.priority}
             labelFor={(value) => formatTaskPriority(locale, value)}
             onSelect={(value) => void setPriority(value)}
           />
-          <ChoiceSection
+          <ChipSection
             title={t("tasks.recurrence")}
             values={RECURRENCES}
             selected={recurrence}
@@ -353,13 +361,13 @@ export default function TaskDetailScreen() {
           />
           <StoneText variant="label">{t("tasks.project")}</StoneText>
           <ScrollView horizontal contentContainerStyle={styles.choices}>
-            <Choice
+            <Chip
               label={t("tasks.noProject")}
               selected={!task.projectId}
               onPress={() => void setProject(null)}
             />
             {projects.map((project) => (
-              <Choice
+              <Chip
                 key={project.id}
                 label={project.title}
                 selected={task.projectId === project.id}
@@ -453,7 +461,7 @@ export default function TaskDetailScreen() {
   );
 }
 
-function ChoiceSection<Value extends string>({
+function ChipSection<Value extends string>({
   title,
   values,
   selected,
@@ -468,10 +476,14 @@ function ChoiceSection<Value extends string>({
 }) {
   return (
     <View style={styles.choiceSection}>
-      <StoneText variant="label">{title}</StoneText>
-      <ScrollView horizontal contentContainerStyle={styles.choices}>
+      <Overline>{title}</Overline>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.choices}
+      >
         {values.map((value) => (
-          <Choice
+          <Chip
             key={value}
             label={labelFor(value)}
             selected={selected === value}
@@ -480,27 +492,6 @@ function ChoiceSection<Value extends string>({
         ))}
       </ScrollView>
     </View>
-  );
-}
-
-function Choice({
-  label,
-  selected,
-  onPress,
-}: {
-  label: string;
-  selected: boolean;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityState={{ selected }}
-      onPress={onPress}
-      style={[styles.choice, selected && styles.choiceSelected]}
-    >
-      <StoneText variant="label">{label}</StoneText>
-    </Pressable>
   );
 }
 
@@ -514,15 +505,6 @@ const styles = StyleSheet.create({
   field: { flex: 1, minWidth: 180 },
   choiceSection: { gap: spacing.sm },
   choices: { gap: spacing.sm, paddingVertical: spacing.sm },
-  choice: {
-    minHeight: 44,
-    justifyContent: "center",
-    paddingHorizontal: spacing.lg,
-    borderWidth: 1,
-    borderColor: "#D4CEE3",
-    borderRadius: 999,
-  },
-  choiceSelected: { backgroundColor: "#E8E5FF", borderColor: "#8075F0" },
   subtasks: { gap: spacing.md, marginTop: spacing.xxl },
   addSubtask: { gap: spacing.sm },
   rowActions: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },

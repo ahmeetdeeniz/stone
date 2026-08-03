@@ -4,7 +4,7 @@ import { Alert, FlatList, StyleSheet, View } from "react-native";
 import type { Document } from "@stone/domain";
 import { ErrorState, EmptyState, LoadingState } from "../src/components/states";
 import { ResponsiveContent } from "../src/components/responsive";
-import { Screen, StoneButton, StoneText, Surface } from "../src/components/ui";
+import { IconButton, Screen, StoneButton, StoneText, Surface } from "../src/components/ui";
 import { spacing } from "../src/design/tokens";
 import { useAuth } from "../src/providers/auth-provider";
 import { useAppServices } from "../src/providers/app-provider";
@@ -53,7 +53,11 @@ export default function TrashScreen() {
     <Screen>
       <ResponsiveContent>
         <View style={styles.header}>
-          <StoneButton label={t("common.back")} variant="quiet" onPress={() => router.back()} />
+          <IconButton
+            icon="chevron-back"
+            accessibilityLabel={t("common.back")}
+            onPress={() => router.back()}
+          />
           <StoneText variant="title1">{t("trash.title")}</StoneText>
         </View>
         {loading ? (
@@ -66,12 +70,18 @@ export default function TrashScreen() {
             keyExtractor={(item) => item.id}
             contentContainerStyle={notes.length === 0 ? styles.empty : styles.list}
             ListEmptyComponent={
-              <EmptyState title={t("trash.empty")} description={t("trash.emptyDetail")} />
+              <EmptyState
+                icon="trash-outline"
+                title={t("trash.empty")}
+                description={t("trash.emptyDetail")}
+              />
             }
             renderItem={({ item }) => (
               <Surface>
-                <StoneText variant="title3">{item.title}</StoneText>
-                <StoneText variant="caption" style={styles.deleted}>
+                <StoneText variant="title3" numberOfLines={1}>
+                  {item.title}
+                </StoneText>
+                <StoneText variant="caption" tone="muted" style={styles.deleted}>
                   {t("common.deletedAt", {
                     date: item.deletedAt
                       ? formatInstant(
@@ -86,13 +96,16 @@ export default function TrashScreen() {
                   <StoneButton
                     label={t("common.restore")}
                     variant="secondary"
+                    icon="arrow-undo-outline"
+                    size="sm"
                     onPress={() =>
                       void noteUseCases.restore(user!.uid, item.id, deviceId).then(load)
                     }
                   />
                   <StoneButton
                     label={t("common.permanentlyDelete")}
-                    variant="quiet"
+                    variant="danger"
+                    size="sm"
                     onPress={() => permanentlyDelete(item)}
                   />
                 </View>
@@ -106,10 +119,16 @@ export default function TrashScreen() {
 }
 
 const styles = StyleSheet.create({
-  header: { flexDirection: "row", alignItems: "center", gap: spacing.md, marginBottom: spacing.xl },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    marginLeft: -spacing.sm,
+    marginBottom: spacing.lg,
+  },
   list: { gap: spacing.md, paddingBottom: spacing.giant },
   empty: { flexGrow: 1 },
-  deleted: { color: "#9A96AA", marginTop: spacing.sm },
+  deleted: { marginTop: spacing.sm },
   actions: {
     flexDirection: "row",
     justifyContent: "flex-end",

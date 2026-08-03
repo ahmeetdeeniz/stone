@@ -9,6 +9,7 @@ import {
   type EditorBridgeMessage,
 } from "@stone/editor";
 import { EDITOR_BUNDLE } from "./editor-bundle";
+import { colors as tokens } from "../design/tokens";
 import { useI18n } from "../i18n/provider";
 
 export interface EditorWebViewHandle {
@@ -82,11 +83,18 @@ export const EditorWebView = React.forwardRef<EditorWebViewHandle, EditorWebView
 );
 
 function createEditorHtml(theme: "light" | "dark", accessibilityLabel: string): string {
-  const colors =
-    theme === "dark"
-      ? { background: "#151515", text: "#F4F0E8", surface: "#23211E", accent: "#D8A15D" }
-      : { background: "#F8F6F0", text: "#292721", surface: "#EEE9DF", accent: "#99642D" };
-  return `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"><style>:root{--stone-background:${colors.background};--stone-text:${colors.text};--stone-surface:${colors.surface};--stone-accent:${colors.accent}}html,body,#editor{height:100%;margin:0;background:var(--stone-background);color:var(--stone-text)}body{overflow:hidden}button,a{color:var(--stone-accent)}</style></head><body><main id="editor" role="textbox" aria-label="${escapeHtmlAttribute(accessibilityLabel)}"></main><script>${EDITOR_BUNDLE}</script></body></html>`;
+  // The editing surface must be the same material as the rest of Stone, so the
+  // palette is read from the shared tokens rather than defined here.
+  const palette = theme === "dark" ? tokens.dark : tokens.light;
+  const editorColors = {
+    background: palette.background,
+    text: palette.text,
+    surface: palette.surface,
+    accent: theme === "dark" ? tokens.brand.purple300 : tokens.brand.purple600,
+    muted: palette.textSecondary,
+    border: palette.border,
+  };
+  return `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"><style>:root{--stone-background:${editorColors.background};--stone-text:${editorColors.text};--stone-surface:${editorColors.surface};--stone-accent:${editorColors.accent};--stone-muted:${editorColors.muted};--stone-border:${editorColors.border}}html,body,#editor{height:100%;margin:0;background:var(--stone-background);color:var(--stone-text)}body{overflow:hidden;-webkit-font-smoothing:antialiased}button,a{color:var(--stone-accent)}</style></head><body><main id="editor" role="textbox" aria-label="${escapeHtmlAttribute(accessibilityLabel)}"></main><script>${EDITOR_BUNDLE}</script></body></html>`;
 }
 
 function escapeHtmlAttribute(value: string): string {

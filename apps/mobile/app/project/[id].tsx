@@ -25,7 +25,8 @@ import {
 import { ErrorState, LoadingState } from "../../src/components/states";
 import { ResponsiveContent } from "../../src/components/responsive";
 import { Screen, StoneButton, StoneInput, StoneText, Surface } from "../../src/components/ui";
-import { spacing } from "../../src/design/tokens";
+import { radii, spacing } from "../../src/design/tokens";
+import { useTheme } from "../../src/design/theme";
 import { useAuth } from "../../src/providers/auth-provider";
 import { useAppServices } from "../../src/providers/app-provider";
 import { shareProjectExport } from "../../src/projects/project-files";
@@ -40,6 +41,7 @@ export default function ProjectDetailScreen() {
   const { user } = useAuth();
   const { projectUseCases, taskUseCases, calendar, deviceId } = useAppServices();
   const { locale, t } = useI18n();
+  const { colors } = useTheme();
   const [project, setProject] = useState<Project | null>(null);
   const [versions, setVersions] = useState<readonly ProjectVersion[]>([]);
   const [tasks, setTasks] = useState<readonly ProjectTask[]>([]);
@@ -436,7 +438,7 @@ export default function ProjectDetailScreen() {
                   accessibilityRole="checkbox"
                   accessibilityState={{ checked: task.completed }}
                   onPress={() => void toggleTask(task)}
-                  style={styles.task}
+                  style={[styles.task, { borderBottomColor: colors.border }]}
                 >
                   <StoneText variant="body">
                     {task.completed ? "☑" : "☐"} {task.text}
@@ -470,7 +472,7 @@ export default function ProjectDetailScreen() {
                   accessibilityRole="button"
                   accessibilityLabel={t("tasks.editA11y", { title: task.title })}
                   onPress={() => router.push({ pathname: "/task/[id]", params: { id: task.id } })}
-                  style={styles.task}
+                  style={[styles.task, { borderBottomColor: colors.border }]}
                 >
                   <StoneText variant="body">
                     {task.state === "completed" ? "☑" : "☐"} {task.title}
@@ -510,7 +512,7 @@ export default function ProjectDetailScreen() {
                 accessibilityRole="button"
                 accessibilityLabel={`${item.title} · ${t("common.open")}`}
                 onPress={() => router.push({ pathname: "/calendar/[id]", params: { id: item.id } })}
-                style={styles.task}
+                style={[styles.task, { borderBottomColor: colors.border }]}
               >
                 <StoneText>{item.title}</StoneText>
                 <StoneText variant="caption">
@@ -585,7 +587,7 @@ export default function ProjectDetailScreen() {
                 onPress={() =>
                   router.push({ pathname: "/version/[id]", params: { id: version.id } })
                 }
-                style={styles.version}
+                style={[styles.version, { borderColor: colors.border }]}
               >
                 <StoneText variant="title3">v{version.version}</StoneText>
                 <StoneText variant="bodySmall">
@@ -652,13 +654,11 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
     paddingVertical: spacing.sm,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#D6D2DD",
   },
   version: {
     gap: spacing.xs,
     padding: spacing.md,
-    borderWidth: 1,
-    borderColor: "#D6D2DD",
-    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: radii.md,
   },
 });

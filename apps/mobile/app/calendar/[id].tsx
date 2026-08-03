@@ -10,7 +10,7 @@ import {
 } from "@stone/domain";
 import { ErrorState, LoadingState } from "../../src/components/states";
 import { ResponsiveContent } from "../../src/components/responsive";
-import { Screen, StoneButton, StoneInput, StoneText } from "../../src/components/ui";
+import { Chip, Screen, StoneButton, StoneInput, StoneText } from "../../src/components/ui";
 import { spacing } from "../../src/design/tokens";
 import { useAppServices } from "../../src/providers/app-provider";
 import { useAuth } from "../../src/providers/auth-provider";
@@ -282,7 +282,7 @@ export default function CalendarDetailScreen() {
           <StoneText variant="label">{t("calendar.recurrence")}</StoneText>
           <ScrollView horizontal contentContainerStyle={styles.choices}>
             {recurrenceOptions.map((value) => (
-              <Choice
+              <Chip
                 key={value}
                 label={recurrenceLabel(value, t)}
                 selected={recurrence === value}
@@ -292,13 +292,13 @@ export default function CalendarDetailScreen() {
           </ScrollView>
           <StoneText variant="label">{t("calendar.project")}</StoneText>
           <ScrollView horizontal contentContainerStyle={styles.choices}>
-            <Choice
+            <Chip
               label={t("calendar.noProject")}
               selected={!projectId}
               onPress={() => setProjectId(null)}
             />
             {projects.map((project) => (
-              <Choice
+              <Chip
                 key={project.id}
                 label={project.title}
                 selected={projectId === project.id}
@@ -309,7 +309,7 @@ export default function CalendarDetailScreen() {
           <StoneText variant="label">{t("calendar.category")}</StoneText>
           <ScrollView horizontal contentContainerStyle={styles.choices}>
             {categoryOptions.map((value) => (
-              <Choice
+              <Chip
                 key={value}
                 label={t(`calendar.category.${value}`)}
                 selected={category === value}
@@ -319,13 +319,13 @@ export default function CalendarDetailScreen() {
           </ScrollView>
           <StoneText variant="label">{t("calendar.sourceNote")}</StoneText>
           <ScrollView horizontal contentContainerStyle={styles.choices}>
-            <Choice
+            <Chip
               label={t("calendar.noLink")}
               selected={!sourceDocumentId}
               onPress={() => setSourceDocumentId(null)}
             />
             {notes.slice(0, 200).map((note) => (
-              <Choice
+              <Chip
                 key={note.id}
                 label={note.title}
                 selected={sourceDocumentId === note.id}
@@ -377,27 +377,6 @@ export default function CalendarDetailScreen() {
   );
 }
 
-function Choice({
-  label,
-  selected,
-  onPress,
-}: {
-  label: string;
-  selected: boolean;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityState={{ selected }}
-      onPress={onPress}
-      style={[styles.choice, selected && styles.choiceSelected]}
-    >
-      <StoneText variant="label">{label}</StoneText>
-    </Pressable>
-  );
-}
-
 function recurrenceLabel(recurrence: RecurrenceChoice, t: ReturnType<typeof useI18n>["t"]): string {
   return t(`recurrence.${recurrence}`);
 }
@@ -412,13 +391,4 @@ const styles = StyleSheet.create({
   field: { flex: 1, minWidth: 160 },
   toggle: { minHeight: 48, justifyContent: "center" },
   choices: { gap: spacing.sm, paddingVertical: spacing.sm },
-  choice: {
-    minHeight: 44,
-    justifyContent: "center",
-    paddingHorizontal: spacing.lg,
-    borderWidth: 1,
-    borderColor: "#D4CEE3",
-    borderRadius: 999,
-  },
-  choiceSelected: { backgroundColor: "#E8E5FF", borderColor: "#8075F0" },
 });

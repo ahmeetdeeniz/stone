@@ -1,13 +1,23 @@
 import { createContext, useContext, useMemo, useState, type PropsWithChildren } from "react";
-import { useColorScheme } from "react-native";
+import { useColorScheme, type ViewStyle } from "react-native";
 import type { ThemePreference } from "@stone/domain";
-import { colors } from "./tokens";
+import {
+  colors,
+  derived,
+  elevation,
+  statusTones,
+  type ElevationLevel,
+  type StatusTone,
+  type ToneColors,
+} from "./tokens";
 
 export interface ThemeColors {
   background: string;
   backgroundSecondary: string;
   surface: string;
   surfaceRaised: string;
+  surfaceSunken: string;
+  surfacePressed: string;
   text: string;
   textSecondary: string;
   textMuted: string;
@@ -15,14 +25,22 @@ export interface ThemeColors {
   borderStrong: string;
   primary: string;
   primaryPressed: string;
+  primarySoft: string;
+  primarySoftBorder: string;
+  primaryText: string;
   onPrimary: string;
+  overlay: string;
+  scrim: string;
 }
 
 interface ThemeContextValue {
   preference: ThemePreference;
   setPreference: (preference: ThemePreference) => void;
   mode: "light" | "dark";
+  isDark: boolean;
   colors: ThemeColors;
+  tones: Record<StatusTone, ToneColors>;
+  elevation: Record<ElevationLevel, ViewStyle>;
 }
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
@@ -35,19 +53,30 @@ export function ThemeProvider({
   const [preference, setPreference] = useState<ThemePreference>(initialPreference);
   const mode = preference === "system" ? (systemScheme === "dark" ? "dark" : "light") : preference;
   const palette = mode === "dark" ? colors.dark : colors.light;
+  const extras = mode === "dark" ? derived.dark : derived.light;
   const value = useMemo<ThemeContextValue>(
     () => ({
       preference,
       setPreference,
       mode,
+      isDark: mode === "dark",
       colors: {
         ...palette,
+        surfaceSunken: extras.surfaceSunken,
+        surfacePressed: extras.surfacePressed,
         primary: colors.brand.purple600,
-        primaryPressed: colors.brand.purple500,
+        primaryPressed: mode === "dark" ? colors.brand.purple500 : "#5F53DC",
+        primarySoft: extras.accentSoft,
+        primarySoftBorder: extras.accentSoftBorder,
+        primaryText: extras.accentText,
         onPrimary: "#FFFFFF",
+        overlay: extras.overlay,
+        scrim: extras.scrim,
       },
+      tones: mode === "dark" ? statusTones.dark : statusTones.light,
+      elevation: mode === "dark" ? elevation.dark : elevation.light,
     }),
-    [mode, palette, preference],
+    [extras, mode, palette, preference],
   );
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;

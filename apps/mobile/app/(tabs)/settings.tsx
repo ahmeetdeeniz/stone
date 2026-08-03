@@ -1,9 +1,20 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useRouter } from "expo-router";
-import { Alert, PermissionsAndroid, Platform, StyleSheet, View } from "react-native";
+import { Alert, PermissionsAndroid, Platform, ScrollView, StyleSheet, View } from "react-native";
 import { ResponsiveContent } from "../../src/components/responsive";
-import { Screen, StoneButton, StoneText } from "../../src/components/ui";
+import {
+  Badge,
+  Chip,
+  Divider,
+  Overline,
+  Screen,
+  ScreenHeader,
+  SectionCard,
+  StoneButton,
+  StoneText,
+} from "../../src/components/ui";
 import { spacing } from "../../src/design/tokens";
+import type { StatusTone } from "../../src/design/tokens";
 import { useTheme } from "../../src/design/theme";
 import { useAuth } from "../../src/providers/auth-provider";
 import { useAppServices } from "../../src/providers/app-provider";
@@ -16,9 +27,17 @@ import { readWidgetPrivacy, writeWidgetPrivacy } from "../../src/widgets/widget-
 import { refreshNativeWidgets } from "../../src/widgets/snapshot";
 import { clearWidgetsForAccountLifecycle } from "../../src/widgets/snapshot";
 
+const syncTone: Readonly<Record<string, StatusTone>> = {
+  saved: "success",
+  syncing: "info",
+  offline: "warning",
+  error: "danger",
+  conflict: "danger",
+};
+
 export default function SettingsScreen() {
   const router = useRouter();
-  const { preference, setPreference, colors } = useTheme();
+  const { preference, setPreference } = useTheme();
   const { locale, preference: localePreference, setPreference: setLocalePreference, t } = useI18n();
   const { user, service } = useAuth();
   const services = useAppServices();
@@ -192,157 +211,192 @@ export default function SettingsScreen() {
       },
     ]);
   };
+
+  const status = syncState?.status ?? "saved";
+
   return (
-    <Screen>
-      <ResponsiveContent>
-        <StoneText variant="title1" style={styles.title}>
-          {t("tabs.settings")}
-        </StoneText>
-        <View style={[styles.section, { borderColor: colors.border }]}>
-          <StoneText variant="title3">{t("locale.setting")}</StoneText>
-          <StoneText variant="bodySmall" style={{ color: colors.textSecondary }}>
-            {t("locale.description")} {t("locale.persistence")}
-          </StoneText>
-          <View style={styles.options}>
-            {(["system", "en", "tr"] as const).map((option) => (
-              <StoneButton
-                key={option}
-                label={
-                  option === "system"
-                    ? t("locale.system")
-                    : option === "en"
-                      ? t("locale.english")
-                      : t("locale.turkish")
-                }
-                variant={localePreference === option ? "primary" : "secondary"}
-                onPress={() => void setLocalePreference(option)}
-                accessibilityLabel={`${t("locale.setting")}: ${
-                  option === "system"
-                    ? t("locale.system")
-                    : option === "en"
-                      ? t("locale.english")
-                      : t("locale.turkish")
-                }`}
+    <Screen padded={false}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.page}>
+        <ResponsiveContent>
+          <ScreenHeader
+            title={t("tabs.settings")}
+            subtitle={user?.email ?? t("settings.noSession")}
+          />
+
+          <SectionCard title={t("settings.sync")} icon="cloud-upload-outline">
+            <View style={styles.statusRow}>
+              <Badge
+                label={t("settings.status", { status })}
+                tone={syncTone[status] ?? "neutral"}
               />
-            ))}
-          </View>
-        </View>
-        <View style={[styles.section, { borderColor: colors.border }]}>
-          <StoneText variant="title3">{t("settings.sync")}</StoneText>
-          <StoneText variant="bodySmall" style={{ color: colors.textSecondary }}>
-            {t("settings.status", { status: syncState?.status ?? "saved" })}
-            {syncState?.lastError ? ` · ${syncState.lastError}` : ""}
-          </StoneText>
-          <View style={styles.options}>
+              {syncState?.lastError ? (
+                <StoneText variant="caption" tone="danger" numberOfLines={2}>
+                  {syncState.lastError}
+                </StoneText>
+              ) : null}
+            </View>
+            <View style={styles.actionRow}>
+              <StoneButton
+                label={t("settings.syncNow")}
+                variant="secondary"
+                icon="sync-outline"
+                size="sm"
+                onPress={() => void runSync()}
+                disabled={busy || !user}
+              />
+              <StoneButton
+                label={t("settings.conflicts")}
+                variant="quiet"
+                size="sm"
+                onPress={() => router.push("/conflicts")}
+              />
+            </View>
+          </SectionCard>
+
+          <SectionCard
+            title={t("settings.theme")}
+            description={t("settings.themePersistence")}
+            icon="contrast-outline"
+          >
+            <ChoiceRow>
+              {(["system", "light", "dark"] as const).map((option) => (
+                <Chip
+                  key={option}
+                  label={
+                    option === "system"
+                      ? t("settings.theme.system")
+                      : option === "light"
+                        ? t("settings.theme.light")
+                        : t("settings.theme.dark")
+                  }
+                  icon={
+                    option === "system"
+                      ? "phone-portrait-outline"
+                      : option === "light"
+                        ? "sunny-outline"
+                        : "moon-outline"
+                  }
+                  selected={preference === option}
+                  onPress={() => void updateTheme(option)}
+                />
+              ))}
+            </ChoiceRow>
+          </SectionCard>
+
+          <SectionCard
+            title={t("locale.setting")}
+            description={`${t("locale.description")} ${t("locale.persistence")}`}
+            icon="language-outline"
+          >
+            <ChoiceRow>
+              {(["system", "en", "tr"] as const).map((option) => {
+                const label =
+                  option === "system"
+                    ? t("locale.system")
+                    : option === "en"
+                      ? t("locale.english")
+                      : t("locale.turkish");
+                return (
+                  <Chip
+                    key={option}
+                    label={label}
+                    selected={localePreference === option}
+                    onPress={() => void setLocalePreference(option)}
+                    accessibilityLabel={`${t("locale.setting")}: ${label}`}
+                  />
+                );
+              })}
+            </ChoiceRow>
+          </SectionCard>
+
+          <SectionCard
+            title={t("widgets.privacy")}
+            description={t("widgets.privacyDescription")}
+            icon="eye-off-outline"
+          >
+            <ChoiceRow>
+              {(["counts_only", "titles", "titles_and_context"] as const).map((option) => (
+                <Chip
+                  key={option}
+                  label={t(`widgets.privacy.${option}`)}
+                  selected={widgetPrivacy === option}
+                  onPress={() => void updateWidgetPrivacy(option)}
+                />
+              ))}
+            </ChoiceRow>
+            {Platform.OS === "android" && Platform.Version >= 33 ? (
+              <StoneButton
+                label={t("widgets.enableNotification")}
+                variant="secondary"
+                size="sm"
+                icon="notifications-outline"
+                onPress={() => void requestFocusNotification()}
+              />
+            ) : null}
+          </SectionCard>
+
+          <SectionCard title={t("settings.noteManagement")} icon="archive-outline">
+            <View style={styles.actionRow}>
+              <StoneButton
+                label={t("settings.openTrash")}
+                variant="secondary"
+                icon="trash-outline"
+                size="sm"
+                onPress={() => router.push("/trash")}
+              />
+              <StoneButton
+                label={t("settings.exportWorkspace")}
+                variant="secondary"
+                icon="share-outline"
+                size="sm"
+                onPress={() => void exportAll()}
+                disabled={busy || !user}
+              />
+              <StoneButton
+                label={t("settings.restoreCalendar")}
+                variant="secondary"
+                icon="cloud-download-outline"
+                size="sm"
+                onPress={() => void restoreCalendar()}
+                disabled={busy || !user}
+              />
+            </View>
+          </SectionCard>
+
+          <SectionCard title={t("settings.account")} icon="person-circle-outline">
+            <StoneText variant="bodySmall" tone="secondary">
+              {user?.email ?? t("settings.noSession")}
+            </StoneText>
             <StoneButton
-              label={t("settings.syncNow")}
+              label={busy ? t("settings.signingOut") : t("settings.signOut")}
               variant="secondary"
-              onPress={() => void runSync()}
+              icon="log-out-outline"
+              onPress={() => void signOut()}
+              disabled={busy}
+            />
+            <Divider />
+            <Overline tone="danger">{t("settings.dangerZone")}</Overline>
+            <StoneButton
+              label={t("settings.deleteAccount")}
+              variant="danger"
+              icon="warning-outline"
+              onPress={deleteAccount}
               disabled={busy || !user}
             />
-            <StoneButton
-              label={t("settings.conflicts")}
-              variant="quiet"
-              onPress={() => router.push("/conflicts")}
-            />
-          </View>
-        </View>
-        <View style={[styles.section, { borderColor: colors.border }]}>
-          <StoneText variant="title3">{t("settings.theme")}</StoneText>
-          <StoneText variant="bodySmall" style={{ color: colors.textSecondary }}>
-            {t("settings.themePersistence")}
-          </StoneText>
-          <View style={styles.options}>
-            {(["system", "light", "dark"] as const).map((option) => (
-              <StoneButton
-                key={option}
-                label={
-                  option === "system"
-                    ? t("settings.theme.system")
-                    : option === "light"
-                      ? t("settings.theme.light")
-                      : t("settings.theme.dark")
-                }
-                variant={preference === option ? "primary" : "secondary"}
-                onPress={() => void updateTheme(option)}
-              />
-            ))}
-          </View>
-        </View>
-        <View style={[styles.section, { borderColor: colors.border }]}>
-          <StoneText variant="title3">{t("widgets.privacy")}</StoneText>
-          <StoneText variant="bodySmall" style={{ color: colors.textSecondary }}>
-            {t("widgets.privacyDescription")}
-          </StoneText>
-          <View style={styles.options}>
-            {(["counts_only", "titles", "titles_and_context"] as const).map((option) => (
-              <StoneButton
-                key={option}
-                label={t(`widgets.privacy.${option}`)}
-                variant={widgetPrivacy === option ? "primary" : "secondary"}
-                onPress={() => void updateWidgetPrivacy(option)}
-              />
-            ))}
-          </View>
-          {Platform.OS === "android" && Platform.Version >= 33 ? (
-            <StoneButton
-              label={t("widgets.enableNotification")}
-              variant="secondary"
-              onPress={() => void requestFocusNotification()}
-            />
-          ) : null}
-        </View>
-        <View style={[styles.section, { borderColor: colors.border }]}>
-          <StoneText variant="title3">{t("settings.account")}</StoneText>
-          <StoneText variant="bodySmall" style={{ color: colors.textSecondary }}>
-            {user?.email ?? t("settings.noSession")}
-          </StoneText>
-          <StoneButton
-            label={busy ? t("settings.signingOut") : t("settings.signOut")}
-            variant="secondary"
-            onPress={() => void signOut()}
-            disabled={busy}
-          />
-          <StoneButton
-            label={t("settings.exportWorkspace")}
-            variant="quiet"
-            onPress={() => void exportAll()}
-            disabled={busy || !user}
-          />
-          <StoneButton
-            label={t("settings.restoreCalendar")}
-            variant="quiet"
-            onPress={() => void restoreCalendar()}
-            disabled={busy || !user}
-          />
-          <StoneButton
-            label={t("settings.deleteAccount")}
-            variant="quiet"
-            onPress={deleteAccount}
-            disabled={busy || !user}
-          />
-        </View>
-        <View style={[styles.section, { borderColor: colors.border }]}>
-          <StoneText variant="title3">{t("settings.noteManagement")}</StoneText>
-          <StoneButton
-            label={t("settings.openTrash")}
-            variant="secondary"
-            onPress={() => router.push("/trash")}
-          />
-        </View>
-      </ResponsiveContent>
+          </SectionCard>
+        </ResponsiveContent>
+      </ScrollView>
     </Screen>
   );
 }
 
+function ChoiceRow({ children }: { children: ReactNode }) {
+  return <View style={styles.choices}>{children}</View>;
+}
+
 const styles = StyleSheet.create({
-  title: { marginBottom: spacing.xxl },
-  section: {
-    borderWidth: 1,
-    borderRadius: 16,
-    padding: spacing.lg,
-    gap: spacing.md,
-    marginBottom: spacing.lg,
-  },
-  options: { flexDirection: "row", gap: spacing.sm, flexWrap: "wrap" },
+  page: { paddingHorizontal: spacing.lg, paddingTop: spacing.lg, paddingBottom: spacing.giant },
+  statusRow: { gap: spacing.xs },
+  actionRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
+  choices: { flexDirection: "row", gap: spacing.sm, flexWrap: "wrap" },
 });

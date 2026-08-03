@@ -1,14 +1,17 @@
 import { Link, router } from "expo-router";
 import { useState } from "react";
-import { ScrollView, StyleSheet } from "react-native";
-import { StoneButton, StoneInput, StoneText } from "../../src/components/ui";
+import { StyleSheet } from "react-native";
+import { AuthNotice, AuthScaffold } from "../../src/components/auth-scaffold";
+import { StoneButton, StoneInput } from "../../src/components/ui";
 import { spacing } from "../../src/design/tokens";
+import { useTheme } from "../../src/design/theme";
 import { useAuth } from "../../src/providers/auth-provider";
 import { useI18n } from "../../src/i18n/provider";
 
 export default function SignUpScreen() {
   const { service } = useAuth();
   const { t } = useI18n();
+  const { colors } = useTheme();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -27,10 +30,8 @@ export default function SignUpScreen() {
     }
   };
   return (
-    <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-      <StoneText variant="display">Stone</StoneText>
-      <StoneText variant="title1">{t("auth.createAccount")}</StoneText>
-      {error ? <StoneText style={styles.error}>{error}</StoneText> : null}
+    <AuthScaffold title={t("auth.createAccount")} description={t("auth.welcomeDetail")}>
+      {error ? <AuthNotice message={error} tone="danger" /> : null}
       <StoneInput
         label={t("auth.email")}
         value={email}
@@ -38,6 +39,7 @@ export default function SignUpScreen() {
         autoCapitalize="none"
         autoComplete="email"
         keyboardType="email-address"
+        icon="mail-outline"
       />
       <StoneInput
         label={t("auth.password")}
@@ -45,21 +47,29 @@ export default function SignUpScreen() {
         onChangeText={setPassword}
         secureTextEntry
         autoComplete="new-password"
+        icon="lock-closed-outline"
       />
       <StoneButton
         label={busy ? t("auth.creatingAccount") : t("auth.createAccount")}
         onPress={() => void signUp()}
         disabled={busy}
       />
-      <Link href="/(auth)/sign-in" style={styles.link}>
+      <Link
+        href="/(auth)/sign-in"
+        accessibilityRole="button"
+        style={[styles.link, { color: colors.primaryText }]}
+      >
         {t("auth.backToSignIn")}
       </Link>
-    </ScrollView>
+    </AuthScaffold>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flexGrow: 1, justifyContent: "center", gap: spacing.lg, padding: spacing.xxxl },
-  link: { textAlign: "center", color: "#6F63E7", padding: spacing.sm },
-  error: { color: "#C95B67" },
+  link: {
+    textAlign: "center",
+    padding: spacing.sm,
+    fontSize: 14,
+    fontFamily: "Inter_600SemiBold",
+  },
 });

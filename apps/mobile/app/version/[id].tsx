@@ -8,6 +8,7 @@ import { ErrorState, LoadingState } from "../../src/components/states";
 import { ResponsiveContent } from "../../src/components/responsive";
 import { Screen, StoneButton, StoneInput, StoneText, Surface } from "../../src/components/ui";
 import { spacing } from "../../src/design/tokens";
+import { useTheme } from "../../src/design/theme";
 import { useAuth } from "../../src/providers/auth-provider";
 import { useAppServices } from "../../src/providers/app-provider";
 import { useI18n } from "../../src/i18n/provider";
@@ -18,6 +19,7 @@ export default function VersionDetailScreen() {
   const { user } = useAuth();
   const { projectUseCases, deviceId } = useAppServices();
   const { locale, t } = useI18n();
+  const { colors } = useTheme();
   const [version, setVersion] = useState<ProjectVersion | null>(null);
   const [tasks, setTasks] = useState<readonly ProjectTask[]>([]);
   const [targetDate, setTargetDate] = useState("");
@@ -148,7 +150,7 @@ export default function VersionDetailScreen() {
                         ),
                       )
                   }
-                  style={styles.task}
+                  style={[styles.task, { borderBottomColor: colors.border }]}
                 >
                   <StoneText variant="body">
                     {task.completed ? "☑" : "☐"} {task.text}
@@ -201,6 +203,5 @@ const styles = StyleSheet.create({
   task: {
     paddingVertical: spacing.sm,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#D6D2DD",
   },
 });

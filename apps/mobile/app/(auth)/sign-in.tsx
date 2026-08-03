@@ -1,15 +1,17 @@
 import { Link, router } from "expo-router";
 import { useState } from "react";
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet } from "react-native";
-import { ErrorState } from "../../src/components/states";
+import { StyleSheet, View } from "react-native";
+import { AuthNotice, AuthScaffold } from "../../src/components/auth-scaffold";
 import { StoneButton, StoneInput, StoneText } from "../../src/components/ui";
 import { spacing } from "../../src/design/tokens";
+import { useTheme } from "../../src/design/theme";
 import { useAuth } from "../../src/providers/auth-provider";
 import { useI18n } from "../../src/i18n/provider";
 
 export default function SignInScreen() {
   const { service } = useAuth();
   const { t } = useI18n();
+  const { colors } = useTheme();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -28,54 +30,60 @@ export default function SignInScreen() {
     }
   };
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-      style={styles.flex}
-    >
-      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-        <StoneText variant="display" style={styles.brand}>
-          Stone
-        </StoneText>
-        <StoneText variant="title1">{t("auth.welcomeBack")}</StoneText>
-        <StoneText variant="body" style={styles.secondary}>
-          {t("auth.welcomeDetail")}
-        </StoneText>
-        {error ? <ErrorState message={error} /> : null}
-        <StoneInput
-          label={t("auth.email")}
-          value={email}
-          onChangeText={setEmail}
-          autoCapitalize="none"
-          autoComplete="email"
-          keyboardType="email-address"
-        />
-        <StoneInput
-          label={t("auth.password")}
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-          autoComplete="password"
-        />
-        <StoneButton
-          label={busy ? t("auth.signingIn") : t("auth.signIn")}
-          onPress={() => void signIn()}
-          disabled={busy}
-        />
-        <Link href="/(auth)/reset-password" accessibilityRole="button" style={styles.link}>
+    <AuthScaffold title={t("auth.welcomeBack")} description={t("auth.welcomeDetail")}>
+      {error ? <AuthNotice message={error} tone="danger" /> : null}
+      <StoneInput
+        label={t("auth.email")}
+        value={email}
+        onChangeText={setEmail}
+        autoCapitalize="none"
+        autoComplete="email"
+        keyboardType="email-address"
+        icon="mail-outline"
+      />
+      <StoneInput
+        label={t("auth.password")}
+        value={password}
+        onChangeText={setPassword}
+        secureTextEntry
+        autoComplete="password"
+        icon="lock-closed-outline"
+      />
+      <StoneButton
+        label={busy ? t("auth.signingIn") : t("auth.signIn")}
+        onPress={() => void signIn()}
+        disabled={busy}
+      />
+      <View style={styles.links}>
+        <Link
+          href="/(auth)/reset-password"
+          accessibilityRole="button"
+          style={[styles.link, { color: colors.primaryText }]}
+        >
           {t("auth.forgotPassword")}
         </Link>
-        <Link href="/(auth)/sign-up" accessibilityRole="button" style={styles.link}>
+        <StoneText variant="bodySmall" tone="muted">
+          ·
+        </StoneText>
+        <Link
+          href="/(auth)/sign-up"
+          accessibilityRole="button"
+          style={[styles.link, { color: colors.primaryText }]}
+        >
           {t("auth.createAccount")}
         </Link>
-      </ScrollView>
-    </KeyboardAvoidingView>
+      </View>
+    </AuthScaffold>
   );
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1 },
-  container: { flexGrow: 1, justifyContent: "center", gap: spacing.lg, padding: spacing.xxxl },
-  brand: { marginBottom: spacing.lg },
-  secondary: { opacity: 0.75, marginBottom: spacing.lg },
-  link: { textAlign: "center", padding: spacing.sm, color: "#6F63E7", fontSize: 14 },
+  links: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    flexWrap: "wrap",
+    gap: spacing.sm,
+  },
+  link: { padding: spacing.sm, fontSize: 14, fontFamily: "Inter_600SemiBold" },
 });

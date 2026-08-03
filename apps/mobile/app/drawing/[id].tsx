@@ -22,14 +22,21 @@ import {
 import { ErrorState, LoadingState } from "../../src/components/states";
 import { Screen, StoneButton, StoneInput, StoneText } from "../../src/components/ui";
 import { useTheme } from "../../src/design/theme";
-import { spacing } from "../../src/design/tokens";
+import { colors as tokens, hairline, radii, spacing } from "../../src/design/tokens";
 import { InkCanvas, type InkCanvasHandle, type InkCanvasTool } from "../../src/drawings/InkCanvas";
 import { useAuth } from "../../src/providers/auth-provider";
 import { useAppServices } from "../../src/providers/app-provider";
 import type { Drawing } from "@stone/domain";
 import { useI18n } from "../../src/i18n/provider";
 
-const colors = ["#11111D", "#6F63E7", "#C95B67", "#2F9E68", "#C58A1D", "#4B86C5"];
+const colors = [
+  tokens.brand.navy950,
+  tokens.brand.purple600,
+  tokens.status.danger,
+  tokens.status.success,
+  tokens.status.warning,
+  tokens.status.info,
+];
 const widths = [2, 4, 8, 14];
 
 export default function DrawingScreen() {
@@ -315,8 +322,8 @@ export default function DrawingScreen() {
             onPress={() => setColor(item)}
             style={[
               styles.swatch,
-              { backgroundColor: item },
-              color === item && styles.selectedSwatch,
+              { backgroundColor: item, borderColor: themeColors.border },
+              color === item && [styles.selectedSwatch, { borderColor: themeColors.primary }],
             ]}
           />
         ))}
@@ -329,7 +336,7 @@ export default function DrawingScreen() {
           />
         ))}
       </ScrollView>
-      <View style={styles.canvasWrap}>
+      <View style={[styles.canvasWrap, { borderColor: themeColors.border }]}>
         <InkCanvas
           ref={canvasRef}
           document={ink}
@@ -346,7 +353,9 @@ export default function DrawingScreen() {
       </View>
       {error ? (
         <Pressable accessibilityRole="button" onPress={() => setError(null)}>
-          <StoneText style={styles.error}>{error}</StoneText>
+          <StoneText tone="danger" style={styles.error}>
+            {error}
+          </StoneText>
         </Pressable>
       ) : null}
     </Screen>
@@ -387,14 +396,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
     paddingBottom: spacing.sm,
   },
-  swatch: { width: 36, height: 36, borderRadius: 18 },
-  selectedSwatch: { borderWidth: 4, borderColor: "#FFFFFF" },
+  swatch: { width: 36, height: 36, borderRadius: radii.pill, borderWidth: hairline },
+  selectedSwatch: { borderWidth: 3 },
   canvasWrap: {
     flex: 1,
     margin: spacing.sm,
-    borderWidth: 1,
-    borderColor: "#D4CEE3",
+    borderWidth: hairline,
+    borderRadius: radii.md,
     minHeight: 420,
   },
-  error: { padding: spacing.sm, color: "#C95B67" },
+  error: { padding: spacing.sm },
 });
