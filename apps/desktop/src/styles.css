@@ -1,55 +1,178 @@
+/*
+ * Stone desktop tokens.
+ *
+ * Colours are the locked palette from docs/04-DESIGN-SYSTEM.md — the same values
+ * the mobile app resolves from src/design/tokens.ts, so the two clients read as
+ * one product. Every semantic role is defined in BOTH themes; nothing here may
+ * reference a variable that a theme leaves undefined.
+ */
 :root {
   color-scheme: light;
   font-family: Inter, ui-sans-serif, system-ui, sans-serif;
-  color: #25243a;
-  background: #f7f7fb;
   font-synthesis: none;
+  -webkit-font-smoothing: antialiased;
+
+  /* Scales shared by both themes. */
+  --radius-xs: 6px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 22px;
+  --radius-pill: 999px;
+  --hairline: 1px;
+  --motion-fast: 120ms;
+  --motion-base: 180ms;
+  --ease: cubic-bezier(0.2, 0, 0, 1);
 }
-:root[data-theme="dark"] {
-  color-scheme: dark;
-  --bg: #171622;
-  --surface: #222132;
-  --surface-strong: #2b2940;
-  --text: #f5f3ff;
-  --muted: #aaa6bd;
-  --line: #3d3954;
-  --accent: #9d8bff;
-  --accent-strong: #c2b8ff;
-  --active-line: #aaa3ff14;
-  --selection: #8075f066;
-  --caret: #c2b8ff;
-  --focus-ring: #aaa3ff;
-}
-:root[data-theme="light"],
-:root {
-  --bg: #f7f7fb;
+
+/* Light is the default and the explicit opt-in. */
+:root,
+:root[data-theme="light"] {
+  --bg: #f7f6fc;
+  --bg-secondary: #f0eef8;
   --surface: #ffffff;
-  --surface-strong: #f0eff8;
-  --text: #25243a;
-  --muted: #76738a;
-  --line: #e4e1ef;
-  --accent: #6557c9;
-  --accent-strong: #4437a3;
+  --surface-raised: #fcfbff;
+  --surface-strong: #f0eef8;
+  --surface-sunken: #edebf6;
+  --text: #242231;
+  --text-secondary: #747184;
+  --muted: #9a96aa;
+  --line: #e5e1ef;
+  --line-strong: #d4cee3;
+  --accent: #6f63e7;
+  --accent-hover: #5f53dc;
+  --accent-strong: #5a4fd0;
+  --accent-soft: #edeaff;
+  --accent-soft-line: #d8d2ff;
+  --on-accent: #ffffff;
   --active-line: #8075f00d;
   --selection: #8075f04d;
   --caret: #5d4cd6;
   --focus-ring: #8075f0;
+  --shadow-sm: 0 1px 2px #241f4508, 0 2px 8px #241f450d;
+  --shadow-md: 0 6px 18px #241f4512;
+  --success: #1f7a4d;
+  --success-soft: #e4f4eb;
+  --success-line: #bfe3ce;
+  --warning: #96650b;
+  --warning-soft: #fbf0dc;
+  --warning-line: #ebd6a8;
+  --danger: #b0424f;
+  --danger-soft: #fbe9eb;
+  --danger-line: #efc7cd;
+  --info: #356b9f;
+  --info-soft: #e6f0fa;
+  --info-line: #c4daee;
 }
+
+/* Dark leans on borders rather than shadow, per the design system. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #11111d;
+  --bg-secondary: #161524;
+  --surface: #1b1a2d;
+  --surface-raised: #222039;
+  --surface-strong: #222039;
+  --surface-sunken: #141322;
+  --text: #f5f3ff;
+  --text-secondary: #b6b1c7;
+  --muted: #8e899f;
+  --line: #2d2a45;
+  --line-strong: #3b3758;
+  --accent: #6f63e7;
+  --accent-hover: #8075f0;
+  --accent-strong: #aaa3ff;
+  --accent-soft: #2a2748;
+  --accent-soft-line: #453f70;
+  --on-accent: #ffffff;
+  --active-line: #aaa3ff14;
+  --selection: #8075f066;
+  --caret: #c2b8ff;
+  --focus-ring: #aaa3ff;
+  --shadow-sm: 0 1px 2px #0000003d, 0 2px 10px #00000029;
+  --shadow-md: 0 8px 24px #00000047;
+  --success: #7fd6a6;
+  --success-soft: #16301f;
+  --success-line: #27543a;
+  --warning: #e5be72;
+  --warning-soft: #332815;
+  --warning-line: #584426;
+  --danger: #f0a2ab;
+  --danger-soft: #341b21;
+  --danger-line: #5a2f38;
+  --info: #9cc5ec;
+  --info-soft: #182838;
+  --info-line: #2c4560;
+}
+
 @media (prefers-color-scheme: dark) {
   :root[data-theme="system"] {
     color-scheme: dark;
-    --bg: #171622;
-    --surface: #222132;
-    --surface-strong: #2b2940;
+    --bg: #11111d;
+    --bg-secondary: #161524;
+    --surface: #1b1a2d;
+    --surface-raised: #222039;
+    --surface-strong: #222039;
+    --surface-sunken: #141322;
     --text: #f5f3ff;
-    --muted: #aaa6bd;
-    --line: #3d3954;
-    --accent: #9d8bff;
-    --accent-strong: #c2b8ff;
+    --text-secondary: #b6b1c7;
+    --muted: #8e899f;
+    --line: #2d2a45;
+    --line-strong: #3b3758;
+    --accent: #6f63e7;
+    --accent-hover: #8075f0;
+    --accent-strong: #aaa3ff;
+    --accent-soft: #2a2748;
+    --accent-soft-line: #453f70;
+    --on-accent: #ffffff;
     --active-line: #aaa3ff14;
     --selection: #8075f066;
     --caret: #c2b8ff;
     --focus-ring: #aaa3ff;
+    --shadow-sm: 0 1px 2px #0000003d, 0 2px 10px #00000029;
+    --shadow-md: 0 8px 24px #00000047;
+    --success: #7fd6a6;
+    --success-soft: #16301f;
+    --success-line: #27543a;
+    --warning: #e5be72;
+    --warning-soft: #332815;
+    --warning-line: #584426;
+    --danger: #f0a2ab;
+    --danger-soft: #341b21;
+    --danger-line: #5a2f38;
+    --info: #9cc5ec;
+    --info-soft: #182838;
+    --info-line: #2c4560;
+  }
+}
+
+/*
+ * Aliases. The Tasks, Calendar and Focus panels were written against these
+ * names, which no theme ever defined — every rule using them was invalid at
+ * computed-value time, so borders fell back to currentColor and backgrounds to
+ * transparent. Defining them here repairs those panels.
+ */
+:root {
+  --border: var(--line);
+  --primary: var(--accent);
+  --background: var(--bg);
+}
+
+::selection {
+  background: var(--selection);
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
   }
 }
 * {
@@ -82,15 +205,15 @@ button:disabled {
   display: grid;
   place-items: center;
   padding: 32px;
-  background: radial-gradient(circle at 20% 10%, #e9e5ff, transparent 36%), var(--bg);
+  background: var(--bg);
 }
 .auth-card {
   width: min(430px, 100%);
   padding: 42px;
   background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 22px;
-  box-shadow: 0 24px 80px #3a326b14;
+  border: var(--hairline) solid var(--line);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-md);
 }
 .brand-mark {
   width: 48px;
@@ -112,26 +235,33 @@ button:disabled {
 }
 .eyebrow {
   margin: 0 0 7px;
-  color: var(--accent);
+  color: var(--accent-strong);
   font-size: 11px;
   letter-spacing: 0.16em;
-  font-weight: 800;
+  font-weight: 700;
+  text-transform: uppercase;
 }
 h1,
 h2,
 p {
   margin-top: 0;
 }
+/* Large type is set tight; small type stays open. */
 h1 {
   margin-bottom: 0;
   font-size: 27px;
+  letter-spacing: -0.02em;
 }
 h2 {
   font-size: 18px;
+  letter-spacing: -0.015em;
+}
+h3 {
+  letter-spacing: -0.01em;
 }
 .muted,
 .hint {
-  color: var(--muted);
+  color: var(--text-secondary);
   line-height: 1.55;
 }
 .hint {
@@ -146,45 +276,70 @@ label {
   font-weight: 700;
 }
 input,
-select {
+select,
+textarea {
   width: 100%;
   padding: 12px 13px;
   color: var(--text);
   background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 9px;
+  border: var(--hairline) solid var(--line);
+  border-radius: var(--radius-sm);
   outline: none;
+  transition:
+    border-color var(--motion-fast) var(--ease),
+    box-shadow var(--motion-fast) var(--ease);
+}
+input::placeholder,
+textarea::placeholder {
+  color: var(--muted);
 }
 input:focus,
-select:focus {
+select:focus,
+textarea:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px #6557c922;
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 .primary-button,
 .secondary-button,
 .text-button,
 .icon-button {
-  border: 0;
-  border-radius: 8px;
+  border: var(--hairline) solid transparent;
+  border-radius: var(--radius-sm);
   padding: 11px 15px;
-  font-weight: 700;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  transition:
+    background var(--motion-fast) var(--ease),
+    border-color var(--motion-fast) var(--ease);
 }
 .primary-button {
-  color: white;
+  color: var(--on-accent);
   background: var(--accent);
+  border-color: var(--accent);
+  box-shadow: var(--shadow-sm);
 }
-.primary-button:hover {
-  background: var(--accent-strong);
+.primary-button:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
 }
 .secondary-button,
 .icon-button {
   color: var(--text);
+  background: var(--surface);
+  border-color: var(--line);
+}
+.secondary-button:hover:not(:disabled),
+.icon-button:hover:not(:disabled) {
   background: var(--surface-strong);
+  border-color: var(--line-strong);
 }
 .text-button {
   padding: 8px 0;
   color: var(--accent-strong);
   background: transparent;
+}
+.text-button:hover:not(:disabled) {
+  text-decoration: underline;
 }
 .compact {
   padding: 8px 12px;
@@ -200,9 +355,10 @@ select:focus {
 }
 .error-text {
   padding: 10px 12px;
-  color: #aa2e4c;
-  background: #ffe8ed;
-  border-radius: 8px;
+  color: var(--danger);
+  background: var(--danger-soft);
+  border: var(--hairline) solid var(--danger-line);
+  border-radius: var(--radius-sm);
   font-size: 13px;
 }
 .error-text p {
@@ -212,7 +368,7 @@ select:focus {
   color: inherit;
 }
 .success-text {
-  color: #26754d;
+  color: var(--success);
   font-size: 13px;
 }
 .app-shell {
@@ -273,10 +429,16 @@ nav {
   color: var(--accent);
   text-align: center;
 }
-.nav-button.active,
 .nav-button:hover {
   color: var(--text);
   background: var(--surface-strong);
+}
+.nav-button.active {
+  color: var(--accent-strong);
+  background: var(--accent-soft);
+}
+.nav-button.active span {
+  color: var(--accent-strong);
 }
 .sidebar-bottom {
   margin-top: auto;
@@ -292,7 +454,7 @@ nav {
   height: 7px;
   margin-right: 5px;
   border-radius: 50%;
-  background: #3fa879;
+  background: var(--success);
 }
 .content {
   display: grid;
@@ -334,8 +496,9 @@ nav {
   height: 100%;
   overflow: hidden;
   background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 14px;
+  border: var(--hairline) solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
 }
 .document-list {
   border-right: 1px solid var(--line);
@@ -363,9 +526,12 @@ nav {
   border: 0;
   border-bottom: 1px solid var(--line);
 }
-.document-row:hover,
-.document-row.selected {
+.document-row:hover {
   background: var(--surface-strong);
+}
+.document-row.selected {
+  background: var(--accent-soft);
+  box-shadow: inset 3px 0 0 var(--accent);
 }
 .document-row strong {
   overflow: hidden;
@@ -492,10 +658,10 @@ nav {
 }
 .save-state-unsaved,
 .save-state-saving {
-  color: #9a6200;
+  color: var(--warning);
 }
 .save-state-error {
-  color: #aa2e4c;
+  color: var(--danger);
 }
 .projects-workspace {
   min-height: 0;
@@ -507,8 +673,9 @@ nav {
   margin-bottom: 16px;
   padding: 24px;
   background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 14px;
+  border: var(--hairline) solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
 }
 .project-intro h2 {
   margin-bottom: 8px;
@@ -549,11 +716,14 @@ nav {
 .today-kind {
   padding: 4px 8px;
   color: var(--accent-strong);
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-  border-radius: 999px;
+  background: var(--accent-soft);
+  border: var(--hairline) solid var(--accent-soft-line);
+  border-radius: var(--radius-pill);
   font-size: 10px;
-  font-weight: 800;
+  font-weight: 700;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .task-workspace {
@@ -610,9 +780,13 @@ nav {
   padding: 0 14px;
 }
 
+.task-filters button:hover {
+  border-color: var(--line-strong);
+}
 .task-filters button.selected {
-  border-color: var(--primary);
-  background: var(--active-line);
+  color: var(--accent-strong);
+  border-color: var(--accent-soft-line);
+  background: var(--accent-soft);
 }
 
 .task-list {
@@ -621,24 +795,54 @@ nav {
 }
 
 .task-list-row {
-  border: 1px solid var(--border);
-  border-radius: 12px;
+  position: relative;
+  border: var(--hairline) solid var(--line);
+  border-radius: var(--radius-md);
   padding: 8px;
   background: var(--surface);
+  transition: border-color var(--motion-fast) var(--ease);
+}
+
+.task-list-row:hover {
+  border-color: var(--line-strong);
 }
 
 .task-list-row.selected {
-  border-color: var(--primary);
+  border-color: var(--accent-soft-line);
+  background: var(--accent-soft);
 }
 
+/* 44px stays the hit target; the drawn box is 22px so rows do not read as boxy. */
 .task-checkbox {
   width: 44px;
   height: 44px;
   flex: 0 0 44px;
-  border: 2px solid var(--primary);
-  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
   background: transparent;
-  color: var(--text);
+}
+.task-checkbox-box {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: 1.5px solid var(--line-strong);
+  border-radius: var(--radius-xs);
+  color: var(--on-accent);
+  font-size: 14px;
+  line-height: 1;
+  transition:
+    border-color var(--motion-fast) var(--ease),
+    background var(--motion-fast) var(--ease);
+}
+.task-checkbox:hover .task-checkbox-box {
+  border-color: var(--accent);
+}
+.task-checkbox[aria-checked="true"] .task-checkbox-box {
+  background: var(--accent);
+  border-color: var(--accent);
 }
 
 .task-open {
@@ -733,8 +937,9 @@ nav {
 .today-card {
   padding: 22px;
   background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 14px;
+  border: var(--hairline) solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
 }
 .today-card h3 {
   margin: 0 0 14px;
@@ -765,17 +970,18 @@ nav {
   color: var(--muted);
 }
 .today-kind-blocker {
-  color: #a73e55;
-  background: #c95b6717;
+  color: var(--danger);
+  background: var(--danger-soft);
 }
 .today-kind-target {
-  color: #906000;
-  background: #c58a1d17;
+  color: var(--warning);
+  background: var(--warning-soft);
 }
 .conflict-banner {
   padding: 10px 17px;
-  color: #8b4a00;
-  background: #fff0d7;
+  color: var(--warning);
+  background: var(--warning-soft);
+  border-bottom: var(--hairline) solid var(--warning-line);
   font-size: 12px;
 }
 .empty-state,
@@ -818,8 +1024,9 @@ nav {
 .settings-card {
   padding: 24px;
   background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 14px;
+  border: var(--hairline) solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
 }
 .settings-panel > .github-panel {
   grid-column: 1 / -1;
@@ -951,16 +1158,16 @@ nav {
   flex: 1;
 }
 .result-cloned {
-  color: #26754d;
+  color: var(--success);
 }
 .result-failed {
-  color: #aa2e4c;
+  color: var(--danger);
 }
 .result-cancelled {
-  color: #8b4a00;
+  color: var(--warning);
 }
 .warning-text {
-  color: #8b4a00;
+  color: var(--warning);
   font-size: 11px;
 }
 .review-card pre {
@@ -1046,11 +1253,46 @@ nav {
   top: 0;
   z-index: 2;
   padding: 12px 0;
-  background: var(--background);
+  background: var(--bg);
+  border-bottom: var(--hairline) solid var(--line);
+}
+/* These buttons carry no utility class, so the toolbar styles them directly. */
+.calendar-toolbar button,
+.segmented button {
+  min-height: 36px;
+  padding: 0 13px;
+  color: var(--text);
+  background: var(--surface);
+  border: var(--hairline) solid var(--line);
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  transition:
+    background var(--motion-fast) var(--ease),
+    border-color var(--motion-fast) var(--ease);
+}
+.calendar-toolbar button:hover,
+.segmented button:hover {
+  background: var(--surface-strong);
+  border-color: var(--line-strong);
+}
+.segmented {
+  gap: 4px;
+  padding: 3px;
+  background: var(--surface-sunken);
+  border-radius: var(--radius-md);
+}
+.segmented button {
+  border-color: transparent;
+  background: transparent;
 }
 .segmented button[aria-pressed="true"] {
-  background: var(--primary);
-  color: white;
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+}
+.segmented button[aria-pressed="true"]:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
 }
 .calendar-grid {
   display: grid;

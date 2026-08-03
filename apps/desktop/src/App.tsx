@@ -935,7 +935,9 @@ function TaskPlanner({
                     })
                   }
                 >
-                  {task.state === "completed" ? "✓" : ""}
+                  <span className="task-checkbox-box" aria-hidden="true">
+                    {task.state === "completed" ? "✓" : ""}
+                  </span>
                 </button>
                 <button className="task-open" onClick={() => setSelected(task.id)}>
                   <strong>{task.title}</strong>
