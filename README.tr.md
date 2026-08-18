@@ -84,5 +84,5 @@ pnpm verify:i18n
 ## Katkı ve lisans
 
 Katkıdan önce [CONTRIBUTING.md](CONTRIBUTING.md), ürün sınırları ve manuel doğrulama açıklarını
-okuyun. Stone [MIT License](LICENSE) ile lisanslanır. Credential, kullanıcı içeriği veya yeniden
+okuyun. Stone [MPL-2.0 License](LICENSE) ile lisanslanır. Credential, kullanıcı içeriği veya yeniden
 dağıtım hakkı olmayan varlıkları commit etmeyin.

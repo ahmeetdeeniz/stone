@@ -2,7 +2,7 @@
   "name": "@stone/desktop",
   "version": "0.1.0",
   "private": true,
-  "license": "MIT",
+  "license": "MPL-2.0",
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1",

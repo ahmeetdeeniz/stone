@@ -59,6 +59,6 @@ synthetic `.example.test` identities and unmistakable placeholders in tests.
 - Do not force-push shared branches, rewrite history, publish tags/releases, or change repository
   settings as part of an ordinary contribution.
 
-By contributing, you agree that your contribution is provided under Stone's MIT License and that
+By contributing, you agree that your contribution is provided under Stone's MPL-2.0 License and that
 you have the right to submit it. Do not contribute third-party assets without documented,
 compatible redistribution terms.

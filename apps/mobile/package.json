@@ -2,7 +2,7 @@
   "name": "@stone/mobile",
   "version": "0.1.0",
   "private": true,
-  "license": "MIT",
+  "license": "MPL-2.0",
   "main": "expo-router/entry",
   "scripts": {
     "pretypecheck": "node ../../scripts/generate-mobile-routes.mjs",

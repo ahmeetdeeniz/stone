@@ -234,6 +234,6 @@ implemented commitments.
 Read [CONTRIBUTING.md](CONTRIBUTING.md), [SUPPORT.md](SUPPORT.md), and
 [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md). Security reports follow [SECURITY.md](SECURITY.md).
 
-Stone source code is available under the [MIT License](LICENSE), copyright (c) 2026 ahmeetdeeniz.
+Stone source code is available under the [MPL-2.0 License](LICENSE), copyright (c) 2026 ahmeetdeeniz.
 Third-party dependencies and assets remain under their own licenses; see
 [third-party notices](THIRD_PARTY_NOTICES.md).

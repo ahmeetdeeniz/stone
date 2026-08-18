@@ -2,7 +2,7 @@
 
 ## Source release
 
-- [x] Root MIT License and package identifiers are present and verified.
+- [x] Root MPL-2.0 License and package identifiers are present and verified.
 - [x] Unlicensed brand font and raw supplied icon files are absent from the public tree and rewritten
       public history.
 - [ ] Private GitHub vulnerability reporting is enabled and tested.

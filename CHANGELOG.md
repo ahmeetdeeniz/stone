@@ -38,7 +38,7 @@ tag, so no release date or semantic version is claimed.
 - Provider-neutral MCP/OAuth service with scoped tools, revisions, idempotency, and audit records.
 - Public self-hosting, security, support, contribution, build, operations, and release-readiness
   documentation.
-- MIT licensing and a redistribution-safe public visual asset boundary using Inter, mobile
+- MPL-2.0 licensing and a redistribution-safe public visual asset boundary using Inter, mobile
   Ionicons, and desktop system-text glyphs.
 
 ### Known limitations

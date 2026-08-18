@@ -1,6 +1,6 @@
 # Third-party notices
 
-Stone's MIT License applies to Stone-authored source code, not to third-party dependencies or their
+Stone's MPL-2.0 License applies to Stone-authored source code, not to third-party dependencies or their
 assets. Dependency license texts remain available in their distributed packages and lockfile
 resolution.
 
