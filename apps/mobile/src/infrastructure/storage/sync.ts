@@ -364,9 +364,8 @@ export class SQLiteSyncStore implements SyncLocalStore {
       change.entityType,
       change.entityId,
     );
-    if (existingTombstoneRevision !== null && existingTombstoneRevision >= change.revision) {
-      return "ignored";
-    }
+    const wasAlreadyPurged =
+      existingTombstoneRevision !== null && existingTombstoneRevision >= change.revision;
 
     const drawingTargets = targets.filter(
       (target): target is { entityType: "drawing"; entityId: string } =>
@@ -409,7 +408,7 @@ export class SQLiteSyncStore implements SyncLocalStore {
         await this.purgeLocalEntityRows(change.ownerId, target.entityType, target.entityId);
       }
     });
-    return "applied";
+    return wasAlreadyPurged ? "ignored" : "applied";
   }
 
   private async drawingRows(

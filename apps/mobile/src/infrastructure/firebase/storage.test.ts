@@ -9,6 +9,9 @@ describe("drawing storage paths", () => {
     expect(storagePath("owner", "drawing", 2, "source.stoneink")).not.toBe(
       storagePath("owner", "drawing", 1, "source.stoneink"),
     );
+    expect(storagePath("owner", "drawing", 1, "source.stoneink", "device:drawing:1")).toBe(
+      "users/owner/drawings/drawing/revisions/1/device%3Adrawing%3A1/source.stoneink",
+    );
   });
 
   it("rejects invalid revisions", () => {
@@ -17,6 +20,9 @@ describe("drawing storage paths", () => {
     );
     expect(() => storagePath("owner", "drawing", Number.NaN, "preview.png")).toThrow(
       "positive safe integer",
+    );
+    expect(() => storagePath("owner", "drawing", 1, "preview.png", "")).toThrow(
+      "between 1 and 200",
     );
   });
 });

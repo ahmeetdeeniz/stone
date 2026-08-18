@@ -16,6 +16,9 @@ describe("Firebase Storage drawing boundary", () => {
     expect(rules).toContain(
       "match /users/{uid}/drawings/{drawingId}/revisions/{revision}/{fileName}",
     );
+    expect(rules).toContain(
+      "match /users/{uid}/drawings/{drawingId}/revisions/{revision}/{uploadId}/{fileName}",
+    );
     expect(rules).toContain("revision.matches('^[1-9][0-9]*$')");
     expect(rules).toContain("fileName in ['source.stoneink', 'preview.png']");
     expect(rules).toContain("allow read, delete: if owner()");
@@ -64,9 +67,18 @@ describe.runIf(Boolean(process.env.FIREBASE_STORAGE_EMULATOR_HOST))(
       const other = environment.authenticatedContext("other").storage();
       const bytes = new TextEncoder().encode('{"schema":1}');
       const path = "users/owner/drawings/drawing-1/revisions/1/source.stoneink";
+      const variantPath =
+        "users/owner/drawings/drawing-1/revisions/1/device%3Adrawing-1%3A1/source.stoneink";
 
       await assertSucceeds(
         uploadBytes(ref(owner, path), bytes, { contentType: "application/json" }),
+      );
+      await assertFails(uploadBytes(ref(owner, path), bytes, { contentType: "application/json" }));
+      await assertSucceeds(
+        uploadBytes(ref(owner, variantPath), bytes, { contentType: "application/json" }),
+      );
+      await assertFails(
+        uploadBytes(ref(owner, variantPath), bytes, { contentType: "application/json" }),
       );
       await assertFails(uploadBytes(ref(other, path), bytes, { contentType: "application/json" }));
       await assertFails(

@@ -112,7 +112,7 @@ export function compareSyncEventCursors(left: SyncEventCursor, right: SyncEventC
   return (
     left.serverUpdatedAtSeconds - right.serverUpdatedAtSeconds ||
     left.serverUpdatedAtNanoseconds - right.serverUpdatedAtNanoseconds ||
-    left.eventId.localeCompare(right.eventId)
+    compareEventIds(left.eventId, right.eventId)
   );
 }
 
@@ -326,4 +326,8 @@ function validateSyncEventCursor(cursor: SyncEventCursor): void {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function compareEventIds(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0;
 }

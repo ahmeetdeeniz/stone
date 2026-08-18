@@ -8,12 +8,32 @@ service firebase.storage {
       }
 
       allow read: if owner();
-      allow write: if owner()
+      allow create: if owner()
+        && resource == null
         && revision.matches('^[1-9][0-9]*$')
         && fileName in ['source.stoneink', 'preview.png']
         && request.resource.size <= 10 * 1024 * 1024
         && ((fileName == 'source.stoneink' && request.resource.contentType == 'application/json')
           || (fileName == 'preview.png' && request.resource.contentType == 'image/png'));
+      allow update: if false;
+      allow delete: if owner();
+    }
+    match /users/{uid}/drawings/{drawingId}/revisions/{revision}/{uploadId}/{fileName} {
+      function owner() {
+        return request.auth != null && request.auth.uid == uid;
+      }
+
+      allow read: if owner();
+      allow create: if owner()
+        && resource == null
+        && revision.matches('^[1-9][0-9]*$')
+        && uploadId.size() > 0
+        && uploadId.size() <= 200
+        && fileName in ['source.stoneink', 'preview.png']
+        && request.resource.size <= 10 * 1024 * 1024
+        && ((fileName == 'source.stoneink' && request.resource.contentType == 'application/json')
+          || (fileName == 'preview.png' && request.resource.contentType == 'image/png'));
+      allow update: if false;
       allow delete: if owner();
     }
     // Read-only compatibility for drawing metadata written before immutable revision paths.

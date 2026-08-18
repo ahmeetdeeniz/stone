@@ -3,7 +3,7 @@ export interface DrawingUploadLifecycle<T> {
   upload(): Promise<T>;
   commit(payload: T): Promise<void>;
   isCommitted(): Promise<boolean>;
-  deleteUploaded(): Promise<void>;
+  deleteUploaded(payload: T | undefined, operationError: unknown): Promise<void>;
   removeMarker(): Promise<void>;
 }
 
@@ -24,12 +24,13 @@ export class DrawingUploadCleanupError extends Error {
 export async function runDrawingUpload<T>(lifecycle: DrawingUploadLifecycle<T>): Promise<T> {
   await lifecycle.createPending();
   let committedInProcess = false;
+  let uploadedPayload: T | undefined;
   try {
-    const payload = await lifecycle.upload();
-    await lifecycle.commit(payload);
+    uploadedPayload = await lifecycle.upload();
+    await lifecycle.commit(uploadedPayload);
     committedInProcess = true;
     await lifecycle.removeMarker();
-    return payload;
+    return uploadedPayload;
   } catch (operationError) {
     if (committedInProcess) throw operationError;
 
@@ -42,7 +43,7 @@ export async function runDrawingUpload<T>(lifecycle: DrawingUploadLifecycle<T>):
     if (committedRemotely) throw operationError;
 
     try {
-      await lifecycle.deleteUploaded();
+      await lifecycle.deleteUploaded(uploadedPayload, operationError);
     } catch (cleanupError) {
       throw new DrawingUploadCleanupError(operationError, cleanupError);
     }

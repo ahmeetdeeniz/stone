@@ -16,7 +16,7 @@ import {
 } from "@stone/sync";
 import { getFirebaseConfig } from "./config";
 import { runDrawingUpload } from "./drawing-lifecycle";
-import { FirebaseDrawingStorage, storagePath } from "./storage";
+import { DrawingStorageUploadError, FirebaseDrawingStorage, storagePath } from "./storage";
 import type { DrawingStoragePayload } from "./storage";
 
 const PAGE_LIMIT = 200;
@@ -38,9 +38,9 @@ export class FirebaseSyncRemote implements SyncRemote {
       getFirebaseConfig();
       const database = firestore();
       await this.reconcileDrawingOperations(database, event.ownerId);
-      if (isPermanentDeletion(event)) return this.pushPermanentDeletion(database, event);
-      if (event.entityType === "drawing") return this.pushDrawing(database, event);
-      return this.pushEntity(database, event, null, null);
+      if (isPermanentDeletion(event)) return await this.pushPermanentDeletion(database, event);
+      if (event.entityType === "drawing") return await this.pushDrawing(database, event);
+      return await this.pushEntity(database, event, null, null);
     } catch (error) {
       if (error instanceof SyncRevisionConflictError) {
         if (error.details.remote.entityType === "drawing") {
@@ -84,7 +84,10 @@ export class FirebaseSyncRemote implements SyncRemote {
       const lastDocument = snapshot.docs.at(-1);
       const nextCursor = lastDocument
         ? encodeSyncEventCursor(
-            toSyncEventCursor(lastDocument.data().serverUpdatedAt, lastDocument.id),
+            toSyncEventCursor(
+              lastDocument.data().serverUpdatedAt,
+              String(lastDocument.data().eventId ?? lastDocument.id),
+            ),
           )
         : cursor;
       return {
@@ -149,13 +152,32 @@ export class FirebaseSyncRemote implements SyncRemote {
       event.entityId,
       event.revision,
       "source.stoneink",
+      event.id,
     );
     const previewStoragePath = storagePath(
       event.ownerId,
       event.entityId,
       event.revision,
       "preview.png",
+      event.id,
     );
+    const entityReference = this.entityReference(
+      database,
+      event.ownerId,
+      event.entityType,
+      event.entityId,
+    );
+    const existingEntity = await entityReference.get();
+    const existingData = existingEntity.data();
+    if (existingEntity.exists() && existingData?.idempotencyKey === event.idempotencyKey) {
+      await markerReference.delete();
+      return { kind: "acknowledged", serverUpdatedAt: new Date().toISOString() };
+    }
+    if (existingEntity.exists() && Number(existingData?.revision ?? 0) !== event.baseRevision) {
+      throw new SyncRevisionConflictError({
+        remote: toRemoteChange(event, existingData, existingEntity.id),
+      });
+    }
     await runDrawingUpload({
       createPending: async () => {
         await markerReference.set({
@@ -178,16 +200,27 @@ export class FirebaseSyncRemote implements SyncRemote {
           event.revision,
           String(event.payload.sourcePath),
           String(event.payload.previewPath),
+          event.id,
         ),
       commit: async (payload) => {
         await this.pushEntity(database, event, payload, markerReference);
       },
       isCommitted: async () => {
         const snapshot = await markerReference.get();
-        return snapshot.exists() && snapshot.data()?.state === "committed";
+        if (snapshot.exists() && snapshot.data()?.state === "committed") return true;
+        const entitySnapshot = await entityReference.get();
+        return (
+          entitySnapshot.exists() && entitySnapshot.data()?.idempotencyKey === event.idempotencyKey
+        );
       },
-      deleteUploaded: () =>
-        this.drawingStorage.deleteRevision(event.ownerId, event.entityId, event.revision),
+      deleteUploaded: (payload, operationError) => {
+        const uploadedFiles =
+          payload?.uploadedFiles ??
+          (operationError instanceof DrawingStorageUploadError ? operationError.uploadedFiles : []);
+        return this.drawingStorage.deleteStoragePaths(
+          uploadedFiles.map((file) => (file === "source" ? sourceStoragePath : previewStoragePath)),
+        );
+      },
       removeMarker: () => markerReference.delete(),
     });
     return { kind: "acknowledged", serverUpdatedAt: new Date().toISOString() };
@@ -436,7 +469,10 @@ export class FirebaseSyncRemote implements SyncRemote {
       }
       const createdAt = Date.parse(marker.createdAt);
       if (!Number.isFinite(createdAt) || Date.now() - createdAt >= DRAWING_UPLOAD_STALE_MS) {
-        await this.drawingStorage.deleteRevision(ownerId, marker.drawingId, marker.revision);
+        await this.drawingStorage.deleteStoragePaths([
+          marker.sourceStoragePath,
+          marker.previewStoragePath,
+        ]);
         await document.ref.delete();
       }
     }
@@ -607,6 +643,8 @@ function toDrawingOperation(
   operation: DrawingOperation;
   drawingId: string;
   revision: number;
+  sourceStoragePath: string;
+  previewStoragePath: string;
   state: DrawingOperationState;
   createdAt: string;
 } | null {
@@ -618,6 +656,8 @@ function toDrawingOperation(
     typeof data.drawingId !== "string" ||
     typeof data.revision !== "number" ||
     !Number.isSafeInteger(data.revision) ||
+    typeof data.sourceStoragePath !== "string" ||
+    typeof data.previewStoragePath !== "string" ||
     typeof data.createdAt !== "string"
   ) {
     return null;
@@ -628,6 +668,8 @@ function toDrawingOperation(
     operation: data.operation,
     drawingId: data.drawingId,
     revision: data.revision,
+    sourceStoragePath: data.sourceStoragePath,
+    previewStoragePath: data.previewStoragePath,
     state: data.state,
     createdAt: data.createdAt,
   };

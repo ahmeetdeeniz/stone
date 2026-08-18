@@ -9,9 +9,9 @@ const deletedFiles: string[] = [];
 vi.mock("expo-file-system", () => ({
   File: class {
     public readonly exists = true;
-    public constructor() {}
+    public constructor(private readonly path: string) {}
     public delete(): void {
-      deletedFiles.push("deleted");
+      deletedFiles.push(this.path);
     }
   },
 }));
@@ -112,6 +112,9 @@ describe("SQLite sync tombstones", () => {
       ),
     ).toMatchObject({ revision: 3 });
 
+    await expect(store.applyRemote(purge)).resolves.toBe("ignored");
+    expect(deletedFiles).toHaveLength(4);
+
     const resurrection: RemoteChange = {
       ...purge,
       eventId: "late-upsert",
@@ -138,6 +141,125 @@ describe("SQLite sync tombstones", () => {
     expect(await database.getFirstAsync("SELECT id FROM documents WHERE id = ?", "note-1")).toBe(
       null,
     );
+  });
+
+  it("turns the local permanent-delete action into durable purge events", async () => {
+    const raw = new DatabaseSync(":memory:");
+    databases.push(raw);
+    applyMigrations(raw);
+    const database = asStoneDatabase(raw);
+    await database.runAsync(
+      "INSERT INTO documents (id, owner_id, kind, title, markdown, is_pinned, revision, created_at, updated_at, deleted_at, updated_by_device_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      "note-1",
+      "owner-1",
+      "note",
+      "Trash me",
+      "# Trash me",
+      0,
+      2,
+      "2026-08-01T00:00:00.000Z",
+      "2026-08-02T00:00:00.000Z",
+      "2026-08-02T00:00:00.000Z",
+      "device-1",
+    );
+    await database.runAsync(
+      "INSERT INTO documents (id, owner_id, kind, title, markdown, is_pinned, revision, created_at, updated_at, updated_by_device_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      "note-2",
+      "owner-1",
+      "note",
+      "Keep me",
+      "# Keep me",
+      0,
+      1,
+      "2026-08-01T00:00:00.000Z",
+      "2026-08-01T00:00:00.000Z",
+      "device-1",
+    );
+    await database.runAsync(
+      "INSERT INTO drawings (id, owner_id, document_id, title, source_path, preview_path, source_sha256, preview_sha256, source_size, preview_size, revision, created_at, updated_at, updated_by_device_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      "drawing-1",
+      "owner-1",
+      "note-1",
+      "Sketch",
+      "file:///source-current.stoneink",
+      "file:///preview-current.png",
+      "source",
+      "preview",
+      1,
+      1,
+      3,
+      "2026-08-01T00:00:00.000Z",
+      "2026-08-02T00:00:00.000Z",
+      "device-1",
+    );
+    await database.runAsync(
+      "INSERT INTO drawing_revisions (id, drawing_id, revision, source_path, preview_path, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+      "drawing-1:2",
+      "drawing-1",
+      2,
+      "file:///source-old.stoneink",
+      "file:///preview-old.png",
+      "2026-08-01T00:00:00.000Z",
+    );
+    await database.runAsync(
+      "INSERT INTO outbox (id, entity_type, entity_id, operation, base_revision, payload_version, payload, created_at, idempotency_key, owner_id, revision, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      "old-note-event",
+      "document",
+      "note-1",
+      "upsert",
+      1,
+      1,
+      JSON.stringify({ id: "note-1" }),
+      "2026-08-01T00:00:00.000Z",
+      "old-note-event",
+      "owner-1",
+      2,
+      "pending",
+    );
+
+    const { SQLiteNoteRepository } = await import("./notes");
+    await new SQLiteNoteRepository(database).permanentlyDelete("owner-1", "note-1", "device-1");
+
+    expect(await database.getFirstAsync("SELECT id FROM documents WHERE id = ?", "note-1")).toBe(
+      null,
+    );
+    expect(
+      await database.getFirstAsync("SELECT id FROM documents WHERE id = ?", "note-2"),
+    ).toMatchObject({ id: "note-2" });
+    expect(await database.getFirstAsync("SELECT id FROM drawings WHERE id = ?", "drawing-1")).toBe(
+      null,
+    );
+    expect(deletedFiles).toEqual([
+      "file:///source-current.stoneink",
+      "file:///preview-current.png",
+      "file:///source-old.stoneink",
+      "file:///preview-old.png",
+    ]);
+    expect(
+      await database.getFirstAsync(
+        "SELECT revision FROM sync_tombstones WHERE owner_id = ? AND entity_type = ? AND entity_id = ?",
+        "owner-1",
+        "document",
+        "note-1",
+      ),
+    ).toMatchObject({ revision: 3 });
+    expect(
+      await database.getFirstAsync(
+        "SELECT revision FROM sync_tombstones WHERE owner_id = ? AND entity_type = ? AND entity_id = ?",
+        "owner-1",
+        "drawing",
+        "drawing-1",
+      ),
+    ).toMatchObject({ revision: 4 });
+    const events = await database.getAllAsync<{ entity_type: string; payload: string }>(
+      "SELECT entity_type, payload FROM outbox WHERE owner_id = ? ORDER BY entity_type",
+      "owner-1",
+    );
+    expect(events).toHaveLength(2);
+    expect(events.map((event) => event.entity_type)).toEqual(["document", "drawing"]);
+    const documentPayload = JSON.parse(events[0]?.payload ?? "{}") as Record<string, unknown>;
+    expect(documentPayload).toMatchObject({ purge: true });
+    expect(documentPayload.cascadeDrawingIds).toEqual(["drawing-1"]);
   });
 });
 

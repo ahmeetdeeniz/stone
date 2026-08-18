@@ -4,11 +4,27 @@ import { storagePath } from "./storage-path";
 
 export { storagePath } from "./storage-path";
 
+export type DrawingStorageFile = "source" | "preview";
+
 export interface DrawingStoragePayload {
   sourcePath: string;
   previewPath: string;
   sourceStoragePath: string;
   previewStoragePath: string;
+}
+
+export interface DrawingStorageUploadPayload extends DrawingStoragePayload {
+  uploadedFiles: readonly DrawingStorageFile[];
+}
+
+export class DrawingStorageUploadError extends Error {
+  public constructor(
+    public readonly cause: unknown,
+    public readonly uploadedFiles: readonly DrawingStorageFile[],
+  ) {
+    super(`Drawing storage upload failed: ${errorMessage(cause)}`);
+    this.name = "DrawingStorageUploadError";
+  }
 }
 
 export class FirebaseDrawingStorage {
@@ -18,12 +34,28 @@ export class FirebaseDrawingStorage {
     revision: number,
     sourcePath: string,
     previewPath: string,
-  ): Promise<DrawingStoragePayload> {
-    const sourceStoragePath = storagePath(ownerId, drawingId, revision, "source.stoneink");
-    const previewStoragePath = storagePath(ownerId, drawingId, revision, "preview.png");
-    await storage().ref(sourceStoragePath).putFile(sourcePath, { contentType: "application/json" });
-    await storage().ref(previewStoragePath).putFile(previewPath, { contentType: "image/png" });
-    return { sourcePath, previewPath, sourceStoragePath, previewStoragePath };
+    uploadId?: string,
+  ): Promise<DrawingStorageUploadPayload> {
+    const sourceStoragePath = storagePath(
+      ownerId,
+      drawingId,
+      revision,
+      "source.stoneink",
+      uploadId,
+    );
+    const previewStoragePath = storagePath(ownerId, drawingId, revision, "preview.png", uploadId);
+    const uploadedFiles: DrawingStorageFile[] = [];
+    try {
+      await storage()
+        .ref(sourceStoragePath)
+        .putFile(sourcePath, { contentType: "application/json" });
+      uploadedFiles.push("source");
+      await storage().ref(previewStoragePath).putFile(previewPath, { contentType: "image/png" });
+      uploadedFiles.push("preview");
+    } catch (error) {
+      throw new DrawingStorageUploadError(error, uploadedFiles);
+    }
+    return { sourcePath, previewPath, sourceStoragePath, previewStoragePath, uploadedFiles };
   }
 
   public async download(
@@ -59,10 +91,24 @@ export class FirebaseDrawingStorage {
   }
 
   public async deleteRevision(ownerId: string, drawingId: string, revision: number): Promise<void> {
-    await Promise.all([
-      deleteObject(storage().ref(storagePath(ownerId, drawingId, revision, "source.stoneink"))),
-      deleteObject(storage().ref(storagePath(ownerId, drawingId, revision, "preview.png"))),
-    ]);
+    await this.deleteRevisionFiles(ownerId, drawingId, revision, ["source", "preview"]);
+  }
+
+  public async deleteRevisionFiles(
+    ownerId: string,
+    drawingId: string,
+    revision: number,
+    files: readonly DrawingStorageFile[],
+  ): Promise<void> {
+    await Promise.all(
+      files.map((file) =>
+        deleteObject(storage().ref(storagePath(ownerId, drawingId, revision, fileName(file)))),
+      ),
+    );
+  }
+
+  public async deleteStoragePaths(paths: readonly string[]): Promise<void> {
+    await Promise.all(paths.map((path) => deleteObject(storage().ref(path))));
   }
 
   public async deleteDrawing(ownerId: string, drawingId: string): Promise<void> {
@@ -94,4 +140,12 @@ function isNotFoundError(error: unknown): boolean {
     "code" in error &&
     String(error.code) === "storage/object-not-found"
   );
+}
+
+function fileName(file: DrawingStorageFile): "source.stoneink" | "preview.png" {
+  return file === "source" ? "source.stoneink" : "preview.png";
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "unknown error";
 }
