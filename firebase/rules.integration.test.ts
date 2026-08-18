@@ -6,6 +6,7 @@ import {
   initializeTestEnvironment,
   type RulesTestEnvironment,
 } from "@firebase/rules-unit-testing";
+import { serverTimestamp } from "firebase/firestore";
 import { afterAll, beforeAll, describe, it } from "vitest";
 
 describe("Firestore owner isolation rules", () => {
@@ -69,7 +70,7 @@ describe("Firestore owner isolation rules", () => {
       payload: {},
       createdAt: "2026-01-01T00:00:00.000Z",
       idempotencyKey: "device:document:note-1:1",
-      serverUpdatedAt: new Date(),
+      serverUpdatedAt: serverTimestamp(),
     };
     await assertSucceeds(owner.doc("users/owner/syncEvents/event-1").set(event));
     await assertFails(owner.doc("users/owner/syncEvents/event-1").update({ revision: 2 }));

@@ -9,6 +9,9 @@ import {
   type SyncEntityType,
   type SyncOperation,
   type SyncRemote,
+  decodeSyncEventCursor,
+  encodeSyncEventCursor,
+  type SyncEventCursor,
 } from "@stone/sync";
 import { getFirebaseConfig } from "./config";
 import { FirebaseDrawingStorage } from "./storage";
@@ -113,18 +116,33 @@ export class FirebaseSyncRemote implements SyncRemote {
     try {
       getFirebaseConfig();
       const safeLimit = Math.max(1, Math.min(limit, PAGE_LIMIT));
+      const decodedCursor = decodeSyncEventCursor(cursor);
       let query = firestore()
         .collection("users")
         .doc(ownerId)
         .collection("syncEvents")
+        .orderBy("serverUpdatedAt", "asc")
         .orderBy("eventId", "asc")
         .limit(safeLimit);
-      if (cursor) query = query.startAfter(cursor);
+      if (decodedCursor) {
+        query = query.startAfter(
+          new firestore.Timestamp(
+            decodedCursor.serverUpdatedAtSeconds,
+            decodedCursor.serverUpdatedAtNanoseconds,
+          ),
+          decodedCursor.eventId,
+        );
+      }
       const snapshot = await query.get();
       const changes = await Promise.all(
         snapshot.docs.map((document) => this.hydrateDrawing(toRemoteChangeFromEvent(document))),
       );
-      const nextCursor = changes.at(-1)?.eventId ?? cursor;
+      const lastDocument = snapshot.docs.at(-1);
+      const nextCursor = lastDocument
+        ? encodeSyncEventCursor(
+            toSyncEventCursor(lastDocument.data().serverUpdatedAt, lastDocument.id),
+          )
+        : cursor;
       return {
         changes,
         cursor: nextCursor,
@@ -266,6 +284,35 @@ function toRemoteChangeFromEvent(
     createdAt: String(data.createdAt),
     idempotencyKey: String(data.idempotencyKey),
   };
+}
+
+function toSyncEventCursor(value: unknown, eventId: string): SyncEventCursor {
+  if (value instanceof firestore.Timestamp) {
+    return {
+      serverUpdatedAtSeconds: value.seconds,
+      serverUpdatedAtNanoseconds: value.nanoseconds,
+      eventId,
+    };
+  }
+  if (value instanceof Date) {
+    const timestamp = firestore.Timestamp.fromDate(value);
+    return {
+      serverUpdatedAtSeconds: timestamp.seconds,
+      serverUpdatedAtNanoseconds: timestamp.nanoseconds,
+      eventId,
+    };
+  }
+  if (typeof value === "object" && value !== null && !Array.isArray(value)) {
+    const candidate = value as { seconds?: unknown; nanoseconds?: unknown };
+    if (typeof candidate.seconds === "number" && typeof candidate.nanoseconds === "number") {
+      return {
+        serverUpdatedAtSeconds: candidate.seconds,
+        serverUpdatedAtNanoseconds: candidate.nanoseconds,
+        eventId,
+      };
+    }
+  }
+  throw new Error("Sync event is missing its serverUpdatedAt timestamp.");
 }
 
 function toRecord(value: unknown): Record<string, unknown> {

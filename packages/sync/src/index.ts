@@ -49,6 +49,55 @@ export interface RemotePage {
   hasMore: boolean;
 }
 
+export interface SyncEventCursor {
+  serverUpdatedAtSeconds: number;
+  serverUpdatedAtNanoseconds: number;
+  eventId: string;
+}
+
+const SYNC_EVENT_CURSOR_PREFIX = "stone-sync-cursor-v1:";
+
+/**
+ * Encodes the complete Firestore ordering position. The nanosecond component
+ * is retained because converting a Firestore Timestamp to Date would make
+ * two events in the same millisecond indistinguishable at a page boundary.
+ */
+export function encodeSyncEventCursor(cursor: SyncEventCursor): string {
+  validateSyncEventCursor(cursor);
+  return `${SYNC_EVENT_CURSOR_PREFIX}${encodeURIComponent(JSON.stringify(cursor))}`;
+}
+
+/**
+ * Returns null for a legacy eventId-only cursor. Callers must replay from the
+ * beginning under the new ordering rather than guessing a timestamp.
+ */
+export function decodeSyncEventCursor(value: string | null): SyncEventCursor | null {
+  if (!value?.startsWith(SYNC_EVENT_CURSOR_PREFIX)) return null;
+  try {
+    const parsed: unknown = JSON.parse(
+      decodeURIComponent(value.slice(SYNC_EVENT_CURSOR_PREFIX.length)),
+    );
+    if (!isRecord(parsed)) return null;
+    const cursor: SyncEventCursor = {
+      serverUpdatedAtSeconds: parsed.serverUpdatedAtSeconds as number,
+      serverUpdatedAtNanoseconds: parsed.serverUpdatedAtNanoseconds as number,
+      eventId: parsed.eventId as string,
+    };
+    validateSyncEventCursor(cursor);
+    return cursor;
+  } catch {
+    return null;
+  }
+}
+
+export function compareSyncEventCursors(left: SyncEventCursor, right: SyncEventCursor): number {
+  return (
+    left.serverUpdatedAtSeconds - right.serverUpdatedAtSeconds ||
+    left.serverUpdatedAtNanoseconds - right.serverUpdatedAtNanoseconds ||
+    left.eventId.localeCompare(right.eventId)
+  );
+}
+
 export interface RemoteWriteResult {
   kind: "acknowledged";
   serverUpdatedAt: string;
@@ -189,7 +238,13 @@ export class SyncEngine {
         pulled += 1;
         if (result === "conflict") conflicts += 1;
       }
-      if (page.cursor) {
+      if (page.changes.length > 0 && page.cursor === null) {
+        throw new SyncTransportError("Remote page did not include a cursor.");
+      }
+      if (page.changes.length > 0 && page.cursor === cursor) {
+        throw new SyncTransportError("Remote page cursor did not advance.");
+      }
+      if (page.cursor !== null) {
         await this.local.saveCursor(ownerId, page.cursor);
         cursor = page.cursor;
       }
@@ -237,4 +292,20 @@ export function mergeTextThreeWay(
 
 function toErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "Sync failed.";
+}
+
+function validateSyncEventCursor(cursor: SyncEventCursor): void {
+  if (
+    !Number.isSafeInteger(cursor.serverUpdatedAtSeconds) ||
+    !Number.isInteger(cursor.serverUpdatedAtNanoseconds) ||
+    cursor.serverUpdatedAtNanoseconds < 0 ||
+    cursor.serverUpdatedAtNanoseconds > 999_999_999 ||
+    cursor.eventId.length === 0
+  ) {
+    throw new Error("Invalid sync event cursor.");
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

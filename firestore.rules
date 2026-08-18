@@ -358,7 +358,8 @@ service cloud.firestore {
         && request.resource.data.payload is map
         && request.resource.data.payload.size() <= 40
         && request.resource.data.createdAt is string
-        && request.resource.data.serverUpdatedAt is timestamp;
+        && request.resource.data.serverUpdatedAt is timestamp
+        && request.resource.data.serverUpdatedAt == request.time;
     }
 
     match /users/{uid} {
