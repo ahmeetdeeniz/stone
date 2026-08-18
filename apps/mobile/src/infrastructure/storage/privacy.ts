@@ -43,6 +43,7 @@ export class SQLitePrivacyRepository {
         "versions",
         "conflicts",
         "outbox",
+        "sync_tombstones",
         "sync_state_cursors",
         "sync_state",
         "settings",

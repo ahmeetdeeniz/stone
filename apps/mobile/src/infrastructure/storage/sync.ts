@@ -5,8 +5,9 @@ import type {
   OutboxEvent,
   ApplyRemoteResult,
 } from "@stone/sync";
-import { SyncTransportError } from "@stone/sync";
+import { isPermanentDeletion, SyncTransportError } from "@stone/sync";
 import { extractTasks } from "@stone/markdown";
+import { File } from "expo-file-system";
 import type { StoneDatabase } from "./database";
 
 interface OutboxRow {
@@ -42,6 +43,13 @@ interface ConflictRow {
   resolution: string | null;
   created_at: string;
   resolved_at: string | null;
+}
+
+interface DrawingFileRow {
+  id: string;
+  revision: number;
+  source_path: string;
+  preview_path: string;
 }
 
 export interface LocalConflict {
@@ -99,6 +107,28 @@ export async function enqueueOutbox(
   return event;
 }
 
+export async function saveLocalTombstone(
+  database: StoneDatabase,
+  input: {
+    ownerId: string;
+    entityType: SyncEntityType;
+    entityId: string;
+    revision: number;
+    deletedAt: string;
+    createdAt: string;
+  },
+): Promise<void> {
+  await database.runAsync(
+    "INSERT INTO sync_tombstones (owner_id, entity_type, entity_id, revision, deleted_at, created_at) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(owner_id, entity_type, entity_id) DO UPDATE SET revision = CASE WHEN excluded.revision > sync_tombstones.revision THEN excluded.revision ELSE sync_tombstones.revision END, deleted_at = CASE WHEN excluded.revision >= sync_tombstones.revision THEN excluded.deleted_at ELSE sync_tombstones.deleted_at END",
+    input.ownerId,
+    input.entityType,
+    input.entityId,
+    input.revision,
+    input.deletedAt,
+    input.createdAt,
+  );
+}
+
 export class SQLiteSyncStore implements SyncLocalStore {
   public constructor(private readonly database: StoneDatabase) {}
 
@@ -138,6 +168,12 @@ export class SQLiteSyncStore implements SyncLocalStore {
   }
 
   public async applyRemote(change: RemoteChange): Promise<ApplyRemoteResult> {
+    if (isPermanentDeletion(change)) return this.applyPermanentDeletion(change);
+    if (
+      (await this.tombstoneRevision(change.ownerId, change.entityType, change.entityId)) !== null
+    ) {
+      return "ignored";
+    }
     const pending = await this.database.getFirstAsync<{
       id: string;
       base_revision: number;
@@ -316,7 +352,203 @@ export class SQLiteSyncStore implements SyncLocalStore {
     return row ?? { status: "saved", lastError: null, updatedAt: new Date(0).toISOString() };
   }
 
+  private async applyPermanentDeletion(change: RemoteChange): Promise<ApplyRemoteResult> {
+    const cascadeDrawingIds =
+      change.entityType === "document" ? stringArray(change.payload.cascadeDrawingIds) : [];
+    const targets: readonly { entityType: SyncEntityType; entityId: string }[] = [
+      { entityType: change.entityType, entityId: change.entityId },
+      ...cascadeDrawingIds.map((entityId) => ({ entityType: "drawing" as const, entityId })),
+    ];
+    const existingTombstoneRevision = await this.tombstoneRevision(
+      change.ownerId,
+      change.entityType,
+      change.entityId,
+    );
+    if (existingTombstoneRevision !== null && existingTombstoneRevision >= change.revision) {
+      return "ignored";
+    }
+
+    const drawingTargets = targets.filter(
+      (target): target is { entityType: "drawing"; entityId: string } =>
+        target.entityType === "drawing",
+    );
+    const drawingRows = await this.drawingRows(change.ownerId, drawingTargets);
+    const localFiles = new Set(
+      drawingRows.flatMap((drawing) => [drawing.source_path, drawing.preview_path]),
+    );
+    for (const path of localFiles) {
+      const file = new File(path);
+      if (file.exists) file.delete();
+    }
+
+    const deletedAt = stringValue(change.payload.deletedAt) || change.createdAt;
+    await this.database.withTransactionAsync(async () => {
+      for (const target of targets) {
+        const localRevision = await this.entityRevision(
+          change.ownerId,
+          target.entityType,
+          target.entityId,
+        );
+        await this.database.runAsync(
+          "DELETE FROM outbox WHERE owner_id = ? AND entity_type = ? AND entity_id = ?",
+          change.ownerId,
+          target.entityType,
+          target.entityId,
+        );
+        await saveLocalTombstone(this.database, {
+          ownerId: change.ownerId,
+          entityType: target.entityType,
+          entityId: target.entityId,
+          revision:
+            target.entityType === change.entityType
+              ? change.revision
+              : Math.max(change.revision, localRevision + 1),
+          deletedAt,
+          createdAt: change.createdAt,
+        });
+        await this.purgeLocalEntityRows(change.ownerId, target.entityType, target.entityId);
+      }
+    });
+    return "applied";
+  }
+
+  private async drawingRows(
+    ownerId: string,
+    targets: readonly { entityType: "drawing"; entityId: string }[],
+  ): Promise<readonly DrawingFileRow[]> {
+    if (targets.length === 0) return [];
+    const placeholders = targets.map(() => "?").join(", ");
+    return this.database.getAllAsync<DrawingFileRow>(
+      `SELECT id, revision, source_path, preview_path FROM drawings WHERE owner_id = ? AND id IN (${placeholders})
+       UNION
+       SELECT d.id, r.revision, r.source_path, r.preview_path
+       FROM drawing_revisions r JOIN drawings d ON d.id = r.drawing_id
+       WHERE d.owner_id = ? AND d.id IN (${placeholders})`,
+      ownerId,
+      ...targets.map((target) => target.entityId),
+      ownerId,
+      ...targets.map((target) => target.entityId),
+    );
+  }
+
+  private async purgeLocalEntityRows(
+    ownerId: string,
+    entityType: SyncEntityType,
+    entityId: string,
+  ): Promise<void> {
+    switch (entityType) {
+      case "document":
+        await this.database.runAsync(
+          "DELETE FROM project_blockers WHERE owner_id = ? AND task_id IN (SELECT id FROM tasks_index WHERE owner_id = ? AND document_id = ?)",
+          ownerId,
+          ownerId,
+          entityId,
+        );
+        await this.database.runAsync(
+          "DELETE FROM tasks_index WHERE owner_id = ? AND document_id = ?",
+          ownerId,
+          entityId,
+        );
+        await this.database.runAsync("DELETE FROM documents_fts WHERE document_id = ?", entityId);
+        await this.database.runAsync(
+          "DELETE FROM document_drafts WHERE owner_id = ? AND document_id = ?",
+          ownerId,
+          entityId,
+        );
+        await this.database.runAsync(
+          "DELETE FROM document_revisions WHERE document_id = ?",
+          entityId,
+        );
+        await this.database.runAsync(
+          "DELETE FROM documents WHERE owner_id = ? AND id = ?",
+          ownerId,
+          entityId,
+        );
+        return;
+      case "project":
+        await this.database.runAsync(
+          "DELETE FROM project_blockers WHERE owner_id = ? AND project_id = ?",
+          ownerId,
+          entityId,
+        );
+        await this.database.runAsync("DELETE FROM project_tags WHERE project_id = ?", entityId);
+        await this.database.runAsync(
+          "DELETE FROM projects WHERE owner_id = ? AND id = ?",
+          ownerId,
+          entityId,
+        );
+        return;
+      case "version":
+        await this.database.runAsync(
+          "DELETE FROM versions WHERE owner_id = ? AND id = ?",
+          ownerId,
+          entityId,
+        );
+        return;
+      case "task":
+        await this.database.runAsync(
+          "DELETE FROM task_occurrences WHERE owner_id = ? AND task_id = ?",
+          ownerId,
+          entityId,
+        );
+        await this.database.runAsync(
+          "DELETE FROM tasks WHERE owner_id = ? AND id = ?",
+          ownerId,
+          entityId,
+        );
+        return;
+      case "calendar":
+        await this.database.runAsync(
+          "DELETE FROM calendar_items WHERE owner_id = ? AND id = ?",
+          ownerId,
+          entityId,
+        );
+        return;
+      case "focus":
+        await this.database.runAsync(
+          "DELETE FROM focus_sessions WHERE owner_id = ? AND id = ?",
+          ownerId,
+          entityId,
+        );
+        return;
+      case "focus_goal":
+        await this.database.runAsync("DELETE FROM focus_goals WHERE owner_id = ?", ownerId);
+        return;
+      case "device":
+        await this.database.runAsync(
+          "DELETE FROM devices WHERE owner_id = ? AND id = ?",
+          ownerId,
+          entityId,
+        );
+        return;
+      case "settings":
+        await this.database.runAsync("DELETE FROM settings WHERE owner_id = ?", ownerId);
+        return;
+      case "drawing":
+        await this.database.runAsync(
+          "DELETE FROM drawing_revisions WHERE drawing_id = ?",
+          entityId,
+        );
+        await this.database.runAsync(
+          "DELETE FROM drawings WHERE owner_id = ? AND id = ?",
+          ownerId,
+          entityId,
+        );
+        return;
+    }
+  }
+
   private async localRevision(
+    ownerId: string,
+    entityType: SyncEntityType,
+    entityId: string,
+  ): Promise<number> {
+    const entityRevision = await this.entityRevision(ownerId, entityType, entityId);
+    const tombstoneRevision = await this.tombstoneRevision(ownerId, entityType, entityId);
+    return Math.max(entityRevision, tombstoneRevision ?? 0);
+  }
+
+  private async entityRevision(
     ownerId: string,
     entityType: SyncEntityType,
     entityId: string,
@@ -329,6 +561,20 @@ export class SQLiteSyncStore implements SyncLocalStore {
       entityId,
     );
     return row?.revision ?? 0;
+  }
+
+  private async tombstoneRevision(
+    ownerId: string,
+    entityType: SyncEntityType,
+    entityId: string,
+  ): Promise<number | null> {
+    const row = await this.database.getFirstAsync<{ revision: number }>(
+      "SELECT revision FROM sync_tombstones WHERE owner_id = ? AND entity_type = ? AND entity_id = ?",
+      ownerId,
+      entityType,
+      entityId,
+    );
+    return row?.revision ?? null;
   }
 
   private async recordConflict(
@@ -996,4 +1242,14 @@ function asText(value: unknown): string {
 
 function nullableText(value: unknown): string | null {
   return typeof value === "string" ? value : null;
+}
+
+function stringValue(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
+function stringArray(value: unknown): readonly string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : [];
 }

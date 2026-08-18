@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   detectRevisionConflict,
+  isPermanentDeletion,
   mergeTextThreeWay,
   retryDelayMs,
   SyncEngine,
@@ -13,6 +14,12 @@ import {
 } from "./index.js";
 
 describe("sync boundary", () => {
+  it("distinguishes durable permanent deletion events from soft deletes", () => {
+    expect(isPermanentDeletion({ operation: "delete", payload: { purge: true } })).toBe(true);
+    expect(isPermanentDeletion({ operation: "delete", payload: { deletedAt: "now" } })).toBe(false);
+    expect(isPermanentDeletion({ operation: "upsert", payload: { purge: true } })).toBe(false);
+  });
+
   it("detects revision mismatches instead of applying last-write-wins", () => {
     expect(detectRevisionConflict({ baseRevision: 2, remoteRevision: 3 })).toBe(true);
     expect(detectRevisionConflict({ baseRevision: 2, remoteRevision: 2 })).toBe(false);

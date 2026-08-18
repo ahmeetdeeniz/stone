@@ -8,8 +8,9 @@ import type {
 } from "@stone/domain";
 import { StorageError } from "@stone/domain";
 import { normalizeMarkdown } from "@stone/markdown";
+import { File } from "expo-file-system";
 import type { StoneDatabase } from "./database";
-import { enqueueOutbox } from "./sync";
+import { enqueueOutbox, saveLocalTombstone } from "./sync";
 import { reindexMarkdownTasks } from "./tasks";
 
 interface DocumentRow {
@@ -43,6 +44,18 @@ interface DraftRow {
   updated_at: string;
   selection_from: number;
   selection_to: number;
+}
+
+interface DrawingCascadeRow {
+  id: string;
+  revision: number;
+  source_path: string;
+  preview_path: string;
+}
+
+interface DrawingRevisionCascadeRow {
+  source_path: string;
+  preview_path: string;
 }
 
 export class SQLiteNoteRepository implements NoteRepository {
@@ -155,9 +168,119 @@ export class SQLiteNoteRepository implements NoteRepository {
     return this.update(ownerId, id, { deletedAt: null }, deviceId);
   }
 
-  public permanentlyDelete(ownerId: string, id: string): Promise<void> {
+  public permanentlyDelete(ownerId: string, id: string, deviceId: string): Promise<void> {
     return withStorageError(async () => {
+      const row = await this.database.getFirstAsync<DocumentRow>(
+        "SELECT id, owner_id, kind, title, markdown, path, project_id, is_pinned, revision, created_at, updated_at, deleted_at, updated_by_device_id FROM documents WHERE owner_id = ? AND id = ?",
+        ownerId,
+        id,
+      );
+      if (!row) return;
+      const current = toDocument(row);
+      const drawingRows = await this.database.getAllAsync<DrawingCascadeRow>(
+        "SELECT id, revision, source_path, preview_path FROM drawings WHERE owner_id = ? AND document_id = ?",
+        ownerId,
+        id,
+      );
+      const drawingRevisionRows = await this.database.getAllAsync<DrawingRevisionCascadeRow>(
+        "SELECT r.source_path, r.preview_path FROM drawing_revisions r JOIN drawings d ON d.id = r.drawing_id WHERE d.owner_id = ? AND d.document_id = ?",
+        ownerId,
+        id,
+      );
+      const deletedAt = new Date().toISOString();
+      const drawingIds = drawingRows.map((drawing) => drawing.id);
+      const localFiles = new Set(
+        [...drawingRows, ...drawingRevisionRows].flatMap((drawing) => [
+          drawing.source_path,
+          drawing.preview_path,
+        ]),
+      );
+      for (const path of localFiles) {
+        const file = new File(path);
+        if (file.exists) file.delete();
+      }
       await this.database.withTransactionAsync(async () => {
+        await this.database.runAsync(
+          "DELETE FROM outbox WHERE owner_id = ? AND entity_type = 'document' AND entity_id = ?",
+          ownerId,
+          id,
+        );
+        await saveLocalTombstone(this.database, {
+          ownerId,
+          entityType: "document",
+          entityId: id,
+          revision: current.revision + 1,
+          deletedAt,
+          createdAt: deletedAt,
+        });
+        await enqueueOutbox(this.database, {
+          ownerId,
+          entityType: "document",
+          entityId: id,
+          operation: "delete",
+          baseRevision: current.revision,
+          revision: current.revision + 1,
+          payloadVersion: 1,
+          payload: {
+            id,
+            ownerId,
+            revision: current.revision + 1,
+            deletedAt,
+            updatedAt: deletedAt,
+            updatedByDeviceId: deviceId,
+            purge: true,
+            cascadeDrawingIds: drawingIds,
+          },
+          createdAt: deletedAt,
+          idempotencyKey: `${deviceId}:document:${id}:purge:${current.revision + 1}`,
+        });
+        for (const drawing of drawingRows) {
+          const revision = drawing.revision + 1;
+          await this.database.runAsync(
+            "DELETE FROM outbox WHERE owner_id = ? AND entity_type = 'drawing' AND entity_id = ?",
+            ownerId,
+            drawing.id,
+          );
+          await saveLocalTombstone(this.database, {
+            ownerId,
+            entityType: "drawing",
+            entityId: drawing.id,
+            revision,
+            deletedAt,
+            createdAt: deletedAt,
+          });
+          await enqueueOutbox(this.database, {
+            ownerId,
+            entityType: "drawing",
+            entityId: drawing.id,
+            operation: "delete",
+            baseRevision: drawing.revision,
+            revision,
+            payloadVersion: 1,
+            payload: {
+              id: drawing.id,
+              ownerId,
+              revision,
+              deletedAt,
+              updatedAt: deletedAt,
+              updatedByDeviceId: deviceId,
+              purge: true,
+            },
+            createdAt: deletedAt,
+            idempotencyKey: `${deviceId}:drawing:${drawing.id}:purge:${revision}`,
+          });
+        }
+        await this.database.runAsync(
+          "DELETE FROM project_blockers WHERE owner_id = ? AND task_id IN (SELECT id FROM tasks_index WHERE owner_id = ? AND document_id = ?)",
+          ownerId,
+          ownerId,
+          id,
+        );
+        await this.database.runAsync(
+          "DELETE FROM tasks_index WHERE owner_id = ? AND document_id = ?",
+          ownerId,
+          id,
+        );
         await this.database.runAsync("DELETE FROM documents_fts WHERE document_id = ?", id);
         await this.database.runAsync(
           "DELETE FROM document_drafts WHERE owner_id = ? AND document_id = ?",
@@ -172,6 +295,16 @@ export class SQLiteNoteRepository implements NoteRepository {
         );
         await this.database.runAsync(
           "DELETE FROM documents WHERE owner_id = ? AND id = ?",
+          ownerId,
+          id,
+        );
+        await this.database.runAsync(
+          "DELETE FROM drawing_revisions WHERE drawing_id IN (SELECT id FROM drawings WHERE owner_id = ? AND document_id = ?)",
+          ownerId,
+          id,
+        );
+        await this.database.runAsync(
+          "DELETE FROM drawings WHERE owner_id = ? AND document_id = ?",
           ownerId,
           id,
         );

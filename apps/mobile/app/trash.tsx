@@ -44,7 +44,7 @@ export default function TrashScreen() {
       {
         text: t("common.permanentlyDelete"),
         style: "destructive",
-        onPress: () => void noteUseCases.permanentlyDelete(user.uid, note.id).then(load),
+        onPress: () => void noteUseCases.permanentlyDelete(user.uid, note.id, deviceId).then(load),
       },
     ]);
   };

@@ -13,6 +13,24 @@ export type SyncEntityType =
   | "drawing";
 export type SyncOperation = "upsert" | "delete";
 
+export interface PermanentDeletionPayload {
+  id: string;
+  ownerId: string;
+  revision: number;
+  deletedAt: string;
+  updatedAt: string;
+  updatedByDeviceId: string;
+  purge: true;
+  cascadeDrawingIds?: readonly string[];
+}
+
+export function isPermanentDeletion(input: {
+  operation: SyncOperation;
+  payload: Record<string, unknown>;
+}): boolean {
+  return input.operation === "delete" && input.payload.purge === true;
+}
+
 export interface OutboxEvent {
   id: string;
   ownerId: string;

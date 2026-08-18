@@ -37,7 +37,9 @@ describe("Firebase Storage drawing boundary", () => {
     );
     expect(remote).toContain("await this.drawingStorage.deleteOwnerDrawings(ownerId)");
     expect(storage).toContain("storage().ref(`users/${ownerId}/drawings`)");
-    expect(storage).toContain("await item.delete()");
+    expect(storage).toContain("await deleteObject(item)");
+    expect(storage).toContain("deleteRevision");
+    expect(storage).toContain("deleteDrawing");
   });
 });
 

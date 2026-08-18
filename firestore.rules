@@ -341,6 +341,49 @@ service cloud.firestore {
         && request.resource.data.lastEventId is string;
     }
 
+    function validDeletionTombstone(uid, tombstoneId) {
+      return signedIn(uid)
+        && request.resource.data.keys().hasOnly([
+          'id', 'ownerId', 'entityType', 'entityId', 'revision', 'deletedAt', 'createdAt',
+          'sourceEventId', 'cascadeDrawingIds'
+        ])
+        && request.resource.data.id == tombstoneId
+        && request.resource.data.ownerId == uid
+        && request.resource.data.entityType in [
+          'document', 'project', 'version', 'task', 'calendar', 'focus', 'focus_goal',
+          'device', 'settings', 'drawing'
+        ]
+        && request.resource.data.entityId is string
+        && request.resource.data.revision is int
+        && request.resource.data.revision > 0
+        && request.resource.data.deletedAt is string
+        && request.resource.data.createdAt is string
+        && request.resource.data.sourceEventId is string
+        && (!request.resource.data.keys().hasAny(['cascadeDrawingIds'])
+          || (request.resource.data.cascadeDrawingIds is list
+            && request.resource.data.cascadeDrawingIds.size() <= 100));
+    }
+
+    function validDrawingOperation(uid, operationId) {
+      return signedIn(uid)
+        && request.resource.data.keys().hasOnly([
+          'id', 'ownerId', 'operation', 'drawingId', 'revision', 'sourceStoragePath',
+          'previewStoragePath', 'state', 'createdAt', 'updatedAt'
+        ])
+        && request.resource.data.id == operationId
+        && request.resource.data.ownerId == uid
+        && request.resource.data.operation in ['upload', 'delete']
+        && request.resource.data.drawingId is string
+        && request.resource.data.revision is int
+        && request.resource.data.revision > 0
+        && request.resource.data.sourceStoragePath is string
+        && request.resource.data.previewStoragePath is string
+        && request.resource.data.state in ['pending', 'committed']
+        && request.resource.data.createdAt is string
+        && request.resource.data.updatedAt is timestamp
+        && request.resource.data.updatedAt == request.time;
+    }
+
     function validSyncEvent(uid) {
       return signedIn(uid)
         && request.resource.data.keys().hasOnly([
@@ -440,6 +483,29 @@ service cloud.firestore {
         allow read: if signedIn(uid);
         allow create: if validSyncEvent(uid);
         allow update: if false;
+        allow delete: if signedIn(uid) && resource.data.ownerId == uid;
+      }
+
+      match /deletionTombstones/{tombstoneId} {
+        allow read: if signedIn(uid);
+        allow create: if validDeletionTombstone(uid, tombstoneId);
+        allow update: if validDeletionTombstone(uid, tombstoneId)
+          && resource.data.ownerId == uid
+          && request.resource.data.entityType == resource.data.entityType
+          && request.resource.data.entityId == resource.data.entityId
+          && request.resource.data.revision >= resource.data.revision;
+        allow delete: if signedIn(uid) && resource.data.ownerId == uid;
+      }
+
+      match /drawingOperations/{operationId} {
+        allow read: if signedIn(uid);
+        allow create: if validDrawingOperation(uid, operationId);
+        allow update: if validDrawingOperation(uid, operationId)
+          && resource.data.ownerId == uid
+          && request.resource.data.operation == resource.data.operation
+          && request.resource.data.drawingId == resource.data.drawingId
+          && request.resource.data.revision == resource.data.revision
+          && request.resource.data.createdAt == resource.data.createdAt;
         allow delete: if signedIn(uid) && resource.data.ownerId == uid;
       }
 

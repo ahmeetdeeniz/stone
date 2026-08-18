@@ -147,6 +147,13 @@ export const migrations: readonly Migration[] = [
       "CREATE INDEX IF NOT EXISTS focus_owner_block_range_idx ON focus_sessions (owner_id, calendar_item_id, deleted_at, started_at)",
     ],
   },
+  {
+    version: 10,
+    statements: [
+      "CREATE TABLE IF NOT EXISTS sync_tombstones (owner_id TEXT NOT NULL, entity_type TEXT NOT NULL, entity_id TEXT NOT NULL, revision INTEGER NOT NULL, deleted_at TEXT NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY (owner_id, entity_type, entity_id))",
+      "CREATE INDEX IF NOT EXISTS sync_tombstones_owner_created_idx ON sync_tombstones (owner_id, created_at DESC)",
+    ],
+  },
 ];
 
 export const latestMigrationVersion = migrations.at(-1)?.version ?? 0;

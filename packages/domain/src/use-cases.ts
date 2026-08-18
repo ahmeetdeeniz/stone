@@ -151,8 +151,8 @@ export class NoteUseCases {
     return this.repository.restore(ownerId, id, deviceId);
   }
 
-  public permanentlyDelete(ownerId: string, id: string): Promise<void> {
-    return this.repository.permanentlyDelete(ownerId, id);
+  public permanentlyDelete(ownerId: string, id: string, deviceId: string): Promise<void> {
+    return this.repository.permanentlyDelete(ownerId, id, deviceId);
   }
 
   public revisions(ownerId: string, id: string) {

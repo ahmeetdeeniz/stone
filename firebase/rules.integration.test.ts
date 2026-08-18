@@ -79,6 +79,48 @@ describe("Firestore owner isolation rules", () => {
     );
   });
 
+  it("protects deletion tombstones and drawing cleanup markers by owner and revision", async () => {
+    const owner = environment.authenticatedContext("owner").firestore();
+    const other = environment.authenticatedContext("other").firestore();
+    const tombstone = owner.doc("users/owner/deletionTombstones/document:purged-note");
+    const tombstoneData = {
+      id: "document:purged-note",
+      ownerId: "owner",
+      entityType: "document",
+      entityId: "purged-note",
+      revision: 2,
+      deletedAt: "2026-08-01T00:00:00.000Z",
+      createdAt: "2026-08-01T00:00:00.000Z",
+      sourceEventId: "purge-event",
+      cascadeDrawingIds: ["drawing-1"],
+    };
+    await assertSucceeds(tombstone.set(tombstoneData));
+    await assertSucceeds(tombstone.update({ ...tombstoneData, revision: 3 }));
+    await assertFails(tombstone.update({ ...tombstoneData, revision: 2 }));
+    await assertFails(other.doc(tombstone.path).get());
+    await assertFails(tombstone.set({ ...tombstoneData, revision: 4, debug: true }));
+
+    const marker = owner.doc("users/owner/drawingOperations/delete:drawing-1");
+    const markerData = {
+      id: "delete:drawing-1",
+      ownerId: "owner",
+      operation: "delete",
+      drawingId: "drawing-1",
+      revision: 3,
+      sourceStoragePath: "",
+      previewStoragePath: "",
+      state: "pending",
+      createdAt: "2026-08-01T00:00:00.000Z",
+      updatedAt: serverTimestamp(),
+    };
+    await assertSucceeds(marker.set(markerData));
+    await assertSucceeds(
+      marker.update({ ...markerData, state: "committed", updatedAt: serverTimestamp() }),
+    );
+    await assertFails(other.doc(marker.path).get());
+    await assertFails(marker.set({ ...markerData, revision: 4, debug: true }));
+  });
+
   it("enforces owner identity and revisions for devices and settings", async () => {
     const owner = environment.authenticatedContext("owner").firestore();
     const device = owner.doc("users/owner/devices/device-1");

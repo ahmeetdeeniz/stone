@@ -521,7 +521,7 @@ export interface NoteRepository {
   setPinned(ownerId: string, id: string, pinned: boolean, deviceId: string): Promise<Document>;
   softDelete(ownerId: string, id: string, deviceId: string): Promise<Document>;
   restore(ownerId: string, id: string, deviceId: string): Promise<Document>;
-  permanentlyDelete(ownerId: string, id: string): Promise<void>;
+  permanentlyDelete(ownerId: string, id: string, deviceId: string): Promise<void>;
   revisions(ownerId: string, id: string): Promise<readonly DocumentRevision[]>;
   restoreRevision(
     ownerId: string,
