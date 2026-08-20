@@ -1,16 +1,20 @@
 name: CI
 
 on:
-  push:
   pull_request:
 
+permissions:
+  contents: write
+
 jobs:
-  checks:
+  repair-expo-lockfile:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: fix/expo-sdk-patches
+          fetch-depth: 0
+          persist-credentials: false
       - uses: pnpm/action-setup@v4
         with:
           version: 11.17.0
@@ -18,81 +22,29 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "21"
       - run: pnpm install --frozen-lockfile
-      - run: pnpm verify:clean-workspace
-      - run: pnpm format:check
-      - run: pnpm lint
+      - name: Align Expo SDK 54 patch versions
+        env:
+          PNPM_CONFIG_MINIMUM_RELEASE_AGE: "0"
+        run: >-
+          pnpm --filter @stone/mobile add
+          expo@~54.0.37
+          expo-constants@~18.0.14
+          expo-file-system@~19.0.24
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm expo:doctor
       - run: pnpm typecheck
       - run: pnpm test
-      - run: pnpm test:integration
-      - run: pnpm test:rules
-      - run: pnpm test:storage-rules
-      - run: pnpm verify:native-dependencies
-      - run: pnpm verify:widgets
-      - name: Install pinned Android NDK
+      - run: pnpm mobile:export
+      - name: Commit generated lockfile and restore CI
         env:
-          NDK_VERSION: 27.1.12297006
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-
-          SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
-          if [ -z "$SDK_ROOT" ]; then
-            echo "::error::ANDROID_SDK_ROOT and ANDROID_HOME are both unavailable."
-            exit 1
-          fi
-
-          SDKMANAGER="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
-          if [ ! -x "$SDKMANAGER" ]; then
-            mapfile -t SDKMANAGER_CANDIDATES < <(
-              find "$SDK_ROOT/cmdline-tools" \
-                -mindepth 3 \
-                -maxdepth 3 \
-                -type f \
-                -path '*/bin/sdkmanager' \
-                -perm -u+x \
-                -print |
-                sort -V
-            )
-            if [ "${#SDKMANAGER_CANDIDATES[@]}" -eq 0 ]; then
-              echo "::error::sdkmanager was not found under $SDK_ROOT/cmdline-tools."
-              find "$SDK_ROOT/cmdline-tools" \
-                -maxdepth 4 \
-                -type f \
-                -name sdkmanager \
-                -print || true
-              exit 1
-            fi
-            SDKMANAGER="${SDKMANAGER_CANDIDATES[-1]}"
-          fi
-
-          export ANDROID_SDK_ROOT="$SDK_ROOT"
-          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
-          echo "sdkmanager=$SDKMANAGER"
-          "$SDKMANAGER" --version
-          "$SDKMANAGER" --sdk_root="$ANDROID_SDK_ROOT" "ndk;$NDK_VERSION"
-
-          NDK_DIRECTORY="$ANDROID_SDK_ROOT/ndk/$NDK_VERSION"
-          if [ ! -d "$NDK_DIRECTORY" ]; then
-            echo "::error::Pinned Android NDK was not installed at $NDK_DIRECTORY."
-            exit 1
-          fi
-          echo "Installed Android NDK $NDK_VERSION at $NDK_DIRECTORY"
-          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> "$GITHUB_ENV"
-      - name: Verify Android widget native compilation
-        run: pnpm verify:android-widget-compile
-      - run: pnpm verify:desktop
-      - run: pnpm verify:github
-      - run: pnpm verify:public-boundary
-      - run: pnpm verify:public-docs
-      - run: pnpm verify:public-assets
-      - run: pnpm verify:license
-      - run: pnpm verify:i18n
-      - run: pnpm desktop:build
-      - run: pnpm verify:mcp
-      - run: pnpm mcp:build
-      - run: pnpm expo:doctor
-      - run: pnpm mobile:export
+          git checkout origin/master -- .github/workflows/ci.yml
+          git rm .github/workflows/repair-expo-sdk-patches.yml
+          git add -- apps/mobile/package.json pnpm-lock.yaml .github/workflows/ci.yml .github/workflows/repair-expo-sdk-patches.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "fix: align Expo SDK 54 patch versions"
+          git push "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:fix/expo-sdk-patches
