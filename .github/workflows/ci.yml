@@ -52,7 +52,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          git add -- apps/mobile/package.json pnpm-lock.yaml .github/workflows/ci.yml .github/workflows/repair-expo-sdk-patches.yml
+          git add -- apps/mobile/package.json pnpm-lock.yaml .github/workflows/ci.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -m "fix: align Expo SDK 54 patch versions"
