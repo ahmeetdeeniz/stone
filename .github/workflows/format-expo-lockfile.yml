@@ -1,0 +1,41 @@
+name: Format Expo lockfile repair
+
+on:
+  push:
+    branches:
+      - fix/expo-sdk-patches
+    paths:
+      - .github/workflows/format-expo-lockfile.yml
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/expo-sdk-patches
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.17.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec prettier --write pnpm-lock.yaml
+      - run: pnpm exec prettier --check pnpm-lock.yaml
+      - name: Commit formatted lockfile and remove repair workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git rm .github/workflows/format-expo-lockfile.yml
+          git add -- pnpm-lock.yaml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "chore: format regenerated Expo lockfile"
+          git push "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:fix/expo-sdk-patches
