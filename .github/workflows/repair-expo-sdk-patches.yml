@@ -1,3 +1,4 @@
+# One-shot branch repair; this file removes itself after a successful run.
 name: Repair Expo SDK patches
 
 on:
