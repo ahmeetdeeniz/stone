@@ -1,0 +1,44 @@
+name: Repair Dependabot lockfile
+
+on:
+  push:
+    branches:
+      - security/dependabot-hardening
+    paths:
+      - .github/workflows/repair-dependabot-lockfile.yml
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: security/dependabot-hardening
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.17.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Regenerate lockfile for security overrides
+        env:
+          PNPM_CONFIG_MINIMUM_RELEASE_AGE: "0"
+        run: pnpm install --lockfile-only --no-frozen-lockfile
+      - run: pnpm exec prettier --write pnpm-workspace.yaml pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - name: Commit regenerated lockfile and remove repair workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git rm .github/workflows/repair-dependabot-lockfile.yml
+          git add -- pnpm-workspace.yaml pnpm-lock.yaml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "fix: regenerate security-pinned lockfile"
+          git push "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:security/dependabot-hardening
