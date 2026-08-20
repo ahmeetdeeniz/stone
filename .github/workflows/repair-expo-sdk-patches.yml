@@ -28,11 +28,14 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Align Expo SDK 54 patch versions
+        env:
+          PNPM_CONFIG_MINIMUM_RELEASE_AGE: "0"
         run: >-
           pnpm --filter @stone/mobile add
           expo@~54.0.37
           expo-constants@~18.0.14
           expo-file-system@~19.0.24
+      - run: pnpm install --frozen-lockfile
       - run: pnpm expo:doctor
       - run: pnpm typecheck
       - run: pnpm test
