@@ -1,0 +1,49 @@
+name: Repair Expo SDK patches
+
+on:
+  push:
+    branches:
+      - fix/expo-sdk-patches
+    paths:
+      - .github/workflows/repair-expo-sdk-patches.yml
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/expo-sdk-patches
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.17.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Align Expo SDK 54 patch versions
+        run: >-
+          pnpm --filter @stone/mobile add
+          expo@~54.0.37
+          expo-constants@~18.0.14
+          expo-file-system@~19.0.24
+      - run: pnpm expo:doctor
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm mobile:export
+      - name: Commit generated package and lockfile changes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git rm .github/workflows/repair-expo-sdk-patches.yml
+          git add -- apps/mobile/package.json pnpm-lock.yaml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "fix: align Expo SDK 54 patch versions"
+          git push "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:fix/expo-sdk-patches
