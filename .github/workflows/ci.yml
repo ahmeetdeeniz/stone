@@ -40,6 +40,10 @@ jobs:
           rm -rf node_modules apps/*/node_modules packages/*/node_modules services/*/node_modules
           pnpm install --frozen-lockfile
       - run: pnpm expo:doctor
+      - name: Restore production CI before regression tests
+        run: |
+          git checkout origin/master -- .github/workflows/ci.yml
+          git rm .github/workflows/repair-expo-sdk-patches.yml
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm mobile:export
@@ -48,8 +52,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          git checkout origin/master -- .github/workflows/ci.yml
-          git rm .github/workflows/repair-expo-sdk-patches.yml
           git add -- apps/mobile/package.json pnpm-lock.yaml .github/workflows/ci.yml .github/workflows/repair-expo-sdk-patches.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
