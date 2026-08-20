@@ -31,7 +31,14 @@ jobs:
           expo@~54.0.37
           expo-constants@~18.0.14
           expo-file-system@~19.0.24
-      - run: pnpm install --frozen-lockfile
+      - name: Dedupe the updated Expo dependency graph
+        env:
+          PNPM_CONFIG_MINIMUM_RELEASE_AGE: "0"
+        run: pnpm dedupe
+      - name: Reinstall from the regenerated lockfile
+        run: |
+          rm -rf node_modules apps/*/node_modules packages/*/node_modules services/*/node_modules
+          pnpm install --frozen-lockfile
       - run: pnpm expo:doctor
       - run: pnpm typecheck
       - run: pnpm test
