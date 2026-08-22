@@ -8,7 +8,6 @@ import { hairline, spacing, typography } from "../../src/design/tokens";
 import { useI18n } from "../../src/i18n/provider";
 
 type TabIcon = { active: keyof typeof Ionicons.glyphMap; idle: keyof typeof Ionicons.glyphMap };
-type NativeTabIcon = { selected: string; idle: string };
 type TabName = "notes" | "projects" | "today" | "calendar" | "focus" | "settings";
 
 const tabNames: readonly TabName[] = ["notes", "projects", "today", "calendar", "focus", "settings"];
@@ -22,14 +21,14 @@ const icons: Readonly<Record<TabName, TabIcon>> = {
   settings: { active: "settings", idle: "settings-outline" },
 };
 
-const nativeIcons: Readonly<Record<TabName, NativeTabIcon>> = {
+const nativeIcons = {
   notes: { selected: "doc.text.fill", idle: "doc.text" },
   projects: { selected: "folder.fill", idle: "folder" },
   today: { selected: "sun.max.fill", idle: "sun.max" },
   calendar: { selected: "calendar", idle: "calendar" },
   focus: { selected: "timer", idle: "timer" },
   settings: { selected: "gearshape.fill", idle: "gearshape" },
-};
+} as const;
 
 export default function TabsLayout() {
   if (Platform.OS === "ios") return <IOSNativeTabs />;
