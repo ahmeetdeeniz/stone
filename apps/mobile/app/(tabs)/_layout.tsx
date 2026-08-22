@@ -10,7 +10,14 @@ import { useI18n } from "../../src/i18n/provider";
 type TabIcon = { active: keyof typeof Ionicons.glyphMap; idle: keyof typeof Ionicons.glyphMap };
 type TabName = "notes" | "projects" | "today" | "calendar" | "focus" | "settings";
 
-const tabNames: readonly TabName[] = ["notes", "projects", "today", "calendar", "focus", "settings"];
+const tabNames: readonly TabName[] = [
+  "notes",
+  "projects",
+  "today",
+  "calendar",
+  "focus",
+  "settings",
+];
 
 const icons: Readonly<Record<TabName, TabIcon>> = {
   notes: { active: "document-text", idle: "document-text-outline" },
