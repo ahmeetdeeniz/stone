@@ -1,0 +1,104 @@
+/* Stone 2026 brand refresh — warm surfaces built around the canonical #2e0702 oxblood. */
+:root,
+:root[data-theme="light"] {
+  --bg: #fbf7f5;
+  --bg-secondary: #f4ece8;
+  --surface: #fffdfc;
+  --surface-raised: #fffaf7;
+  --surface-strong: #f2e6e1;
+  --surface-sunken: #f0e2dc;
+  --text: #271b18;
+  --text-secondary: #745f59;
+  --muted: #9a8179;
+  --line: #e8d8d2;
+  --line-strong: #d9c2ba;
+  --accent: #2e0702;
+  --accent-hover: #4a0c05;
+  --accent-strong: #2e0702;
+  --accent-soft: #f3e3de;
+  --accent-soft-line: #d9b9af;
+  --on-accent: #ffffff;
+  --active-line: #2e07020d;
+  --selection: #2e07023d;
+  --caret: #2e0702;
+  --focus-ring: #6d1a0f;
+  --shadow-sm: 0 1px 2px #2e07020a, 0 2px 8px #2e070212;
+  --shadow-md: 0 6px 18px #2e07021a;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #160b09;
+  --bg-secondary: #1f100d;
+  --surface: #291510;
+  --surface-raised: #351a14;
+  --surface-strong: #351a14;
+  --surface-sunken: #120706;
+  --text: #fff7f4;
+  --text-secondary: #d8c0ba;
+  --muted: #a98981;
+  --line: #4a2821;
+  --line-strong: #62352b;
+  --accent: #2e0702;
+  --accent-hover: #5a1008;
+  --accent-strong: #f0b3a6;
+  --accent-soft: #3b1712;
+  --accent-soft-line: #643026;
+  --on-accent: #ffffff;
+  --active-line: #f0b3a614;
+  --selection: #a53c2b66;
+  --caret: #f0b3a6;
+  --focus-ring: #e58e7d;
+  --shadow-sm: 0 1px 2px #00000045, 0 2px 10px #00000033;
+  --shadow-md: 0 8px 24px #00000059;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root[data-theme="system"] {
+    color-scheme: dark;
+    --bg: #160b09;
+    --bg-secondary: #1f100d;
+    --surface: #291510;
+    --surface-raised: #351a14;
+    --surface-strong: #351a14;
+    --surface-sunken: #120706;
+    --text: #fff7f4;
+    --text-secondary: #d8c0ba;
+    --muted: #a98981;
+    --line: #4a2821;
+    --line-strong: #62352b;
+    --accent: #2e0702;
+    --accent-hover: #5a1008;
+    --accent-strong: #f0b3a6;
+    --accent-soft: #3b1712;
+    --accent-soft-line: #643026;
+    --on-accent: #ffffff;
+    --active-line: #f0b3a614;
+    --selection: #a53c2b66;
+    --caret: #f0b3a6;
+    --focus-ring: #e58e7d;
+    --shadow-sm: 0 1px 2px #00000045, 0 2px 10px #00000033;
+    --shadow-md: 0 8px 24px #00000059;
+  }
+}
+
+/* Replace the temporary S glyph with the production Stone mark without coupling the rest of the UI to asset markup. */
+.auth-card > .brand-mark,
+.sidebar-brand > .brand-mark {
+  background: transparent url("/stone-logo.png") center / contain no-repeat;
+  border-radius: 0;
+  color: transparent;
+  font-size: 0;
+  overflow: hidden;
+  text-indent: -9999px;
+}
+
+.sidebar-brand > .brand-mark.small {
+  width: 34px;
+  height: 34px;
+}
+
+.full-wordmark,
+.eyebrow {
+  color: var(--accent-strong);
+}

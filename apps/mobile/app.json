@@ -7,13 +7,23 @@
     "scheme": "stone",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    "icon": "./assets/icon.png",
+    "backgroundColor": "#2e0702",
+    "androidStatusBar": {
+      "backgroundColor": "#2e0702",
+      "barStyle": "light-content"
+    },
     "plugins": ["expo-router", "@react-native-firebase/app"],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.imtempra.stone"
     },
     "android": {
-      "package": "com.imtempra.stone"
+      "package": "com.imtempra.stone",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#2e0702"
+      }
     },
     "assetBundlePatterns": ["**/*"],
     "experiments": {

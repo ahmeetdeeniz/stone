@@ -1,6 +1,6 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import type { PropsWithChildren } from "react";
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from "react-native";
+import { Image, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StoneText } from "./ui";
 import { useTheme } from "../design/theme";
@@ -29,9 +29,12 @@ export function AuthScaffold({
         >
           <View style={styles.column}>
             <View style={styles.brand}>
-              <View style={[styles.mark, { backgroundColor: colors.primary }]}>
-                <Ionicons name="layers" size={22} color={colors.onPrimary} />
-              </View>
+              <Image
+                source={require("../../assets/icon.png")}
+                style={styles.mark}
+                resizeMode="contain"
+                accessibilityIgnoresInvertColors
+              />
               <StoneText variant="title2">Stone</StoneText>
             </View>
             <View style={styles.headings}>
@@ -78,11 +81,9 @@ const styles = StyleSheet.create({
   column: { width: "100%", maxWidth: 420, alignSelf: "center", gap: spacing.xxl },
   brand: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
   mark: {
-    width: 40,
-    height: 40,
+    width: 44,
+    height: 44,
     borderRadius: radii.md,
-    alignItems: "center",
-    justifyContent: "center",
   },
   headings: { gap: spacing.sm },
   card: {

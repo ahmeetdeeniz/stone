@@ -65,7 +65,7 @@ export function ThemeProvider({
         surfaceSunken: extras.surfaceSunken,
         surfacePressed: extras.surfacePressed,
         primary: colors.brand.purple600,
-        primaryPressed: mode === "dark" ? colors.brand.purple500 : "#5F53DC",
+        primaryPressed: mode === "dark" ? colors.brand.purple500 : "#4A0C05",
         primarySoft: extras.accentSoft,
         primarySoftBorder: extras.accentSoftBorder,
         primaryText: extras.accentText,
