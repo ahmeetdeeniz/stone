@@ -2,6 +2,7 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import type { PropsWithChildren } from "react";
 import { Image, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import stoneIcon from "../../assets/icon.png";
 import { StoneText } from "./ui";
 import { useTheme } from "../design/theme";
 import { hairline, radii, spacing } from "../design/tokens";
@@ -30,7 +31,7 @@ export function AuthScaffold({
           <View style={styles.column}>
             <View style={styles.brand}>
               <Image
-                source={require("../../assets/icon.png")}
+                source={stoneIcon}
                 style={styles.mark}
                 resizeMode="contain"
                 accessibilityIgnoresInvertColors
