@@ -77,7 +77,17 @@ async function createAppServices(): Promise<AppServices> {
   await device.getOrCreate(deviceIdentity);
   const syncStore = new SQLiteSyncStore(database);
   const privacy = new SQLitePrivacyRepository(database);
-  const sync = async (ownerId: string): Promise<SyncRunResult> => {
+  // Auth changes, app resume, widgets and the background task can all request a sync at once;
+  // callers for the same owner share the in-flight run instead of pushing the outbox twice.
+  const inFlight = new Map<string, Promise<SyncRunResult>>();
+  const sync = (ownerId: string): Promise<SyncRunResult> => {
+    const running = inFlight.get(ownerId);
+    if (running) return running;
+    const run = runSync(ownerId).finally(() => inFlight.delete(ownerId));
+    inFlight.set(ownerId, run);
+    return run;
+  };
+  const runSync = async (ownerId: string): Promise<SyncRunResult> => {
     const engine = new SyncEngine(new FirebaseSyncRemote(), syncStore, {
       onStatus: (status) => {
         void syncStore.setState(ownerId, {

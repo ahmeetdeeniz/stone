@@ -10,6 +10,19 @@ tag, so no release date or semantic version is claimed.
 - Added bounded versioned snapshot/action bridges, validated deep links, revision-safe actions,
   counts-only default privacy, and native English/Turkish resources.
 
+### Fixed
+
+- Mobile startup no longer races two database initialisations (which could leave the app on an
+  error screen), shows the real error with a retry, builds workspace packages before
+  start/export/EAS, relies on native Firebase config, and targets iOS 16.1 for the widget module.
+- Windows edits now reach mobile: desktop sync writes the `syncEvents` log atomically with each
+  entity, completes note payloads required by the rules, refreshes the Firebase ID token, follows
+  Firestore pagination, and parks rule-rejected events instead of stopping sync.
+- Mobile sync runs once at a time per account, drains the whole outbox in one run, writes device
+  presence at most every six hours, and applies the saved theme at launch.
+- Desktop builds keep the branded icons instead of overwriting them, and "Open in VS Code/Codex"
+  works with the Windows `.cmd` launchers.
+
 ### Added
 
 - Local-first stopwatch, countdown and Pomodoro focus tracking across mobile and Windows, durable

@@ -1115,16 +1115,46 @@ fn keychain_delete() -> Result<(), String> {
 #[tauri::command]
 fn open_external(target: String, path: String) -> Result<(), String> {
     let canonical = canonical_file(&path)?;
-    let program = match target.as_str() {
-        "vscode" => "code",
-        "codex" => "codex",
-        _ => return Err("Bilinmeyen dış uygulama.".to_owned()),
-    };
-    std::process::Command::new(program)
-        .arg(canonical)
-        .spawn()
-        .map(|_| ())
-        .map_err(|error| format!("{program} başlatılamadı: {error}"))
+    spawn_external(&target, &canonical)
+}
+
+/// Editor CLIs are installed as `.cmd` shims on Windows (`code.cmd`, npm's `codex.cmd`), which
+/// `Command::new` does not resolve from a bare name; Rust escapes arguments for batch files.
+fn external_programs(target: &str) -> Result<&'static [&'static str], String> {
+    match (target, cfg!(windows)) {
+        ("vscode", true) => Ok(&["code.cmd", "code"]),
+        ("vscode", false) => Ok(&["code"]),
+        ("codex", true) => Ok(&["codex.cmd", "codex"]),
+        ("codex", false) => Ok(&["codex"]),
+        _ => Err("Bilinmeyen dış uygulama.".to_owned()),
+    }
+}
+
+/// `fs::canonicalize` returns `\\?\C:\...` verbatim paths on Windows, which editors do not
+/// treat as normal workspace paths.
+fn display_path(path: &Path) -> PathBuf {
+    let text = path.to_string_lossy();
+    match text.strip_prefix(r"\\?\") {
+        Some(stripped) if !stripped.starts_with("UNC\\") => PathBuf::from(stripped),
+        _ => path.to_path_buf(),
+    }
+}
+
+fn spawn_external(target: &str, path: &Path) -> Result<(), String> {
+    let programs = external_programs(target)?;
+    let path = display_path(path);
+    let mut last_error = None;
+    for program in programs {
+        match Command::new(program).arg(&path).spawn() {
+            Ok(_) => return Ok(()),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => last_error = Some(error),
+            Err(error) => return Err(format!("{program} başlatılamadı: {error}")),
+        }
+    }
+    let error = last_error
+        .map(|error| error.to_string())
+        .unwrap_or_default();
+    Err(format!("{} başlatılamadı: {error}", programs[0]))
 }
 
 fn public_session(session: &AuthSession) -> PublicAuthSession {
@@ -1285,9 +1315,11 @@ struct PendingOutbox {
     id: String,
     entity_type: String,
     entity_id: String,
+    operation: String,
     base_revision: i64,
     revision: i64,
     payload: serde_json::Value,
+    created_at: String,
 }
 
 fn pending_outbox(state: &Mutex<Database>, owner_id: &str) -> Result<Vec<PendingOutbox>, String> {
@@ -1300,7 +1332,7 @@ fn pending_outbox(state: &Mutex<Database>, owner_id: &str) -> Result<Vec<Pending
         .map_err(|error| error.to_string())?;
     let mut statement = db
         .connection
-        .prepare("SELECT id, entity_type, entity_id, base_revision, revision, payload FROM outbox WHERE owner_id = ?1 AND status = 'pending' ORDER BY created_at LIMIT 50")
+        .prepare("SELECT id, entity_type, entity_id, base_revision, revision, payload, operation, created_at FROM outbox WHERE owner_id = ?1 AND status = 'pending' ORDER BY created_at LIMIT 200")
         .map_err(|error| error.to_string())?;
     let rows = statement
         .query_map([owner_id], |row| {
@@ -1312,6 +1344,8 @@ fn pending_outbox(state: &Mutex<Database>, owner_id: &str) -> Result<Vec<Pending
                 base_revision: row.get(3)?,
                 revision: row.get(4)?,
                 payload: serde_json::from_str(&payload).unwrap_or_else(|_| serde_json::json!({})),
+                operation: row.get(6)?,
+                created_at: row.get(7)?,
             })
         })
         .map_err(|error| error.to_string())?;
@@ -1721,19 +1755,22 @@ async fn sync_now(
     if api_key.is_empty() || project_id.is_empty() {
         return Err("Firebase senkronizasyon yapılandırması eksik.".to_owned());
     }
-    let session = auth
-        .0
-        .lock()
-        .map_err(|_| "Oturum kilidi alınamadı.")?
-        .clone()
-        .ok_or_else(|| "Senkronizasyon için giriş yapmalısınız.".to_owned())?;
-    let pending = pending_outbox(&database, &session.uid)?;
-    let (device_id, client) = {
-        let db = database
-            .lock()
-            .map_err(|_| "Veritabanı kilidi alınamadı.")?;
-        (db.device_id.clone(), Client::new())
+    let client = Client::new();
+    let session = match fresh_session(&client, &api_key, &auth).await {
+        Ok(session) => session,
+        Err(SessionError::Offline) => return Ok(SyncSummary::offline(0, 0)),
+        Err(SessionError::Failed(message)) => return Err(message),
     };
+    let pending = pending_outbox(&database, &session.uid)?;
+    let device_id = database
+        .lock()
+        .map_err(|_| "Veritabanı kilidi alınamadı.")?
+        .device_id
+        .clone();
+    let documents_root = format!(
+        "projects/{project_id}/databases/(default)/documents/users/{}",
+        session.uid
+    );
     let mut pushed = 0;
     let mut conflicts = 0;
     for event in pending {
@@ -1745,178 +1782,142 @@ async fn sync_now(
             "focus_goal" => "focusGoals",
             _ => return Err("Desteklenmeyen desktop sync entity.".to_owned()),
         };
-        let url = format!("https://firestore.googleapis.com/v1/projects/{project_id}/databases/(default)/documents/users/{}/{}/{}", session.uid, collection, event.entity_id);
-        let response = match client.get(&url).bearer_auth(&session.id_token).send().await {
-            Ok(response) => response,
-            Err(_) => {
-                return Ok(SyncSummary {
-                    pushed,
-                    pulled: 0,
-                    conflicts,
-                    offline: true,
-                })
-            }
+        let entity_name = format!("{documents_root}/{collection}/{}", event.entity_id);
+        let remote = match get_firestore_document(&client, &entity_name, &session.id_token).await {
+            Ok(remote) => remote,
+            Err(FetchError::Offline) => return Ok(SyncSummary::offline(pushed, conflicts)),
+            Err(FetchError::Failed(message)) => return Err(message),
         };
-        let remote = if response.status() == reqwest::StatusCode::NOT_FOUND {
-            None
-        } else if response.status().is_success() {
-            Some(
-                response
-                    .json::<serde_json::Value>()
-                    .await
-                    .map_err(|error| error.to_string())?,
-            )
-        } else {
-            return Err(firebase_error(response).await);
-        };
+        let mut event = event;
+        if event.entity_type == "document" {
+            complete_document_payload(&database, &mut event.payload)?;
+        }
+        let fields = firestore_fields(&event.payload, event.revision, &session.uid, &device_id);
+        let event_id = fields
+            .get("idempotencyKey")
+            .and_then(|value| value.get("stringValue"))
+            .and_then(|value| value.as_str())
+            .unwrap_or_default()
+            .to_owned();
+        if remote
+            .as_ref()
+            .and_then(|remote| firestore_text(remote, "idempotencyKey"))
+            .is_some_and(|key| key == event_id)
+        {
+            // A previous run committed this event but did not record the acknowledgement.
+            acknowledge_outbox(&database, &event.id)?;
+            pushed += 1;
+            continue;
+        }
+        let tombstone_name = format!(
+            "{documents_root}/deletionTombstones/{}",
+            tombstone_document_id(&event.entity_type, &event.entity_id)
+        );
+        let tombstone =
+            match get_firestore_document(&client, &tombstone_name, &session.id_token).await {
+                Ok(tombstone) => tombstone,
+                Err(FetchError::Offline) => return Ok(SyncSummary::offline(pushed, conflicts)),
+                Err(FetchError::Failed(message)) => return Err(message),
+            };
         let remote_revision = remote.as_ref().map(firestore_revision).unwrap_or(0);
-        if remote_revision != event.base_revision {
-            let db = database
-                .lock()
-                .map_err(|_| "Veritabanı kilidi alınamadı.")?;
-            db.connection.execute("INSERT INTO conflicts(id, entity_id, local_payload, remote_payload, created_at, status) VALUES(?1, ?2, ?3, ?4, ?5, 'open')", params![Uuid::new_v4().to_string(), event.entity_id, event.payload.to_string(), remote.unwrap_or_else(|| serde_json::json!({})).to_string(), now()]).map_err(|error| error.to_string())?;
-            db.connection.execute("UPDATE outbox SET status = 'blocked', last_error = 'Revision conflict requires user resolution.' WHERE id = ?1", [&event.id]).map_err(|error| error.to_string())?;
+        if tombstone.is_some() || remote_revision != event.base_revision {
+            record_conflict(&database, &event, tombstone.or(remote))?;
             conflicts += 1;
             continue;
         }
-        let fields = firestore_fields(&event.payload, event.revision, &session.uid, &device_id);
-        let write = client
-            .patch(&url)
+        let precondition = match remote
+            .as_ref()
+            .and_then(|remote| remote.get("updateTime"))
+            .and_then(|value| value.as_str())
+        {
+            Some(update_time) => serde_json::json!({ "updateTime": update_time }),
+            None => serde_json::json!({ "exists": false }),
+        };
+        let sync_event = sync_event_fields(&event, &session.uid, &event_id, &fields);
+        // The entity write and its syncEvents entry commit atomically, matching the mobile
+        // client, so other devices pulling the event log see desktop edits.
+        let commit = serde_json::json!({
+            "writes": [
+                {
+                    "update": { "name": entity_name, "fields": fields },
+                    "currentDocument": precondition,
+                },
+                {
+                    "update": {
+                        "name": format!("{documents_root}/syncEvents/{event_id}"),
+                        "fields": sync_event,
+                    },
+                    "updateTransforms": [
+                        { "fieldPath": "serverUpdatedAt", "setToServerValue": "REQUEST_TIME" }
+                    ],
+                    "currentDocument": { "exists": false },
+                },
+            ]
+        });
+        let response = match client
+            .post(format!(
+                "{FIRESTORE_API}/projects/{project_id}/databases/(default)/documents:commit"
+            ))
             .bearer_auth(&session.id_token)
-            .json(&serde_json::json!({"fields": fields}))
+            .json(&commit)
             .send()
             .await
-            .map_err(|error| format!("Firebase bağlantısı başarısız: {error}"))?;
-        if !write.status().is_success() {
-            return Err(firebase_error(write).await);
+        {
+            Ok(response) => response,
+            Err(_) => return Ok(SyncSummary::offline(pushed, conflicts)),
+        };
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.json::<serde_json::Value>().await.ok();
+            let code = body
+                .as_ref()
+                .and_then(|body| body.pointer("/error/status"))
+                .and_then(|value| value.as_str())
+                .unwrap_or_default();
+            if is_precondition_failure(code) {
+                // Another device wrote this entity between our read and commit. Leave the event
+                // pending; the next sync re-reads the remote revision and records a conflict.
+                continue;
+            }
+            let message = body
+                .as_ref()
+                .and_then(|body| body.pointer("/error/message"))
+                .and_then(|value| value.as_str())
+                .map(str::to_owned)
+                .unwrap_or_else(|| status.to_string());
+            if is_rejected_write(code) {
+                // This event can never be accepted as-is; park it like the mobile engine does
+                // instead of stopping every later event and the pull.
+                block_outbox(&database, &event.id, &format!("Firebase: {message}"))?;
+                continue;
+            }
+            return Err(format!("Firebase: {message}"));
         }
-        let db = database
-            .lock()
-            .map_err(|_| "Veritabanı kilidi alınamadı.")?;
-        db.connection
-            .execute(
-                "UPDATE outbox SET status = 'acknowledged', last_error = NULL WHERE id = ?1",
-                [&event.id],
-            )
-            .map_err(|error| error.to_string())?;
+        acknowledge_outbox(&database, &event.id)?;
         pushed += 1;
     }
-    let collection_url = format!("https://firestore.googleapis.com/v1/projects/{project_id}/databases/(default)/documents/users/{}/documents?pageSize=100", session.uid);
-    let list_response = match client
-        .get(collection_url)
-        .bearer_auth(&session.id_token)
-        .send()
+
+    let pulls: [(&str, RemoteApplier); 5] = [
+        ("documents", apply_remote_documents),
+        ("tasks", apply_remote_tasks),
+        ("calendar", apply_remote_calendar),
+        ("focusSessions", apply_remote_focus),
+        ("focusGoals", apply_remote_focus_goals),
+    ];
+    let mut pulled = 0;
+    for (collection, apply) in pulls {
+        let documents = match list_firestore_collection(
+            &client,
+            &format!("{documents_root}/{collection}"),
+            &session.id_token,
+        )
         .await
-    {
-        Ok(response) => response,
-        Err(_) => {
-            return Ok(SyncSummary {
-                pushed,
-                pulled: 0,
-                conflicts,
-                offline: true,
-            })
-        }
-    };
-    let mut pulled = if list_response.status() == reqwest::StatusCode::NOT_FOUND {
-        0
-    } else if list_response.status().is_success() {
-        let body = list_response
-            .json::<serde_json::Value>()
-            .await
-            .map_err(|error| error.to_string())?;
-        let documents = body
-            .get("documents")
-            .and_then(|documents| documents.as_array())
-            .map(Vec::as_slice)
-            .unwrap_or(&[]);
-        apply_remote_documents(&database, documents)?
-    } else {
-        return Err(firebase_error(list_response).await);
-    };
-    let task_collection_url = format!("https://firestore.googleapis.com/v1/projects/{project_id}/databases/(default)/documents/users/{}/tasks?pageSize=100", session.uid);
-    let task_response = client
-        .get(task_collection_url)
-        .bearer_auth(&session.id_token)
-        .send()
-        .await
-        .map_err(|error| format!("Firebase bağlantısı başarısız: {error}"))?;
-    if task_response.status().is_success() {
-        let body = task_response
-            .json::<serde_json::Value>()
-            .await
-            .map_err(|error| error.to_string())?;
-        let tasks = body
-            .get("documents")
-            .and_then(|documents| documents.as_array())
-            .map(Vec::as_slice)
-            .unwrap_or(&[]);
-        pulled += apply_remote_tasks(&database, tasks)?;
-    } else if task_response.status() != reqwest::StatusCode::NOT_FOUND {
-        return Err(firebase_error(task_response).await);
-    }
-    let calendar_url = format!("https://firestore.googleapis.com/v1/projects/{project_id}/databases/(default)/documents/users/{}/calendar?pageSize=100", session.uid);
-    let calendar_response = client
-        .get(calendar_url)
-        .bearer_auth(&session.id_token)
-        .send()
-        .await
-        .map_err(|error| format!("Firebase connection failed: {error}"))?;
-    if calendar_response.status().is_success() {
-        let body = calendar_response
-            .json::<serde_json::Value>()
-            .await
-            .map_err(|error| error.to_string())?;
-        let items = body
-            .get("documents")
-            .and_then(|value| value.as_array())
-            .map(Vec::as_slice)
-            .unwrap_or(&[]);
-        pulled += apply_remote_calendar(&database, items)?;
-    } else if calendar_response.status() != reqwest::StatusCode::NOT_FOUND {
-        return Err(firebase_error(calendar_response).await);
-    }
-    let focus_url = format!("https://firestore.googleapis.com/v1/projects/{project_id}/databases/(default)/documents/users/{}/focusSessions?pageSize=100", session.uid);
-    let focus_response = client
-        .get(focus_url)
-        .bearer_auth(&session.id_token)
-        .send()
-        .await
-        .map_err(|error| format!("Firebase connection failed: {error}"))?;
-    if focus_response.status().is_success() {
-        let body = focus_response
-            .json::<serde_json::Value>()
-            .await
-            .map_err(|error| error.to_string())?;
-        let items = body
-            .get("documents")
-            .and_then(|value| value.as_array())
-            .map(Vec::as_slice)
-            .unwrap_or(&[]);
-        pulled += apply_remote_focus(&database, items)?;
-    } else if focus_response.status() != reqwest::StatusCode::NOT_FOUND {
-        return Err(firebase_error(focus_response).await);
-    }
-    let goal_url = format!("https://firestore.googleapis.com/v1/projects/{project_id}/databases/(default)/documents/users/{}/focusGoals?pageSize=10", session.uid);
-    let goal_response = client
-        .get(goal_url)
-        .bearer_auth(&session.id_token)
-        .send()
-        .await
-        .map_err(|error| format!("Firebase connection failed: {error}"))?;
-    if goal_response.status().is_success() {
-        let body = goal_response
-            .json::<serde_json::Value>()
-            .await
-            .map_err(|error| error.to_string())?;
-        let items = body
-            .get("documents")
-            .and_then(|value| value.as_array())
-            .map(Vec::as_slice)
-            .unwrap_or(&[]);
-        pulled += apply_remote_focus_goals(&database, items)?;
-    } else if goal_response.status() != reqwest::StatusCode::NOT_FOUND {
-        return Err(firebase_error(goal_response).await);
+        {
+            Ok(documents) => documents,
+            Err(FetchError::Offline) => return Ok(SyncSummary::offline(pushed, conflicts)),
+            Err(FetchError::Failed(message)) => return Err(message),
+        };
+        pulled += apply(&database, &documents)?;
     }
     Ok(SyncSummary {
         pushed,
@@ -1924,6 +1925,309 @@ async fn sync_now(
         conflicts,
         offline: false,
     })
+}
+
+const FIRESTORE_API: &str = "https://firestore.googleapis.com/v1";
+/// Refresh the Firebase ID token this long before it expires.
+const SESSION_REFRESH_MARGIN_SECONDS: i64 = 120;
+
+type RemoteApplier = fn(&Mutex<Database>, &[serde_json::Value]) -> Result<u32, String>;
+
+impl SyncSummary {
+    fn offline(pushed: u32, conflicts: u32) -> Self {
+        Self {
+            pushed,
+            pulled: 0,
+            conflicts,
+            offline: true,
+        }
+    }
+}
+
+enum FetchError {
+    Offline,
+    Failed(String),
+}
+
+enum SessionError {
+    Offline,
+    Failed(String),
+}
+
+/// Returns the signed-in session, exchanging the refresh token when the ID token (valid for one
+/// hour) is about to expire so long-running desktop sessions keep syncing.
+async fn fresh_session(
+    client: &Client,
+    api_key: &str,
+    auth: &AuthState,
+) -> Result<AuthSession, SessionError> {
+    let session = auth
+        .0
+        .lock()
+        .map_err(|_| SessionError::Failed("Oturum kilidi alınamadı.".to_owned()))?
+        .clone()
+        .ok_or_else(|| {
+            SessionError::Failed("Senkronizasyon için giriş yapmalısınız.".to_owned())
+        })?;
+    if !session_needs_refresh(session.expires_at, Utc::now().timestamp()) {
+        return Ok(session);
+    }
+    let response = client
+        .post(format!(
+            "https://securetoken.googleapis.com/v1/token?key={api_key}"
+        ))
+        .json(&serde_json::json!({
+            "grant_type": "refresh_token",
+            "refresh_token": session.refresh_token,
+        }))
+        .send()
+        .await
+        .map_err(|_| SessionError::Offline)?;
+    if !response.status().is_success() {
+        return Err(SessionError::Failed(firebase_error(response).await));
+    }
+    let refreshed = response
+        .json::<FirebaseRefreshResponse>()
+        .await
+        .map_err(|error| SessionError::Failed(error.to_string()))?;
+    let expires_in = refreshed.expires_in.parse::<i64>().unwrap_or(3600);
+    let next = AuthSession {
+        uid: refreshed.user_id,
+        email: session.email,
+        id_token: refreshed.id_token,
+        refresh_token: refreshed.refresh_token,
+        expires_at: Utc::now().timestamp() + expires_in,
+    };
+    keychain()
+        .and_then(|entry| {
+            entry
+                .set_password(&next.refresh_token)
+                .map_err(|error| error.to_string())
+        })
+        .map_err(SessionError::Failed)?;
+    *auth
+        .0
+        .lock()
+        .map_err(|_| SessionError::Failed("Oturum kilidi alınamadı.".to_owned()))? =
+        Some(next.clone());
+    Ok(next)
+}
+
+fn session_needs_refresh(expires_at: i64, now: i64) -> bool {
+    expires_at - now <= SESSION_REFRESH_MARGIN_SECONDS
+}
+
+async fn get_firestore_document(
+    client: &Client,
+    name: &str,
+    id_token: &str,
+) -> Result<Option<serde_json::Value>, FetchError> {
+    let response = client
+        .get(format!("{FIRESTORE_API}/{name}"))
+        .bearer_auth(id_token)
+        .send()
+        .await
+        .map_err(|_| FetchError::Offline)?;
+    if response.status() == reqwest::StatusCode::NOT_FOUND {
+        return Ok(None);
+    }
+    if !response.status().is_success() {
+        return Err(FetchError::Failed(firebase_error(response).await));
+    }
+    response
+        .json::<serde_json::Value>()
+        .await
+        .map(Some)
+        .map_err(|error| FetchError::Failed(error.to_string()))
+}
+
+/// Lists every document in a collection, following `nextPageToken` so collections larger than
+/// one page are not silently truncated.
+async fn list_firestore_collection(
+    client: &Client,
+    collection_name: &str,
+    id_token: &str,
+) -> Result<Vec<serde_json::Value>, FetchError> {
+    let mut documents = Vec::new();
+    let mut page_token: Option<String> = None;
+    loop {
+        let mut request = client
+            .get(format!("{FIRESTORE_API}/{collection_name}"))
+            .query(&[("pageSize", "300")])
+            .bearer_auth(id_token);
+        if let Some(token) = &page_token {
+            request = request.query(&[("pageToken", token)]);
+        }
+        let response = request.send().await.map_err(|_| FetchError::Offline)?;
+        if response.status() == reqwest::StatusCode::NOT_FOUND {
+            return Ok(documents);
+        }
+        if !response.status().is_success() {
+            return Err(FetchError::Failed(firebase_error(response).await));
+        }
+        let body = response
+            .json::<serde_json::Value>()
+            .await
+            .map_err(|error| FetchError::Failed(error.to_string()))?;
+        if let Some(page) = body.get("documents").and_then(|value| value.as_array()) {
+            documents.extend(page.iter().cloned());
+        }
+        match body.get("nextPageToken").and_then(|value| value.as_str()) {
+            Some(token) if !token.is_empty() => page_token = Some(token.to_owned()),
+            _ => return Ok(documents),
+        }
+    }
+}
+
+/// Mirrors `tombstoneDocumentId` in the mobile Firestore remote.
+fn tombstone_document_id(entity_type: &str, entity_id: &str) -> String {
+    let mut encoded = String::with_capacity(entity_id.len());
+    for byte in entity_id.bytes() {
+        match byte {
+            b'A'..=b'Z'
+            | b'a'..=b'z'
+            | b'0'..=b'9'
+            | b'-'
+            | b'_'
+            | b'.'
+            | b'!'
+            | b'~'
+            | b'*'
+            | b'\''
+            | b'('
+            | b')' => encoded.push(byte as char),
+            _ => encoded.push_str(&format!("%{byte:02X}")),
+        }
+    }
+    format!("{entity_type}:{encoded}")
+}
+
+/// Builds the `syncEvents` document the mobile client pulls (see `validSyncEvent` in
+/// firestore.rules); `serverUpdatedAt` is set by a REQUEST_TIME transform.
+fn sync_event_fields(
+    event: &PendingOutbox,
+    owner_id: &str,
+    event_id: &str,
+    entity_fields: &serde_json::Value,
+) -> serde_json::Value {
+    serde_json::json!({
+        "eventId": { "stringValue": event_id },
+        "ownerId": { "stringValue": owner_id },
+        "entityType": { "stringValue": event.entity_type },
+        "entityId": { "stringValue": event.entity_id },
+        "operation": { "stringValue": event.operation },
+        "revision": { "integerValue": event.revision.to_string() },
+        "payloadVersion": { "integerValue": "1" },
+        "payload": { "mapValue": { "fields": entity_fields } },
+        "createdAt": { "stringValue": event.created_at },
+        "idempotencyKey": { "stringValue": event_id },
+    })
+}
+
+/// gRPC status names Firestore returns when a commit's `currentDocument` precondition fails.
+fn is_precondition_failure(code: &str) -> bool {
+    matches!(
+        code,
+        "FAILED_PRECONDITION" | "ALREADY_EXISTS" | "NOT_FOUND" | "ABORTED"
+    )
+}
+
+/// Desktop outbox rows store a `DesktopDocument`, which lacks fields `validDocument` in
+/// firestore.rules requires (and mobile stores in NOT NULL columns); fill them from the local row.
+fn complete_document_payload(
+    database: &Mutex<Database>,
+    payload: &mut serde_json::Value,
+) -> Result<(), String> {
+    let Some(object) = payload.as_object_mut() else {
+        return Ok(());
+    };
+    let id = object
+        .get("id")
+        .and_then(|value| value.as_str())
+        .unwrap_or_default()
+        .to_owned();
+    let row: Option<(String, String, Option<String>)> = database
+        .lock()
+        .map_err(|_| "Veritabanı kilidi alınamadı.")?
+        .connection
+        .query_row(
+            "SELECT kind, created_at, deleted_at FROM documents WHERE id = ?1",
+            [&id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .optional()
+        .map_err(|error| error.to_string())?;
+    let updated_at = object
+        .get("updatedAt")
+        .cloned()
+        .unwrap_or_else(|| serde_json::Value::String(now()));
+    let (kind, created_at, deleted_at) = row.unwrap_or_else(|| {
+        (
+            "note".to_owned(),
+            updated_at.as_str().unwrap_or_default().to_owned(),
+            None,
+        )
+    });
+    object
+        .entry("kind")
+        .or_insert(serde_json::Value::String(kind));
+    object
+        .entry("createdAt")
+        .or_insert(serde_json::Value::String(created_at));
+    object
+        .entry("deletedAt")
+        .or_insert(deleted_at.map_or(serde_json::Value::Null, serde_json::Value::String));
+    object.entry("projectId").or_insert(serde_json::Value::Null);
+    object
+        .entry("isPinned")
+        .or_insert(serde_json::Value::Bool(false));
+    object.entry("path").or_insert(serde_json::Value::Null);
+    object.entry("updatedAt").or_insert(updated_at);
+    Ok(())
+}
+
+/// Statuses for a write that retrying unchanged will not fix (rules rejection, bad payload).
+fn is_rejected_write(code: &str) -> bool {
+    matches!(code, "PERMISSION_DENIED" | "INVALID_ARGUMENT")
+}
+
+fn block_outbox(database: &Mutex<Database>, event_id: &str, message: &str) -> Result<(), String> {
+    let db = database
+        .lock()
+        .map_err(|_| "Veritabanı kilidi alınamadı.")?;
+    db.connection
+        .execute(
+            "UPDATE outbox SET status = 'blocked', last_error = ?2 WHERE id = ?1",
+            params![event_id, message],
+        )
+        .map(|_| ())
+        .map_err(|error| error.to_string())
+}
+
+fn acknowledge_outbox(database: &Mutex<Database>, event_id: &str) -> Result<(), String> {
+    let db = database
+        .lock()
+        .map_err(|_| "Veritabanı kilidi alınamadı.")?;
+    db.connection
+        .execute(
+            "UPDATE outbox SET status = 'acknowledged', last_error = NULL WHERE id = ?1",
+            [event_id],
+        )
+        .map(|_| ())
+        .map_err(|error| error.to_string())
+}
+
+fn record_conflict(
+    database: &Mutex<Database>,
+    event: &PendingOutbox,
+    remote: Option<serde_json::Value>,
+) -> Result<(), String> {
+    let db = database
+        .lock()
+        .map_err(|_| "Veritabanı kilidi alınamadı.")?;
+    db.connection.execute("INSERT INTO conflicts(id, entity_id, local_payload, remote_payload, created_at, status) VALUES(?1, ?2, ?3, ?4, ?5, 'open')", params![Uuid::new_v4().to_string(), event.entity_id, event.payload.to_string(), remote.unwrap_or_else(|| serde_json::json!({})).to_string(), now()]).map_err(|error| error.to_string())?;
+    db.connection.execute("UPDATE outbox SET status = 'blocked', last_error = 'Revision conflict requires user resolution.' WHERE id = ?1", [&event.id]).map_err(|error| error.to_string())?;
+    Ok(())
 }
 
 fn github_token() -> Result<String, String> {
@@ -2263,16 +2567,7 @@ fn cancel_restore(
 fn open_external_path(target: String, path: String) -> Result<(), String> {
     let canonical =
         fs::canonicalize(&path).map_err(|error| format!("Klasör/dosya açılamadı: {error}"))?;
-    let program = match target.as_str() {
-        "vscode" => "code",
-        "codex" => "codex",
-        _ => return Err("Bilinmeyen dış uygulama.".to_owned()),
-    };
-    Command::new(program)
-        .arg(canonical)
-        .spawn()
-        .map(|_| ())
-        .map_err(|error| format!("{program} başlatılamadı: {error}"))
+    spawn_external(&target, &canonical)
 }
 
 #[tauri::command]
@@ -2295,5 +2590,127 @@ fn open_github_url(url: String) -> Result<(), String> {
             .spawn()
             .map(|_| ())
             .map_err(|error| error.to_string())
+    }
+}
+
+#[cfg(test)]
+mod sync_tests {
+    use super::*;
+
+    fn pending(entity_type: &str) -> PendingOutbox {
+        PendingOutbox {
+            id: "outbox-1".to_owned(),
+            entity_type: entity_type.to_owned(),
+            entity_id: "task-1".to_owned(),
+            operation: "upsert".to_owned(),
+            base_revision: 1,
+            revision: 2,
+            payload: serde_json::json!({ "id": "task-1", "title": "Ship" }),
+            created_at: "2026-01-01T00:00:00Z".to_owned(),
+        }
+    }
+
+    #[test]
+    fn refreshes_the_id_token_shortly_before_expiry() {
+        assert!(!session_needs_refresh(10_000, 10_000 - 3_600));
+        assert!(session_needs_refresh(10_000, 10_000 - 60));
+        assert!(session_needs_refresh(10_000, 10_001));
+    }
+
+    #[test]
+    fn tombstone_ids_match_the_mobile_encoding() {
+        assert_eq!(tombstone_document_id("task", "task-1"), "task:task-1");
+        assert_eq!(
+            tombstone_document_id("document", "a b/ç"),
+            "document:a%20b%2F%C3%A7"
+        );
+    }
+
+    #[test]
+    fn sync_events_only_use_fields_allowed_by_the_rules() {
+        let event = pending("task");
+        let entity = firestore_fields(&event.payload, event.revision, "owner", "device");
+        let fields = sync_event_fields(&event, "owner", "desktop:device:task-1:2", &entity);
+        let mut keys: Vec<_> = fields.as_object().unwrap().keys().cloned().collect();
+        keys.sort();
+        assert_eq!(
+            keys,
+            [
+                "createdAt",
+                "entityId",
+                "entityType",
+                "eventId",
+                "idempotencyKey",
+                "operation",
+                "ownerId",
+                "payload",
+                "payloadVersion",
+                "revision"
+            ]
+        );
+        assert_eq!(fields["payload"]["mapValue"]["fields"], entity);
+        assert_eq!(fields["revision"]["integerValue"], "2");
+        assert_eq!(
+            entity["idempotencyKey"]["stringValue"],
+            "desktop:device:task-1:2"
+        );
+    }
+
+    #[test]
+    fn completes_desktop_document_payloads_for_the_rules() {
+        let path = std::env::temp_dir().join(format!("stone-sync-test-{}.sqlite3", Uuid::new_v4()));
+        let database = Mutex::new(Database::open(path.clone()).unwrap());
+        database
+            .lock()
+            .unwrap()
+            .connection
+            .execute(
+                "INSERT INTO documents(id, kind, title, markdown, path, revision, updated_at, created_at, deleted_at, updated_by_device_id) VALUES('doc-1', 'note', 'T', 'M', NULL, 1, '2026-02-01T00:00:00Z', '2026-01-01T00:00:00Z', NULL, 'device')",
+                [],
+            )
+            .unwrap();
+        let mut payload = serde_json::json!({
+            "id": "doc-1",
+            "title": "T",
+            "markdown": "M",
+            "path": null,
+            "revision": 1,
+            "updatedAt": "2026-02-01T00:00:00Z"
+        });
+        complete_document_payload(&database, &mut payload).unwrap();
+        assert_eq!(payload["kind"], "note");
+        assert_eq!(payload["createdAt"], "2026-01-01T00:00:00Z");
+        assert_eq!(payload["isPinned"], false);
+        assert!(payload["projectId"].is_null());
+        assert!(payload["deletedAt"].is_null());
+        drop(database);
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn treats_only_precondition_statuses_as_retryable_conflicts() {
+        assert!(is_precondition_failure("FAILED_PRECONDITION"));
+        assert!(is_precondition_failure("ALREADY_EXISTS"));
+        assert!(!is_precondition_failure("PERMISSION_DENIED"));
+        assert!(!is_precondition_failure("INVALID_ARGUMENT"));
+        assert!(is_rejected_write("PERMISSION_DENIED"));
+        assert!(!is_rejected_write("UNAUTHENTICATED"));
+        assert!(!is_rejected_write("UNAVAILABLE"));
+    }
+
+    #[test]
+    fn strips_windows_verbatim_prefixes_for_editors() {
+        assert_eq!(
+            display_path(Path::new(r"\\?\C:\work\note.md")),
+            PathBuf::from(r"C:\work\note.md")
+        );
+        assert_eq!(
+            display_path(Path::new(r"\\?\UNC\server\share")),
+            PathBuf::from(r"\\?\UNC\server\share")
+        );
+        assert_eq!(
+            display_path(Path::new("/home/me/note.md")),
+            PathBuf::from("/home/me/note.md")
+        );
     }
 }

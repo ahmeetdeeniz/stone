@@ -6,12 +6,12 @@ import {
   useState,
   type PropsWithChildren,
 } from "react";
-import { ThemeProvider } from "../design/theme";
+import { ThemeProvider, useTheme } from "../design/theme";
 import { LoadingState } from "../components/states";
 import { ErrorState } from "../components/states";
 import type { AuthUser } from "../infrastructure/firebase/auth";
 import { getAppServices, type AppServices } from "../services/composition-root";
-import { AuthProvider } from "./auth-provider";
+import { AuthProvider, useAuth } from "./auth-provider";
 import { registerBackgroundSync } from "../services/background-sync";
 import { WidgetLifecycle } from "../widgets/widget-lifecycle";
 import { NativeDeepLinkRouter } from "../widgets/native-deep-links";
@@ -55,6 +55,7 @@ export function AppProvider({ children }: PropsWithChildren) {
       {services ? (
         <AppServicesContext.Provider value={services}>
           <AuthProvider onUserChanged={bindDeviceOwner} onSyncRequested={syncOwner}>
+            <ThemePreferenceLoader />
             <WidgetLifecycle />
             <NativeDeepLinkRouter />
             {children}
@@ -67,6 +68,30 @@ export function AppProvider({ children }: PropsWithChildren) {
       )}
     </ThemeProvider>
   );
+}
+
+/** Applies the signed-in user's saved theme at launch, not only once Settings is opened. */
+function ThemePreferenceLoader() {
+  const services = useAppServices();
+  const { user } = useAuth();
+  const { setPreference } = useTheme();
+  useEffect(() => {
+    if (!user) {
+      setPreference("system");
+      return;
+    }
+    let active = true;
+    void services.settingsUseCases
+      .load(user.uid)
+      .then((stored) => {
+        if (active) setPreference(stored.theme);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [services.settingsUseCases, setPreference, user]);
+  return null;
 }
 
 const AppServicesContext = createContext<AppServices | null>(null);

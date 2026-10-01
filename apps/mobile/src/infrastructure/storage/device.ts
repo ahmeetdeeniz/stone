@@ -7,6 +7,8 @@ import type { Device as DeviceEntity, DeviceRepository } from "@stone/domain";
 import type { StoneDatabase } from "./database";
 import { enqueueOutbox } from "./sync";
 
+const DEVICE_TOUCH_INTERVAL_MS = 6 * 60 * 60 * 1_000;
+
 export class SQLiteDeviceRepository implements DeviceRepository {
   public constructor(private readonly database: StoneDatabase) {}
 
@@ -40,6 +42,9 @@ export class SQLiteDeviceRepository implements DeviceRepository {
         id,
       );
       if (!current) return;
+      // Presence is advisory; avoid a synced write (and outbox event) on every app launch.
+      if (Date.parse(lastSeenAt) - Date.parse(current.last_seen_at) < DEVICE_TOUCH_INTERVAL_MS)
+        return;
       const revision = current.revision + 1;
       await this.database.runAsync(
         "UPDATE devices SET last_seen_at = ?, revision = ? WHERE id = ?",
