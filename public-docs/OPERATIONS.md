@@ -33,8 +33,8 @@ Never reuse another maintainer's Firebase or signing credentials.
 
 - **Desktop says Firebase is not configured:** create `apps/desktop/.env.local`, fill the three
   `VITE_FIREBASE_*` client values, and rebuild/restart.
-- **Mobile Firebase startup error:** fill every `EXPO_PUBLIC_FIREBASE_*` value, add matching native
-  config files, and use a Development Build.
+- **Mobile Firebase startup error:** add matching native config files (`google-services.json`,
+  `GoogleService-Info.plist`) and rebuild the Development Build.
 - **Permission denied:** confirm authentication, deployed owner-scoped rules, project ID, and
   application identifiers. Do not open the rules globally.
 - **GitHub connection unavailable:** set `VITE_GITHUB_CLIENT_ID`, enable Device Flow, rebuild, and

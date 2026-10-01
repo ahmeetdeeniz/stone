@@ -9,20 +9,10 @@ Each Stone installation uses a Firebase project controlled by its self-hoster.
 3. Create Firestore and Firebase Storage.
 4. Register Web, Android, and iOS clients.
 5. Keep Android/iOS identifiers aligned with `apps/mobile/app.json`.
-6. Copy `.env.example` to `.env` and fill every `EXPO_PUBLIC_FIREBASE_*` public client value.
-7. Download `google-services.json` and `GoogleService-Info.plist` into `apps/mobile/`. Do not track
-   either file.
-
-The mobile variables are required public client identifiers:
-
-```text
-EXPO_PUBLIC_FIREBASE_API_KEY
-EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN
-EXPO_PUBLIC_FIREBASE_PROJECT_ID
-EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET
-EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID
-EXPO_PUBLIC_FIREBASE_APP_ID
-```
+6. Download `google-services.json` and `GoogleService-Info.plist` into `apps/mobile/`. Do not track
+   either file. React Native Firebase reads them natively; mobile needs no `.env` values.
+7. For EAS builds, upload the same files as file environment variables named
+   `GOOGLE_SERVICES_JSON` and `GOOGLE_SERVICE_INFO_PLIST`; `apps/mobile/app.config.ts` picks them up.
 
 For desktop, copy `apps/desktop/.env.example` to `apps/desktop/.env.local` and set:
 

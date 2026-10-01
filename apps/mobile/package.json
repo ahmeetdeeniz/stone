@@ -5,14 +5,19 @@
   "license": "MPL-2.0",
   "main": "expo-router/entry",
   "scripts": {
+    "build:workspace-deps": "pnpm --filter @stone/domain --filter @stone/markdown --filter @stone/editor --filter @stone/sync --filter @stone/ink --filter @stone/i18n --filter @stone/widgets run typecheck",
     "pretypecheck": "node ../../scripts/generate-mobile-routes.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "prestart": "pnpm run build:workspace-deps",
     "start": "expo start --dev-client",
     "doctor": "expo-doctor",
-    "preexport": "pnpm --filter @stone/domain --filter @stone/markdown --filter @stone/editor --filter @stone/sync --filter @stone/ink --filter @stone/i18n run typecheck",
+    "preexport": "pnpm run build:workspace-deps",
     "export": "expo export --platform android --platform ios",
+    "preandroid": "pnpm run build:workspace-deps",
     "android": "expo run:android",
-    "ios": "expo run:ios"
+    "preios": "pnpm run build:workspace-deps",
+    "ios": "expo run:ios",
+    "eas-build-post-install": "pnpm run build:workspace-deps"
   },
   "dependencies": {
     "@expo-google-fonts/inter": "^0.4.1",
@@ -32,6 +37,7 @@
     "@stone/widgets": "workspace:*",
     "expo": "^54.0.37",
     "expo-background-task": "~1.0.10",
+    "expo-build-properties": "~1.0.10",
     "expo-constants": "^18.0.14",
     "expo-crypto": "^15.0.0",
     "expo-dev-client": "^6.0.0",
@@ -47,12 +53,12 @@
     "expo-status-bar": "^3.0.0",
     "expo-task-manager": "~14.0.9",
     "react": "19.1.0",
-    "react-reconciler": "0.31.0",
     "react-native": "0.81.5",
     "react-native-gesture-handler": "~2.28.0",
     "react-native-safe-area-context": "~5.6.0",
     "react-native-screens": "~4.16.0",
-    "react-native-webview": "13.15.0"
+    "react-native-webview": "13.15.0",
+    "react-reconciler": "0.31.0"
   },
   "devDependencies": {
     "expo-doctor": "^1.20.1"

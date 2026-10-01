@@ -1,6 +1,6 @@
 import auth, { type FirebaseAuthTypes } from "@react-native-firebase/auth";
 import { AuthError } from "@stone/domain";
-import { getFirebaseConfig } from "./config";
+import { assertFirebaseConfigured } from "./config";
 
 export interface AuthUser {
   uid: string;
@@ -21,7 +21,7 @@ function mapUser(user: FirebaseAuthTypes.User): AuthUser {
 }
 
 export function createFirebaseAuthService(): AuthService {
-  getFirebaseConfig();
+  assertFirebaseConfigured();
   const instance = auth();
   return {
     subscribe(listener) {

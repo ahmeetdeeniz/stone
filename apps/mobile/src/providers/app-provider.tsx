@@ -10,7 +10,7 @@ import { ThemeProvider } from "../design/theme";
 import { LoadingState } from "../components/states";
 import { ErrorState } from "../components/states";
 import type { AuthUser } from "../infrastructure/firebase/auth";
-import { createAppServices, type AppServices } from "../services/composition-root";
+import { getAppServices, type AppServices } from "../services/composition-root";
 import { AuthProvider } from "./auth-provider";
 import { registerBackgroundSync } from "../services/background-sync";
 import { WidgetLifecycle } from "../widgets/widget-lifecycle";
@@ -20,15 +20,27 @@ import { useI18n } from "../i18n/provider";
 export function AppProvider({ children }: PropsWithChildren) {
   const { t } = useI18n();
   const [services, setServices] = useState<AppServices | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{ message: string | null } | null>(null);
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
-    void createAppServices()
+    let active = true;
+    void getAppServices()
       .then((nextServices) => {
+        if (!active) return;
         setServices(nextServices);
         void registerBackgroundSync().catch(() => undefined);
       })
-      .catch(() => setError(t("app.unknownError")));
-  }, [t]);
+      .catch((reason: unknown) => {
+        if (active) setError({ message: reason instanceof Error ? reason.message : null });
+      });
+    return () => {
+      active = false;
+    };
+  }, [attempt]);
+  const retry = useCallback(() => {
+    setError(null);
+    setAttempt((value) => value + 1);
+  }, []);
   const bindDeviceOwner = useCallback(
     (user: AuthUser | null) =>
       services && user ? services.device.bindOwner(services.deviceId, user.uid) : undefined,
@@ -49,7 +61,7 @@ export function AppProvider({ children }: PropsWithChildren) {
           </AuthProvider>
         </AppServicesContext.Provider>
       ) : error ? (
-        <ErrorState message={error} />
+        <ErrorState message={error.message ?? t("app.unknownError")} onRetry={retry} />
       ) : (
         <LoadingState label={t("app.loading")} />
       )}

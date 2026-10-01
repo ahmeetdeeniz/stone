@@ -33,6 +33,9 @@ export function AuthProvider({ children, onUserChanged, onSyncRequested }: AuthP
   const [user, setUser] = useState<AuthUser | null>(null);
   const [error, setError] = useState<string | null>(null);
   const currentUserRef = useRef<AuthUser | null>(null);
+  // Read through a ref so a locale change does not resubscribe to Firebase (and re-run sync).
+  const tRef = useRef(t);
+  tRef.current = t;
 
   useEffect(() => {
     let unsubscribe: (() => void) | undefined;
@@ -45,25 +48,25 @@ export function AuthProvider({ children, onUserChanged, onSyncRequested }: AuthP
         setStatus("ready");
         void Promise.resolve(onUserChanged?.(nextUser))
           .then(() => (nextUser ? onSyncRequested?.(nextUser.uid) : undefined))
-          .catch(() => setError(t("app.unknownError")));
+          .catch(() => setError(tRef.current("app.unknownError")));
       });
     } catch {
       setStatus("error");
-      setError(t("auth.firebaseUnavailable"));
+      setError(tRef.current("auth.firebaseUnavailable"));
     }
     return () => unsubscribe?.();
-  }, [onSyncRequested, onUserChanged, t]);
+  }, [onSyncRequested, onUserChanged]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (nextState) => {
       if (nextState === "active" && currentUserRef.current) {
         void Promise.resolve(onSyncRequested?.(currentUserRef.current.uid)).catch(() =>
-          setError(t("app.unknownError")),
+          setError(tRef.current("app.unknownError")),
         );
       }
     });
     return () => subscription.remove();
-  }, [onSyncRequested, t]);
+  }, [onSyncRequested]);
 
   const value = useMemo(() => ({ status, user, error, service }), [error, service, status, user]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

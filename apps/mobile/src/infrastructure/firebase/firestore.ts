@@ -14,7 +14,7 @@ import {
   isPermanentDeletion,
   type SyncEventCursor,
 } from "@stone/sync";
-import { getFirebaseConfig } from "./config";
+import { assertFirebaseConfigured } from "./config";
 import { runDrawingUpload } from "./drawing-lifecycle";
 import { DrawingStorageUploadError, FirebaseDrawingStorage, storagePath } from "./storage";
 import type { DrawingStoragePayload } from "./storage";
@@ -35,7 +35,7 @@ export class FirebaseSyncRemote implements SyncRemote {
 
   public async push(event: OutboxEvent): Promise<RemoteWriteResult> {
     try {
-      getFirebaseConfig();
+      assertFirebaseConfigured();
       const database = firestore();
       await this.reconcileDrawingOperations(database, event.ownerId);
       if (isPermanentDeletion(event)) return await this.pushPermanentDeletion(database, event);
@@ -56,7 +56,7 @@ export class FirebaseSyncRemote implements SyncRemote {
 
   public async pull(ownerId: string, cursor: string | null, limit: number): Promise<RemotePage> {
     try {
-      getFirebaseConfig();
+      assertFirebaseConfigured();
       const database = firestore();
       await this.reconcileDrawingOperations(database, ownerId);
       const safeLimit = Math.max(1, Math.min(limit, PAGE_LIMIT));
@@ -102,7 +102,7 @@ export class FirebaseSyncRemote implements SyncRemote {
 
   public async deleteOwnerData(ownerId: string): Promise<void> {
     try {
-      getFirebaseConfig();
+      assertFirebaseConfigured();
       await this.drawingStorage.deleteOwnerDrawings(ownerId);
       const database = firestore();
       for (const collection of [
