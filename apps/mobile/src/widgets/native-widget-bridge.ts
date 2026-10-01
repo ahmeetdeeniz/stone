@@ -1,6 +1,9 @@
-import { NativeModules, Platform } from "react-native";
+import { requireOptionalNativeModule } from "expo";
+import { Platform } from "react-native";
 import {
   parseWidgetActionQueue,
+  shouldWriteWidgetSnapshot,
+  widgetSnapshotFingerprint,
   type WidgetActionQueue,
   type WidgetSnapshot,
 } from "@stone/widgets";
@@ -14,15 +17,26 @@ interface StoneWidgetsNativeModule {
   reconcileFocusActivity(payload: string | null): Promise<void>;
 }
 
-const module = NativeModules.StoneWidgets as StoneWidgetsNativeModule | undefined;
+// StoneWidgets is an Expo module: it is exposed through the Expo module registry, never through
+// React Native's `NativeModules`, which left every widget, notification and Live Activity unfed.
+const module = requireOptionalNativeModule<StoneWidgetsNativeModule>("StoneWidgets");
+
+let lastWritten: { fingerprint: string; writtenAt: number } | null = null;
 
 export const nativeWidgetsAvailable = Platform.OS === "android" || Platform.OS === "ios";
 
-export async function writeNativeWidgetSnapshot(snapshot: WidgetSnapshot): Promise<void> {
+export async function writeNativeWidgetSnapshot(
+  snapshot: WidgetSnapshot,
+  now = Date.now(),
+): Promise<void> {
   if (!module) return;
+  const fingerprint = widgetSnapshotFingerprint(snapshot);
+  // Unchanged content: skip the write and the timeline reload (budgeted on iOS).
+  if (!shouldWriteWidgetSnapshot(fingerprint, lastWritten, now)) return;
   await module.writeSnapshot(JSON.stringify(snapshot));
   await module.refreshAll();
   await module.reconcileFocusActivity(snapshot.focus ? JSON.stringify(snapshot.focus) : null);
+  lastWritten = { fingerprint, writtenAt: now };
 }
 
 export async function readNativeWidgetActions(): Promise<WidgetActionQueue> {
@@ -35,5 +49,6 @@ export async function acknowledgeNativeWidgetActions(actionIds: readonly string[
 }
 
 export async function clearNativeWidgetData(): Promise<void> {
+  lastWritten = null;
   if (module) await module.clearAll();
 }

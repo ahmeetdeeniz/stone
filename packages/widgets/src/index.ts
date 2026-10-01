@@ -148,6 +148,34 @@ export function safeWidgetSnapshot(
   }
 }
 
+/** How long an unchanged snapshot may go without a rewrite; keeps `staleAfter` ahead of now. */
+export const WIDGET_SNAPSHOT_REWRITE_MS = 20 * 60 * 1_000;
+
+/**
+ * Identifies what a widget would render, ignoring the per-refresh timestamps, so callers can skip
+ * native writes (and iOS timeline reloads, which are budgeted) when nothing visible changed.
+ */
+export function widgetSnapshotFingerprint(snapshot: WidgetSnapshot): string {
+  const { generatedAt, lastSuccessfulRefreshAt, staleAfter, ...visible } = snapshot;
+  void generatedAt;
+  void lastSuccessfulRefreshAt;
+  void staleAfter;
+  return JSON.stringify(visible);
+}
+
+/** Whether a snapshot must be written given what was last written and when. */
+export function shouldWriteWidgetSnapshot(
+  fingerprint: string,
+  last: { fingerprint: string; writtenAt: number } | null,
+  now: number,
+): boolean {
+  return (
+    last === null ||
+    last.fingerprint !== fingerprint ||
+    now - last.writtenAt >= WIDGET_SNAPSHOT_REWRITE_MS
+  );
+}
+
 export function redactWidgetSnapshot(
   source: WidgetSnapshot,
   privacy: WidgetPrivacy,

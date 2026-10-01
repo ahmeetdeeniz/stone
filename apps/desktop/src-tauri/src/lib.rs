@@ -337,6 +337,14 @@ impl Database {
                 [Utc::now().to_rfc3339()],
             )?;
         }
+        if current < 6 {
+            connection.execute_batch("CREATE TABLE IF NOT EXISTS sync_event_cursors (owner_id TEXT PRIMARY KEY, server_updated_at TEXT NOT NULL, event_id TEXT NOT NULL);")?;
+            connection.pragma_update(None, "user_version", 6_i64)?;
+            connection.execute(
+                "INSERT OR IGNORE INTO migrations(version, applied_at) VALUES(6, ?1)",
+                [Utc::now().to_rfc3339()],
+            )?;
+        }
         let device_id = connection.query_row("SELECT id FROM devices LIMIT 1", [], |row| row.get(0)).optional()?.unwrap_or_else(|| {
             let id = Uuid::new_v4().to_string();
             let _ = connection.execute("INSERT INTO devices(id, platform, name, created_at) VALUES(?1, 'windows', 'Stone Desktop', ?2)", params![id, Utc::now().to_rfc3339()]);
@@ -1734,8 +1742,10 @@ fn apply_remote_documents(
             continue;
         }
         let timestamp = firestore_timestamp(remote);
+        // Soft deletes from other devices arrive as a set `deletedAt`.
+        let deleted_at = firestore_text(remote, "deletedAt");
         db.connection
-            .execute("INSERT INTO documents(id, kind, title, markdown, path, revision, updated_at, created_at, deleted_at, updated_by_device_id) VALUES(?1, 'note', ?2, ?3, ?4, ?5, ?6, ?6, NULL, 'remote') ON CONFLICT(id) DO UPDATE SET title=excluded.title, markdown=excluded.markdown, path=excluded.path, revision=excluded.revision, updated_at=excluded.updated_at, updated_by_device_id='remote'", params![document.id, document.title, document.markdown, document.path, remote_revision, timestamp])
+            .execute("INSERT INTO documents(id, kind, title, markdown, path, revision, updated_at, created_at, deleted_at, updated_by_device_id) VALUES(?1, 'note', ?2, ?3, ?4, ?5, ?6, ?6, ?7, 'remote') ON CONFLICT(id) DO UPDATE SET title=excluded.title, markdown=excluded.markdown, path=excluded.path, revision=excluded.revision, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, updated_by_device_id='remote'", params![document.id, document.title, document.markdown, document.path, remote_revision, timestamp, deleted_at])
             .map_err(|error| error.to_string())?;
         db.connection
             .execute("INSERT INTO document_revisions(id, document_id, revision, markdown, created_at) VALUES(?1, ?2, ?3, ?4, ?5)", params![Uuid::new_v4().to_string(), document.id, remote_revision, document.markdown, timestamp])
@@ -1897,27 +1907,40 @@ async fn sync_now(
         pushed += 1;
     }
 
-    let pulls: [(&str, RemoteApplier); 5] = [
-        ("documents", apply_remote_documents),
-        ("tasks", apply_remote_tasks),
-        ("calendar", apply_remote_calendar),
-        ("focusSessions", apply_remote_focus),
-        ("focusGoals", apply_remote_focus_goals),
-    ];
+    let cursor = load_event_cursor(&database, &session.uid)?;
     let mut pulled = 0;
-    for (collection, apply) in pulls {
-        let documents = match list_firestore_collection(
-            &client,
-            &format!("{documents_root}/{collection}"),
-            &session.id_token,
-        )
-        .await
-        {
-            Ok(documents) => documents,
-            Err(FetchError::Offline) => return Ok(SyncSummary::offline(pushed, conflicts)),
-            Err(FetchError::Failed(message)) => return Err(message),
-        };
-        pulled += apply(&database, &documents)?;
+    if cursor.is_none() {
+        // First sync on this device: entities written before the event log existed (or by older
+        // desktop builds that never wrote events) only live in the entity collections.
+        for (collection, apply) in REMOTE_COLLECTIONS {
+            let documents = match list_firestore_collection(
+                &client,
+                &format!("{documents_root}/{collection}"),
+                &session.id_token,
+            )
+            .await
+            {
+                Ok(documents) => documents,
+                Err(FetchError::Offline) => return Ok(SyncSummary::offline(pushed, conflicts)),
+                Err(FetchError::Failed(message)) => return Err(message),
+            };
+            pulled += apply(&database, &documents)?;
+        }
+    }
+    // Afterwards only the syncEvents log is read, from the stored cursor, like the mobile client.
+    match pull_sync_events(
+        &client,
+        &database,
+        &session.uid,
+        &documents_root,
+        &session.id_token,
+        cursor,
+    )
+    .await
+    {
+        Ok(count) => pulled += count,
+        Err(FetchError::Offline) => return Ok(SyncSummary::offline(pushed, conflicts)),
+        Err(FetchError::Failed(message)) => return Err(message),
     }
     Ok(SyncSummary {
         pushed,
@@ -1932,6 +1955,267 @@ const FIRESTORE_API: &str = "https://firestore.googleapis.com/v1";
 const SESSION_REFRESH_MARGIN_SECONDS: i64 = 120;
 
 type RemoteApplier = fn(&Mutex<Database>, &[serde_json::Value]) -> Result<u32, String>;
+
+const REMOTE_COLLECTIONS: [(&str, RemoteApplier); 5] = [
+    ("documents", apply_remote_documents),
+    ("tasks", apply_remote_tasks),
+    ("calendar", apply_remote_calendar),
+    ("focusSessions", apply_remote_focus),
+    ("focusGoals", apply_remote_focus_goals),
+];
+const SYNC_EVENT_PAGE_SIZE: usize = 300;
+const MAX_SYNC_EVENT_PAGES: usize = 100;
+
+#[derive(Debug, Clone, PartialEq)]
+struct SyncEventCursor {
+    server_updated_at: String,
+    event_id: String,
+}
+
+fn load_event_cursor(
+    database: &Mutex<Database>,
+    owner_id: &str,
+) -> Result<Option<SyncEventCursor>, String> {
+    database
+        .lock()
+        .map_err(|_| "Veritabanı kilidi alınamadı.")?
+        .connection
+        .query_row(
+            "SELECT server_updated_at, event_id FROM sync_event_cursors WHERE owner_id = ?1",
+            [owner_id],
+            |row| {
+                Ok(SyncEventCursor {
+                    server_updated_at: row.get(0)?,
+                    event_id: row.get(1)?,
+                })
+            },
+        )
+        .optional()
+        .map_err(|error| error.to_string())
+}
+
+fn save_event_cursor(
+    database: &Mutex<Database>,
+    owner_id: &str,
+    cursor: &SyncEventCursor,
+) -> Result<(), String> {
+    database
+        .lock()
+        .map_err(|_| "Veritabanı kilidi alınamadı.")?
+        .connection
+        .execute(
+            "INSERT INTO sync_event_cursors(owner_id, server_updated_at, event_id) VALUES(?1, ?2, ?3) ON CONFLICT(owner_id) DO UPDATE SET server_updated_at = excluded.server_updated_at, event_id = excluded.event_id",
+            params![owner_id, cursor.server_updated_at, cursor.event_id],
+        )
+        .map(|_| ())
+        .map_err(|error| error.to_string())
+}
+
+fn sync_events_query(cursor: Option<&SyncEventCursor>) -> serde_json::Value {
+    let mut query = serde_json::json!({
+        "structuredQuery": {
+            "from": [{ "collectionId": "syncEvents" }],
+            "orderBy": [
+                { "field": { "fieldPath": "serverUpdatedAt" }, "direction": "ASCENDING" },
+                { "field": { "fieldPath": "eventId" }, "direction": "ASCENDING" }
+            ],
+            "limit": SYNC_EVENT_PAGE_SIZE,
+        }
+    });
+    if let Some(cursor) = cursor {
+        query["structuredQuery"]["startAt"] = serde_json::json!({
+            "values": [
+                { "timestampValue": cursor.server_updated_at },
+                { "stringValue": cursor.event_id }
+            ],
+            "before": false,
+        });
+    }
+    query
+}
+
+/// One `syncEvents` document turned into what the entity appliers expect.
+#[derive(Debug, PartialEq)]
+enum RemoteEvent {
+    Entity {
+        collection: &'static str,
+        document: serde_json::Value,
+    },
+    Purge {
+        entity_type: String,
+        entity_id: String,
+    },
+    Unsupported,
+}
+
+fn decode_sync_event(documents_root: &str, event: &serde_json::Value) -> RemoteEvent {
+    let fields = event.get("fields");
+    let text = |key: &str| {
+        fields
+            .and_then(|fields| fields.get(key))
+            .and_then(|value| value.get("stringValue"))
+            .and_then(|value| value.as_str())
+            .unwrap_or_default()
+            .to_owned()
+    };
+    let entity_type = text("entityType");
+    let entity_id = text("entityId");
+    let payload = fields
+        .and_then(|fields| fields.get("payload"))
+        .and_then(|payload| payload.pointer("/mapValue/fields"))
+        .cloned()
+        .unwrap_or_else(|| serde_json::json!({}));
+    let collection = match entity_type.as_str() {
+        "document" => "documents",
+        "task" => "tasks",
+        "calendar" => "calendar",
+        "focus" => "focusSessions",
+        "focus_goal" => "focusGoals",
+        // Projects, versions, drawings, devices and settings are mobile-only today.
+        _ => return RemoteEvent::Unsupported,
+    };
+    if entity_id.is_empty() {
+        return RemoteEvent::Unsupported;
+    }
+    if payload
+        .pointer("/purge/booleanValue")
+        .and_then(|value| value.as_bool())
+        == Some(true)
+    {
+        return RemoteEvent::Purge {
+            entity_type,
+            entity_id,
+        };
+    }
+    RemoteEvent::Entity {
+        collection,
+        document: serde_json::json!({
+            "name": format!("{documents_root}/{collection}/{entity_id}"),
+            "fields": payload,
+        }),
+    }
+}
+
+fn event_cursor(event: &serde_json::Value) -> Option<SyncEventCursor> {
+    let fields = event.get("fields")?;
+    Some(SyncEventCursor {
+        server_updated_at: fields
+            .pointer("/serverUpdatedAt/timestampValue")?
+            .as_str()?
+            .to_owned(),
+        event_id: fields.pointer("/eventId/stringValue")?.as_str()?.to_owned(),
+    })
+}
+
+/// Removes a permanently deleted entity locally unless this device still has unsent edits for it,
+/// in which case the push will surface a conflict against the remote tombstone instead.
+fn apply_purge(
+    database: &Mutex<Database>,
+    entity_type: &str,
+    entity_id: &str,
+) -> Result<u32, String> {
+    let db = database
+        .lock()
+        .map_err(|_| "Veritabanı kilidi alınamadı.")?;
+    let has_pending: bool = db
+        .connection
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM outbox WHERE entity_type = ?1 AND entity_id = ?2 AND status = 'pending')",
+            params![entity_type, entity_id],
+            |row| row.get(0),
+        )
+        .map_err(|error| error.to_string())?;
+    if has_pending {
+        return Ok(0);
+    }
+    let statement = match entity_type {
+        "document" => "DELETE FROM documents WHERE id = ?1",
+        "task" => "DELETE FROM tasks WHERE id = ?1",
+        "calendar" => "DELETE FROM calendar_items WHERE id = ?1",
+        "focus" => "DELETE FROM focus_sessions WHERE id = ?1",
+        "focus_goal" => "DELETE FROM focus_goals WHERE owner_id = ?1",
+        _ => return Ok(0),
+    };
+    let removed = db
+        .connection
+        .execute(statement, [entity_id])
+        .map_err(|error| error.to_string())?;
+    if entity_type == "document" {
+        db.connection
+            .execute(
+                "DELETE FROM document_revisions WHERE document_id = ?1",
+                [entity_id],
+            )
+            .map_err(|error| error.to_string())?;
+    }
+    Ok(u32::from(removed > 0))
+}
+
+/// Reads `syncEvents` after `cursor` in (serverUpdatedAt, eventId) order, applying each event and
+/// saving the cursor after every page so an interrupted sync resumes where it stopped.
+async fn pull_sync_events(
+    client: &Client,
+    database: &Mutex<Database>,
+    owner_id: &str,
+    documents_root: &str,
+    id_token: &str,
+    mut cursor: Option<SyncEventCursor>,
+) -> Result<u32, FetchError> {
+    let mut pulled = 0;
+    for _ in 0..MAX_SYNC_EVENT_PAGES {
+        let response = client
+            .post(format!("{FIRESTORE_API}/{documents_root}:runQuery"))
+            .bearer_auth(id_token)
+            .json(&sync_events_query(cursor.as_ref()))
+            .send()
+            .await
+            .map_err(|_| FetchError::Offline)?;
+        if !response.status().is_success() {
+            return Err(FetchError::Failed(firebase_error(response).await));
+        }
+        let rows = response
+            .json::<Vec<serde_json::Value>>()
+            .await
+            .map_err(|error| FetchError::Failed(error.to_string()))?;
+        let events: Vec<&serde_json::Value> =
+            rows.iter().filter_map(|row| row.get("document")).collect();
+        for event in &events {
+            pulled += match decode_sync_event(documents_root, event) {
+                RemoteEvent::Entity {
+                    collection,
+                    document,
+                } => {
+                    let apply = REMOTE_COLLECTIONS
+                        .iter()
+                        .find(|(name, _)| *name == collection)
+                        .map(|(_, apply)| *apply)
+                        .expect("every decoded collection has an applier");
+                    apply(database, std::slice::from_ref(&document)).map_err(FetchError::Failed)?
+                }
+                RemoteEvent::Purge {
+                    entity_type,
+                    entity_id,
+                } => apply_purge(database, &entity_type, &entity_id).map_err(FetchError::Failed)?,
+                RemoteEvent::Unsupported => 0,
+            };
+        }
+        if let Some(next) = events.last().and_then(|event| event_cursor(event)) {
+            save_event_cursor(database, owner_id, &next).map_err(FetchError::Failed)?;
+            cursor = Some(next);
+        } else if cursor.is_none() {
+            // Empty log: remember that the first full pull happened so it is not repeated.
+            let start = SyncEventCursor {
+                server_updated_at: "1970-01-01T00:00:00Z".to_owned(),
+                event_id: String::new(),
+            };
+            save_event_cursor(database, owner_id, &start).map_err(FetchError::Failed)?;
+        }
+        if events.len() < SYNC_EVENT_PAGE_SIZE {
+            break;
+        }
+    }
+    Ok(pulled)
+}
 
 impl SyncSummary {
     fn offline(pushed: u32, conflicts: u32) -> Self {
@@ -2683,6 +2967,137 @@ mod sync_tests {
         assert_eq!(payload["isPinned"], false);
         assert!(payload["projectId"].is_null());
         assert!(payload["deletedAt"].is_null());
+        drop(database);
+        let _ = fs::remove_file(path);
+    }
+
+    fn test_database() -> (Mutex<Database>, PathBuf) {
+        let path = std::env::temp_dir().join(format!("stone-sync-test-{}.sqlite3", Uuid::new_v4()));
+        (Mutex::new(Database::open(path.clone()).unwrap()), path)
+    }
+
+    #[test]
+    fn decodes_sync_events_for_the_entity_appliers() {
+        let root = "projects/p/databases/(default)/documents/users/u";
+        let event = serde_json::json!({
+            "fields": {
+                "entityType": { "stringValue": "task" },
+                "entityId": { "stringValue": "task-1" },
+                "eventId": { "stringValue": "e-1" },
+                "serverUpdatedAt": { "timestampValue": "2026-03-01T10:00:00.123456Z" },
+                "payload": { "mapValue": { "fields": { "title": { "stringValue": "Ship" } } } }
+            }
+        });
+        assert_eq!(
+            decode_sync_event(root, &event),
+            RemoteEvent::Entity {
+                collection: "tasks",
+                document: serde_json::json!({
+                    "name": format!("{root}/tasks/task-1"),
+                    "fields": { "title": { "stringValue": "Ship" } }
+                }),
+            }
+        );
+        assert_eq!(
+            event_cursor(&event),
+            Some(SyncEventCursor {
+                server_updated_at: "2026-03-01T10:00:00.123456Z".to_owned(),
+                event_id: "e-1".to_owned(),
+            })
+        );
+
+        let mut purge = event.clone();
+        purge["fields"]["payload"] =
+            serde_json::json!({ "mapValue": { "fields": { "purge": { "booleanValue": true } } } });
+        assert_eq!(
+            decode_sync_event(root, &purge),
+            RemoteEvent::Purge {
+                entity_type: "task".to_owned(),
+                entity_id: "task-1".to_owned()
+            }
+        );
+
+        let mut project = event;
+        project["fields"]["entityType"] = serde_json::json!({ "stringValue": "project" });
+        assert_eq!(decode_sync_event(root, &project), RemoteEvent::Unsupported);
+    }
+
+    #[test]
+    fn queries_events_after_the_cursor_in_stable_order() {
+        let first = sync_events_query(None);
+        assert!(first["structuredQuery"].get("startAt").is_none());
+        let cursor = SyncEventCursor {
+            server_updated_at: "2026-03-01T10:00:00Z".to_owned(),
+            event_id: "e-1".to_owned(),
+        };
+        let next = sync_events_query(Some(&cursor));
+        assert_eq!(next["structuredQuery"]["startAt"]["before"], false);
+        assert_eq!(
+            next["structuredQuery"]["startAt"]["values"][1]["stringValue"],
+            "e-1"
+        );
+        assert_eq!(
+            next["structuredQuery"]["orderBy"][1]["field"]["fieldPath"],
+            "eventId"
+        );
+    }
+
+    #[test]
+    fn stores_the_event_cursor_and_purges_without_pending_edits() {
+        let (database, path) = test_database();
+        assert_eq!(load_event_cursor(&database, "owner").unwrap(), None);
+        let cursor = SyncEventCursor {
+            server_updated_at: "2026-03-01T10:00:00Z".to_owned(),
+            event_id: "e-1".to_owned(),
+        };
+        save_event_cursor(&database, "owner", &cursor).unwrap();
+        assert_eq!(load_event_cursor(&database, "owner").unwrap(), Some(cursor));
+
+        {
+            let db = database.lock().unwrap();
+            for id in ["doc-1", "doc-2"] {
+                db.connection.execute("INSERT INTO documents(id, kind, title, markdown, path, revision, updated_at, created_at, deleted_at, updated_by_device_id) VALUES(?1, 'note', 'T', 'M', NULL, 1, 'now', 'now', NULL, 'device')", [id]).unwrap();
+            }
+            db.connection.execute("INSERT INTO outbox(id, owner_id, entity_type, entity_id, operation, base_revision, revision, payload, created_at, status) VALUES('o-1', 'owner', 'document', 'doc-2', 'upsert', 1, 2, '{}', 'now', 'pending')", []).unwrap();
+        }
+        assert_eq!(apply_purge(&database, "document", "doc-1").unwrap(), 1);
+        assert_eq!(apply_purge(&database, "document", "doc-2").unwrap(), 0);
+        let remaining: i64 = database
+            .lock()
+            .unwrap()
+            .connection
+            .query_row("SELECT COUNT(*) FROM documents", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(remaining, 1);
+        drop(database);
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn applies_remote_soft_deletes_to_documents() {
+        let (database, path) = test_database();
+        let remote = serde_json::json!({
+            "name": "projects/p/databases/(default)/documents/users/u/documents/doc-1",
+            "fields": {
+                "id": { "stringValue": "doc-1" },
+                "title": { "stringValue": "T" },
+                "markdown": { "stringValue": "M" },
+                "revision": { "integerValue": "3" },
+                "deletedAt": { "stringValue": "2026-03-01T10:00:00Z" }
+            }
+        });
+        assert_eq!(apply_remote_documents(&database, &[remote]).unwrap(), 1);
+        let deleted_at: Option<String> = database
+            .lock()
+            .unwrap()
+            .connection
+            .query_row(
+                "SELECT deleted_at FROM documents WHERE id = 'doc-1'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(deleted_at.as_deref(), Some("2026-03-01T10:00:00Z"));
         drop(database);
         let _ = fs::remove_file(path);
     }
