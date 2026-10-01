@@ -7,7 +7,7 @@ export type StoneDatabase = SQLite.SQLiteDatabase;
 export async function initializeDatabase(): Promise<StoneDatabase> {
   try {
     const database = await SQLite.openDatabaseAsync("stone.db");
-    await database.execAsync("PRAGMA foreign_keys = ON;");
+    await database.execAsync("PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;");
     const row = await database.getFirstAsync<{ user_version: number }>("PRAGMA user_version");
     let currentVersion = row?.user_version ?? 0;
     assertSupportedMigrationVersion(currentVersion);

@@ -1,7 +1,7 @@
 import * as BackgroundTask from "expo-background-task";
 import * as TaskManager from "expo-task-manager";
 import auth from "@react-native-firebase/auth";
-import { createAppServices } from "./composition-root";
+import { getAppServices } from "./composition-root";
 
 export const STONE_SYNC_TASK = "stone-sync-task";
 
@@ -9,7 +9,7 @@ TaskManager.defineTask(STONE_SYNC_TASK, async () => {
   try {
     const currentUser = auth().currentUser;
     if (!currentUser) return BackgroundTask.BackgroundTaskResult.Success;
-    const services = await createAppServices();
+    const services = await getAppServices();
     const result = await services.sync(currentUser.uid);
     return result.status === "error"
       ? BackgroundTask.BackgroundTaskResult.Failed

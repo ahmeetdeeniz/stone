@@ -13,7 +13,18 @@
       "backgroundColor": "#2e0702",
       "barStyle": "light-content"
     },
-    "plugins": ["expo-router", "@react-native-firebase/app"],
+    "plugins": [
+      "expo-router",
+      "@react-native-firebase/app",
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "deploymentTarget": "16.1"
+          }
+        }
+      ]
+    ],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.imtempra.stone"

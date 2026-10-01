@@ -60,14 +60,7 @@ vi.mock("expo-file-system", () => ({
 }));
 
 vi.mock("./config", () => ({
-  getFirebaseConfig: () => ({
-    apiKey: "test",
-    authDomain: "test",
-    projectId: "test",
-    storageBucket: "test",
-    messagingSenderId: "test",
-    appId: "test",
-  }),
+  assertFirebaseConfigured: () => undefined,
 }));
 
 describe("Firebase sync deletion and drawing boundaries", () => {

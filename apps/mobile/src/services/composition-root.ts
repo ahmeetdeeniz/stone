@@ -43,7 +43,23 @@ export interface AppServices {
   exportWorkspace(ownerId: string): Promise<readonly ExportedProjectFile[]>;
 }
 
-export async function createAppServices(): Promise<AppServices> {
+let sharedServices: Promise<AppServices> | null = null;
+
+/**
+ * Returns the process-wide services, creating them at most once. Every caller
+ * (UI, background task) shares one database connection; concurrent
+ * initialisation would interleave migration transactions on that connection.
+ * A failed attempt is forgotten so the next call can retry.
+ */
+export function getAppServices(): Promise<AppServices> {
+  sharedServices ??= createAppServices().catch((error: unknown) => {
+    sharedServices = null;
+    throw error;
+  });
+  return sharedServices;
+}
+
+async function createAppServices(): Promise<AppServices> {
   const database = await initializeDatabase();
   const settings = new SQLiteSettingsRepository(database);
   const settingsUseCases = new SettingsUseCases(settings);
