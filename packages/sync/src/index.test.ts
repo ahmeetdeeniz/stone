@@ -74,6 +74,62 @@ describe("sync boundary", () => {
     expect(blocked).toEqual([event.id]);
   });
 
+  it("drains an outbox larger than one page in a single run", async () => {
+    const queue = Array.from({ length: 5 }, (_, index) => createEvent("task", `task-${index}`));
+    const pushedIds: string[] = [];
+    const local: SyncLocalStore = {
+      pending: (_owner, _now, limit) => Promise.resolve(queue.slice(0, limit)),
+      acknowledgeOutbox: (id) => {
+        queue.splice(
+          queue.findIndex((event) => event.id === id),
+          1,
+        );
+        return Promise.resolve();
+      },
+      deferOutbox: () => Promise.resolve(),
+      blockOutbox: () => Promise.resolve(),
+      applyRemote: () => Promise.resolve("ignored" as const),
+      getCursor: () => Promise.resolve(null),
+      saveCursor: () => Promise.resolve(),
+      countOpenConflicts: () => Promise.resolve(0),
+    };
+    const remote: SyncRemote = {
+      push: (event) => {
+        pushedIds.push(event.id);
+        return Promise.resolve({ kind: "acknowledged", serverUpdatedAt: "now" });
+      },
+      pull: () => Promise.resolve({ changes: [], cursor: null, hasMore: false }),
+    };
+    const result = await new SyncEngine(remote, local, { pageSize: 2 }).run("owner");
+    expect(result).toMatchObject({ status: "saved", pushed: 5 });
+    expect(pushedIds).toHaveLength(5);
+    expect(queue).toEqual([]);
+  });
+
+  it("does not re-push an event the store keeps returning", async () => {
+    const event = createEvent();
+    let pushes = 0;
+    const local: SyncLocalStore = {
+      pending: () => Promise.resolve([event]),
+      acknowledgeOutbox: () => Promise.resolve(),
+      deferOutbox: () => Promise.resolve(),
+      blockOutbox: () => Promise.resolve(),
+      applyRemote: () => Promise.resolve("ignored" as const),
+      getCursor: () => Promise.resolve(null),
+      saveCursor: () => Promise.resolve(),
+      countOpenConflicts: () => Promise.resolve(0),
+    };
+    const remote: SyncRemote = {
+      push: () => {
+        pushes += 1;
+        return Promise.resolve({ kind: "acknowledged", serverUpdatedAt: "now" });
+      },
+      pull: () => Promise.resolve({ changes: [], cursor: null, hasMore: false }),
+    };
+    await new SyncEngine(remote, local, { pageSize: 1 }).run("owner");
+    expect(pushes).toBe(1);
+  });
+
   it("defers retryable transport failures with backoff", async () => {
     const event = createEvent();
     let deferred: [string, string, string] | undefined;

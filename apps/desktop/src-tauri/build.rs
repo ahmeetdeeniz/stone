@@ -5,12 +5,14 @@ fn main() {
         PathBuf::from(env::var_os("CARGO_MANIFEST_DIR").expect("manifest directory must be set"));
     let icons_dir = manifest_dir.join("icons");
     fs::create_dir_all(&icons_dir).expect("Stone icon directory must be created");
-    write_if_changed(&icons_dir.join("icon.ico"), &stone_icon());
-    write_if_changed(&icons_dir.join("icon.png"), FALLBACK_PNG);
+    // The branded icons are tracked in git; only generate placeholders for a checkout that
+    // lacks them so a build never overwrites the real artwork.
+    write_if_missing(&icons_dir.join("icon.ico"), &stone_icon());
+    write_if_missing(&icons_dir.join("icon.png"), FALLBACK_PNG);
+    println!("cargo:rerun-if-changed=icons/icon.ico");
+    println!("cargo:rerun-if-changed=icons/icon.png");
 
-    let out_dir = PathBuf::from(env::var_os("OUT_DIR").expect("OUT_DIR must be set"));
-    let icon_path = out_dir.join("stone.ico");
-    fs::write(&icon_path, stone_icon()).expect("Stone icon must be generated");
+    let icon_path = icons_dir.join("icon.ico");
     let windows = tauri_build::WindowsAttributes::new().window_icon_path(icon_path);
     tauri_build::try_build(tauri_build::Attributes::new().windows_attributes(windows))
         .expect("failed to run tauri build");
@@ -24,12 +26,9 @@ const FALLBACK_PNG: &[u8] = &[
     0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
 ];
 
-fn write_if_changed(path: &PathBuf, contents: &[u8]) {
-    let unchanged = fs::read(path)
-        .map(|current| current == contents)
-        .unwrap_or(false);
-    if !unchanged {
-        fs::write(path, contents).expect("Stone generated asset must be written");
+fn write_if_missing(path: &PathBuf, contents: &[u8]) {
+    if !path.exists() {
+        fs::write(path, contents).expect("Stone placeholder asset must be written");
     }
 }
 

@@ -177,6 +177,8 @@ export interface SyncEngineOptions {
   onStatus?: (status: SyncStatus) => void;
 }
 
+const MAX_PUSH_ROUNDS = 20;
+
 export class SyncEngine {
   private readonly pageSize: number;
   private readonly now: () => string;
@@ -204,29 +206,39 @@ export class SyncEngine {
       pulled = pullResult.pulled;
       conflicts += pullResult.conflicts;
 
-      const events = await this.local.pending(ownerId, this.now(), this.pageSize);
-      for (const event of events) {
-        try {
-          await this.remote.push(event);
-          await this.local.acknowledgeOutbox(event.id);
-          pushed += 1;
-        } catch (error) {
-          if (error instanceof SyncRevisionConflictError) {
-            await this.local.applyRemote(error.details.remote);
-            await this.local.blockOutbox(event.id, "Revision conflict requires user resolution.");
-            conflicts += 1;
-            continue;
+      // Drain the outbox page by page so a backlog does not need one app resume per page.
+      const seen = new Set<string>();
+      for (let round = 0; round < MAX_PUSH_ROUNDS; round += 1) {
+        const page = await this.local.pending(ownerId, this.now(), this.pageSize);
+        const events = page.filter((event) => !seen.has(event.id));
+        if (events.length === 0) break;
+        const deferredBefore = deferred;
+        for (const event of events) {
+          seen.add(event.id);
+          try {
+            await this.remote.push(event);
+            await this.local.acknowledgeOutbox(event.id);
+            pushed += 1;
+          } catch (error) {
+            if (error instanceof SyncRevisionConflictError) {
+              await this.local.applyRemote(error.details.remote);
+              await this.local.blockOutbox(event.id, "Revision conflict requires user resolution.");
+              conflicts += 1;
+              continue;
+            }
+            if (error instanceof SyncTransportError && error.retryable) {
+              const nextAttemptAt = new Date(
+                Date.now() + retryDelayMs(event.attemptCount),
+              ).toISOString();
+              await this.local.deferOutbox(event.id, nextAttemptAt, error.message);
+              deferred += 1;
+              continue;
+            }
+            await this.local.blockOutbox(event.id, toErrorMessage(error));
           }
-          if (error instanceof SyncTransportError && error.retryable) {
-            const nextAttemptAt = new Date(
-              Date.now() + retryDelayMs(event.attemptCount),
-            ).toISOString();
-            await this.local.deferOutbox(event.id, nextAttemptAt, error.message);
-            deferred += 1;
-            continue;
-          }
-          await this.local.blockOutbox(event.id, toErrorMessage(error));
         }
+        // A retryable failure usually means we are offline; stop instead of failing every page.
+        if (deferred > deferredBefore || page.length < this.pageSize) break;
       }
 
       const openConflicts = await this.local.countOpenConflicts(ownerId);
