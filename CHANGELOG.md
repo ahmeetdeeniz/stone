@@ -22,6 +22,16 @@ tag, so no release date or semantic version is claimed.
   presence at most every six hours, and applies the saved theme at launch.
 - Desktop builds keep the branded icons instead of overwriting them, and "Open in VS Code/Codex"
   works with the Windows `.cmd` launchers.
+- Native widgets, the Android focus notification and the iOS Live Activity now receive data: the
+  bridge looked the Expo module up in React Native's `NativeModules`, where it never exists.
+  Unchanged widget snapshots are no longer rewritten (and iOS timelines no longer reloaded) every
+  minute.
+- Windows sync reads the `syncEvents` log incrementally from a stored cursor after the first full
+  pull, applies permanent deletions and soft-deleted notes from other devices.
+- Sign-in, sign-up, reset and account errors show a translated reason (wrong password, email in
+  use, offline, ...) instead of a generic message or hardcoded Turkish.
+- The MCP OAuth sign-in is rate limited per client and per account, cannot be framed, and limiter
+  memory is bounded; `MCP_TRUST_PROXY` keys limits on the real client behind a proxy.
 
 ### Added
 

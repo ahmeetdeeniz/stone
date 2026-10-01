@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  shouldWriteWidgetSnapshot,
+  WIDGET_SNAPSHOT_REWRITE_MS,
+  widgetSnapshotFingerprint,
   WIDGET_ACTION_VERSION,
   WIDGET_SNAPSHOT_VERSION,
   enqueueWidgetAction,
@@ -105,6 +108,24 @@ describe("widget snapshot", () => {
   it("marks materially old snapshots stale", () => {
     expect(safeWidgetSnapshot(snapshot(), "2026-07-29T12:29:00.000Z").stale).toBe(false);
     expect(safeWidgetSnapshot(snapshot(), "2026-07-29T12:31:00.000Z").stale).toBe(true);
+  });
+
+  it("skips rewriting a snapshot whose visible content did not change", () => {
+    const first = widgetSnapshotFingerprint(snapshot());
+    const retimed = widgetSnapshotFingerprint({
+      ...snapshot(),
+      generatedAt: "2026-07-29T13:00:00.000Z",
+      lastSuccessfulRefreshAt: "2026-07-29T13:00:00.000Z",
+      staleAfter: "2026-07-29T14:00:00.000Z",
+    });
+    expect(retimed).toBe(first);
+    expect(widgetSnapshotFingerprint({ ...snapshot(), todayRemainingCount: 9 })).not.toBe(first);
+
+    const last = { fingerprint: first, writtenAt: 0 };
+    expect(shouldWriteWidgetSnapshot(first, null, 0)).toBe(true);
+    expect(shouldWriteWidgetSnapshot(first, last, 60_000)).toBe(false);
+    expect(shouldWriteWidgetSnapshot("changed", last, 60_000)).toBe(true);
+    expect(shouldWriteWidgetSnapshot(first, last, WIDGET_SNAPSHOT_REWRITE_MS)).toBe(true);
   });
 });
 

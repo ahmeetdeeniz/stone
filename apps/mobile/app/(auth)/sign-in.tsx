@@ -7,6 +7,7 @@ import { spacing } from "../../src/design/tokens";
 import { useTheme } from "../../src/design/theme";
 import { useAuth } from "../../src/providers/auth-provider";
 import { useI18n } from "../../src/i18n/provider";
+import { authErrorKey } from "../../src/infrastructure/firebase/auth";
 
 export default function SignInScreen() {
   const { service } = useAuth();
@@ -23,8 +24,8 @@ export default function SignInScreen() {
     try {
       await service.signIn(email, password);
       router.replace("/(tabs)/notes");
-    } catch {
-      setError(t("auth.signInFailed"));
+    } catch (caught) {
+      setError(t(authErrorKey(caught, "auth.signInFailed")));
     } finally {
       setBusy(false);
     }

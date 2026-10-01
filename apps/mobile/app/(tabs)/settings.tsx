@@ -26,6 +26,7 @@ import type { WidgetPrivacy } from "@stone/widgets";
 import { readWidgetPrivacy, writeWidgetPrivacy } from "../../src/widgets/widget-lifecycle";
 import { refreshNativeWidgets } from "../../src/widgets/snapshot";
 import { clearWidgetsForAccountLifecycle } from "../../src/widgets/snapshot";
+import { AuthFailure, authErrorKey } from "../../src/infrastructure/firebase/auth";
 
 const syncTone: Readonly<Record<string, StatusTone>> = {
   saved: "success",
@@ -130,7 +131,11 @@ export default function SettingsScreen() {
     } catch (error) {
       Alert.alert(
         t("settings.signOutFailed"),
-        error instanceof Error ? error.message : t("app.unknownError"),
+        error instanceof AuthFailure
+          ? t(authErrorKey(error, "app.unknownError"))
+          : error instanceof Error
+            ? error.message
+            : t("app.unknownError"),
       );
     } finally {
       setBusy(false);
@@ -201,7 +206,11 @@ export default function SettingsScreen() {
             } catch (error) {
               Alert.alert(
                 t("settings.deleteAccountFailed"),
-                error instanceof Error ? error.message : t("app.unknownError"),
+                error instanceof AuthFailure
+                  ? t(authErrorKey(error, "app.unknownError"))
+                  : error instanceof Error
+                    ? error.message
+                    : t("app.unknownError"),
               );
             } finally {
               setBusy(false);

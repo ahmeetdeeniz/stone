@@ -52,9 +52,17 @@ export async function createMcpHttpServer(options: McpHttpOptions = {}) {
     new FirebasePasswordAuthenticator(requiredEnv("FIREBASE_WEB_API_KEY"), firebase!.auth);
   const sessions = new Map<string, Session>();
   const limiter = new FixedWindowLimiter(120, 60_000);
+  const authLimiter = new FixedWindowLimiter(AUTH_ATTEMPTS_PER_WINDOW, AUTH_WINDOW_MS);
   const server = createServer(async (request, response) => {
     try {
-      await handle(request, response, { oauth, service, authenticator, sessions, limiter });
+      await handle(request, response, {
+        oauth,
+        service,
+        authenticator,
+        sessions,
+        limiter,
+        authLimiter,
+      });
     } catch (error) {
       sendError(response, error);
     }
@@ -79,6 +87,7 @@ async function handle(
     authenticator: FirebasePasswordAuthenticator;
     sessions: Map<string, Session>;
     limiter: FixedWindowLimiter;
+    authLimiter: FixedWindowLimiter;
   },
 ): Promise<void> {
   const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
@@ -90,7 +99,10 @@ async function handle(
   if (url.pathname === "/oauth/jwks.json")
     return json(response, 200, { keys: [context.oauth.publicJwk] });
   if (url.pathname === "/oauth/authorize") return authorize(request, response, url, context);
-  if (url.pathname === "/oauth/token") return token(request, response, context);
+  if (url.pathname === "/oauth/token") {
+    if (!context.limiter.allow(`token:${clientKey(request)}`)) throw new McpRateLimitError(60);
+    return token(request, response, context);
+  }
   if (url.pathname === "/mcp") return mcp(request, response, context);
   json(response, 404, { error: "not_found" });
 }
@@ -99,7 +111,11 @@ async function authorize(
   request: IncomingMessage,
   response: ServerResponse,
   url: URL,
-  context: { oauth: OAuthRuntime; authenticator: FirebasePasswordAuthenticator },
+  context: {
+    oauth: OAuthRuntime;
+    authenticator: FirebasePasswordAuthenticator;
+    authLimiter: FixedWindowLimiter;
+  },
 ): Promise<void> {
   const values =
     request.method === "POST"
@@ -118,6 +134,12 @@ async function authorize(
     return html(response, 200, loginPage({ ...values, scope: scopes.join(" ") }));
   const email = requiredValue(values.email, "email");
   const password = requiredValue(values.password, "password");
+  // Throttle password attempts per client and per account before calling Firebase.
+  if (
+    !context.authLimiter.allow(`ip:${clientKey(request)}`) ||
+    !context.authLimiter.allow(`email:${email.trim().toLowerCase()}`)
+  )
+    throw new McpRateLimitError(Math.ceil(AUTH_WINDOW_MS / 1000));
   const user = await context.authenticator.authenticate(email, password);
   const code = randomBytes(48).toString("base64url");
   await context.oauth.codeStore.save({
@@ -190,8 +212,7 @@ async function mcp(
     limiter: FixedWindowLimiter;
   },
 ): Promise<void> {
-  if (!context.limiter.allow(request.socket.remoteAddress ?? "unknown"))
-    throw new McpRateLimitError(60);
+  if (!context.limiter.allow(clientKey(request))) throw new McpRateLimitError(60);
   const token = bearer(request.headers.authorization);
   if (!token) {
     response.setHeader(
@@ -301,7 +322,7 @@ function bearer(value: string | undefined): string | null {
   const match = value?.match(/^Bearer\s+(.+)$/iu);
   return match?.[1] ?? null;
 }
-function header(request: IncomingMessage, name: string): string | undefined {
+function header(request: Pick<IncomingMessage, "headers">, name: string): string | undefined {
   const value = request.headers[name];
   return Array.isArray(value) ? value[0] : value;
 }
@@ -340,12 +361,17 @@ function html(response: ServerResponse, status: number, value: string): void {
   response.writeHead(status, {
     "content-type": "text/html; charset=utf-8",
     "cache-control": "no-store",
-    "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'",
+    "content-security-policy":
+      "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'",
+    "x-frame-options": "DENY",
+    "referrer-policy": "no-referrer",
   });
   response.end(value);
 }
 function sendError(response: ServerResponse, error: unknown): void {
   const safeError = toSafeHttpError(error);
+  if (error instanceof McpRateLimitError && !response.headersSent)
+    response.setHeader("retry-after", String(error.retryAfterSeconds));
   json(response, safeError.status, { error: safeError.message });
 }
 export function toSafeHttpError(error: unknown): { status: number; message: string } {
@@ -369,14 +395,36 @@ function epoch(): number {
   return Math.floor(Date.now() / 1000);
 }
 
-class FixedWindowLimiter {
+const AUTH_ATTEMPTS_PER_WINDOW = 10;
+const AUTH_WINDOW_MS = 15 * 60_000;
+const MAX_LIMITER_KEYS = 10_000;
+
+/**
+ * Behind a reverse proxy (Cloud Run, a load balancer) every request shares the proxy's socket
+ * address, so the client must come from X-Forwarded-For. Only trust it when the deployment says
+ * a proxy sets it; otherwise a client could spoof a fresh key per request.
+ */
+export function clientKey(
+  request: Pick<IncomingMessage, "headers" | "socket">,
+  trustProxy = process.env.MCP_TRUST_PROXY === "true",
+): string {
+  if (trustProxy) {
+    const forwarded = header(request, "x-forwarded-for")?.split(",")[0]?.trim();
+    if (forwarded) return forwarded;
+  }
+  return request.socket.remoteAddress ?? "unknown";
+}
+
+export class FixedWindowLimiter {
   private readonly values = new Map<string, { count: number; startedAt: number }>();
   public constructor(
     private readonly max: number,
     private readonly windowMs: number,
+    private readonly clock: () => number = Date.now,
   ) {}
   public allow(key: string): boolean {
-    const now = Date.now();
+    const now = this.clock();
+    if (this.values.size >= MAX_LIMITER_KEYS) this.prune(now);
     const current = this.values.get(key);
     if (!current || now - current.startedAt >= this.windowMs) {
       this.values.set(key, { count: 1, startedAt: now });
@@ -385,5 +433,11 @@ class FixedWindowLimiter {
     if (current.count >= this.max) return false;
     current.count += 1;
     return true;
+  }
+  /** Drops expired windows so one key per client IP/email cannot grow memory without bound. */
+  private prune(now: number): void {
+    for (const [key, value] of this.values)
+      if (now - value.startedAt >= this.windowMs) this.values.delete(key);
+    if (this.values.size >= MAX_LIMITER_KEYS) this.values.clear();
   }
 }

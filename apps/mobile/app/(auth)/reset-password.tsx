@@ -7,6 +7,7 @@ import { spacing } from "../../src/design/tokens";
 import { useTheme } from "../../src/design/theme";
 import { useAuth } from "../../src/providers/auth-provider";
 import { useI18n } from "../../src/i18n/provider";
+import { authErrorKey } from "../../src/infrastructure/firebase/auth";
 
 export default function ResetPasswordScreen() {
   const { service } = useAuth();
@@ -24,8 +25,8 @@ export default function ResetPasswordScreen() {
     try {
       await service.sendPasswordReset(email);
       setMessage(t("auth.resetSent"));
-    } catch {
-      setError(t("auth.sendLinkFailed"));
+    } catch (caught) {
+      setError(t(authErrorKey(caught, "auth.sendLinkFailed")));
     } finally {
       setBusy(false);
     }

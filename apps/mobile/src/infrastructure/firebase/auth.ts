@@ -32,7 +32,7 @@ export function createFirebaseAuthService(): AuthService {
         const result = await instance.signInWithEmailAndPassword(email.trim(), password);
         return mapUser(result.user);
       } catch (error) {
-        throw new AuthError(toAuthMessage(error));
+        throw toAuthFailure(error);
       }
     },
     async signUp(email, password) {
@@ -40,48 +40,75 @@ export function createFirebaseAuthService(): AuthService {
         const result = await instance.createUserWithEmailAndPassword(email.trim(), password);
         return mapUser(result.user);
       } catch (error) {
-        throw new AuthError(toAuthMessage(error));
+        throw toAuthFailure(error);
       }
     },
     async sendPasswordReset(email) {
       try {
         await instance.sendPasswordResetEmail(email.trim());
       } catch (error) {
-        throw new AuthError(toAuthMessage(error));
+        throw toAuthFailure(error);
       }
     },
     async signOut() {
       try {
         await instance.signOut();
       } catch (error) {
-        throw new AuthError(toAuthMessage(error));
+        throw toAuthFailure(error);
       }
     },
     async deleteAccount() {
       try {
         const currentUser = instance.currentUser;
-        if (!currentUser) throw new AuthError("Aktif kullanıcı bulunamadı.");
+        if (!currentUser) throw new AuthFailure("noUser");
         await currentUser.delete();
       } catch (error) {
-        if (error instanceof AuthError) throw error;
-        throw new AuthError(toAuthMessage(error));
+        throw toAuthFailure(error);
       }
     },
   };
 }
 
-function toAuthMessage(error: unknown): string {
-  if (typeof error === "object" && error !== null && "code" in error) {
-    const code = String(error.code);
-    const messages: Record<string, string> = {
-      "auth/invalid-credential": "E-posta veya şifre hatalı.",
-      "auth/email-already-in-use": "Bu e-posta zaten kullanılıyor.",
-      "auth/invalid-email": "Geçerli bir e-posta adresi girin.",
-      "auth/weak-password": "Şifre en az altı karakter olmalı.",
-      "auth/too-many-requests": "Çok fazla deneme yapıldı. Daha sonra tekrar deneyin.",
-      "auth/requires-recent-login": "Bu işlem için yeniden giriş yapmanız gerekiyor.",
-    };
-    return messages[code] ?? "Kimlik doğrulama tamamlanamadı.";
+export type AuthFailureReason =
+  | "invalidCredential"
+  | "emailInUse"
+  | "invalidEmail"
+  | "weakPassword"
+  | "tooManyRequests"
+  | "requiresRecentLogin"
+  | "network"
+  | "noUser";
+
+/** An auth failure with a stable reason the UI translates (see `auth.error.*` keys). */
+export class AuthFailure extends AuthError {
+  public constructor(public readonly reason: AuthFailureReason | null) {
+    super(reason ? `Authentication failed: ${reason}.` : "Authentication failed.");
   }
-  return "Kimlik doğrulama tamamlanamadı.";
+}
+
+const reasonsByFirebaseCode: Readonly<Record<string, AuthFailureReason>> = {
+  "auth/invalid-credential": "invalidCredential",
+  "auth/wrong-password": "invalidCredential",
+  "auth/user-not-found": "invalidCredential",
+  "auth/email-already-in-use": "emailInUse",
+  "auth/invalid-email": "invalidEmail",
+  "auth/weak-password": "weakPassword",
+  "auth/too-many-requests": "tooManyRequests",
+  "auth/requires-recent-login": "requiresRecentLogin",
+  "auth/network-request-failed": "network",
+};
+
+export function toAuthFailure(error: unknown): AuthFailure {
+  if (error instanceof AuthFailure) return error;
+  const code =
+    typeof error === "object" && error !== null && "code" in error ? String(error.code) : "";
+  return new AuthFailure(reasonsByFirebaseCode[code] ?? null);
+}
+
+/** Translation key for a caught auth error, or the screen's generic fallback key. */
+export function authErrorKey<Fallback extends string>(
+  error: unknown,
+  fallback: Fallback,
+): `auth.error.${AuthFailureReason}` | Fallback {
+  return error instanceof AuthFailure && error.reason ? `auth.error.${error.reason}` : fallback;
 }
