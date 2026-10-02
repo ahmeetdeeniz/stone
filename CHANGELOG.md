@@ -5,6 +5,9 @@ tag, so no release date or semantic version is claimed.
 
 ## Unreleased
 
+- Optional, per-device Crashlytics crash reporting (off by default, Settings → Diagnostics &
+  updates) and EAS over-the-air updates with per-profile channels and fingerprint runtime
+  versions (`pnpm update:preview` / `pnpm update:production`).
 - Added local-first Android Glance and iOS WidgetKit Today, Agenda, Focus, and Quick Capture
   widgets, an optional Android focus notification, and iOS Live Activity/Dynamic Island sources.
 - Added bounded versioned snapshot/action bridges, validated deep links, revision-safe actions,

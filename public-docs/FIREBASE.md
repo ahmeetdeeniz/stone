@@ -50,6 +50,15 @@ Drawing sources and previews are uploaded to immutable revision paths under the 
 owner. Storage rules restrict names, MIME types, ownership, and a 10 MiB file limit. Firestore
 stores metadata; Storage stores `.stoneink` and PNG objects.
 
+## Crash reporting (optional)
+
+The mobile app includes Firebase Crashlytics, but collection is off by default
+(`apps/mobile/firebase.json`) and only starts on a device after its user chooses **Settings →
+Diagnostics & updates → Send crash reports**. Turning it off again deletes reports that were not
+sent yet. Reports go to Crashlytics in your own Firebase project and contain the error, stack
+trace and device model; Stone never sets a user ID or attaches note content. Enable Crashlytics
+in the Firebase console to see them.
+
 ## Credentials that never belong in clients or Git
 
 - Firebase service-account JSON or private keys

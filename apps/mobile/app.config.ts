@@ -12,8 +12,15 @@ export default ({ config }: ConfigContext): ExpoConfig => {
   const iosFirebaseFile = process.env.GOOGLE_SERVICE_INFO_PLIST
     ? path.resolve(process.env.GOOGLE_SERVICE_INFO_PLIST)
     : path.join(__dirname, "GoogleService-Info.plist");
+  // OTA updates are served from the EAS project this app belongs to, so a fork with its own
+  // `extra.eas.projectId` updates from its own project, and one without it simply has none.
+  const easProjectId = (config.extra?.eas as { projectId?: string } | undefined)?.projectId;
   return {
     ...config,
+    updates: {
+      ...config.updates,
+      ...(easProjectId ? { url: `https://u.expo.dev/${easProjectId}` } : { enabled: false }),
+    },
     plugins: [
       ...(config.plugins ?? []),
       "expo-background-task",
