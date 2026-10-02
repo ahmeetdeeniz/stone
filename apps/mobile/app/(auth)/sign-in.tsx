@@ -41,6 +41,7 @@ export default function SignInScreen() {
         autoComplete="email"
         keyboardType="email-address"
         icon="mail-outline"
+        testID="auth-email"
       />
       <StoneInput
         label={t("auth.password")}
@@ -49,11 +50,13 @@ export default function SignInScreen() {
         secureTextEntry
         autoComplete="password"
         icon="lock-closed-outline"
+        testID="auth-password"
       />
       <StoneButton
         label={busy ? t("auth.signingIn") : t("auth.signIn")}
         onPress={() => void signIn()}
         disabled={busy}
+        testID="auth-sign-in"
       />
       <View style={styles.links}>
         <Link

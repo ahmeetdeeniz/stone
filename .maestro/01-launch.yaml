@@ -1,0 +1,20 @@
+# A fresh install opens on the sign-in screen (English or Turkish device language).
+appId: ${APP_ID}
+name: 01-launch
+tags:
+  - smoke
+env:
+  APP_ID: com.imtempra.stone
+---
+- launchApp:
+    clearState: true
+    clearKeychain: true
+- extendedWaitUntil:
+    visible:
+      id: auth-sign-in
+    timeout: 30000
+- assertVisible:
+    id: auth-email
+- assertVisible:
+    id: auth-password
+- assertVisible: "Create an account|Yeni hesap oluştur"

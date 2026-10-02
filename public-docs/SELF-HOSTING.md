@@ -48,6 +48,23 @@ Native verification generates temporary demo-only Android and iOS Firebase files
 the real config-plugin/prebuild path in public CI, then removes them. Real Development, EAS, and
 Release Builds never use this fixture and require the self-hoster's genuine ignored native files.
 
+## Setup wizard
+
+After installing, connect your own Firebase project:
+
+```sh
+pnpm setup:self-host     # asks for the project ID, Web API key and app identifier
+pnpm doctor:self-host    # re-checks everything; exits non-zero if something is missing
+```
+
+The wizard checks the prerequisites, writes `apps/desktop/.env.local` and `.firebaserc` (both
+ignored), can apply your own app identifier to `apps/mobile/app.json` and the desktop Tauri config,
+checks that `google-services.json` / `GoogleService-Info.plist` belong to that project and those
+identifiers, and prints the remaining console and deploy steps. It only handles public client
+identifiers and never asks for passwords, service accounts or signing keys. Every value can also
+be passed as a flag for scripted setups, for example
+`pnpm setup:self-host --yes --project-id my-stone --api-key AIza... --app-id dev.me.stone`.
+
 ## Configuration boundaries
 
 - Mobile public client values: copy `.env.example` to `.env`.
@@ -77,6 +94,19 @@ pnpm mcp:dev
 without Firebase values, but sign-in explains that configuration is missing. MCP intentionally
 fails without its required server configuration unless its explicit development memory-store mode
 is used as documented in `services/mcp/README.md`.
+
+## Device smoke tests
+
+[Maestro](https://maestro.mobile.dev) flows in `.maestro/` launch a Development or Release Build,
+sign in with a test account from your own Firebase project and create a note. Install Maestro,
+start an emulator or connect a device with the app installed, then run:
+
+```sh
+pnpm e2e:mobile -e APP_ID=dev.me.stone -e STONE_E2E_EMAIL=test@example.com -e STONE_E2E_PASSWORD=...
+```
+
+`APP_ID` defaults to `com.imtempra.stone`. Use a dedicated test account: the first flow clears the
+app's data, and the last one leaves a "Maestro …" note behind.
 
 ## Application identifiers
 

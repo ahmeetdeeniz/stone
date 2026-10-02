@@ -1,0 +1,31 @@
+# Creates and renames a note, then finds it in the list. Runs after 02-sign-in (same session).
+appId: ${APP_ID}
+name: 03-create-note
+tags:
+  - smoke
+env:
+  APP_ID: com.imtempra.stone
+---
+- launchApp
+- extendedWaitUntil:
+    visible:
+      id: notes-new
+    timeout: 30000
+- evalScript: ${output.title = 'Maestro ' + Date.now()}
+- tapOn:
+    id: notes-new
+- extendedWaitUntil:
+    visible:
+      id: editor-title
+    timeout: 20000
+- tapOn:
+    id: editor-title
+- eraseText: 80
+- inputText: ${output.title}
+- pressKey: Enter
+- hideKeyboard
+- tapOn:
+    id: editor-back
+- extendedWaitUntil:
+    visible: ${output.title}
+    timeout: 20000
