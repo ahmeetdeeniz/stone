@@ -5,7 +5,9 @@ import { Alert, Pressable, ScrollView, StyleSheet, TextInput, View } from "react
 import Ionicons from "@expo/vector-icons/Ionicons";
 import {
   buildAgendaItems,
+  parseQuickAdd,
   type AgendaItem,
+  type QuickAddResult,
   type Task,
   type TaskListOptions,
   type TodayItem,
@@ -67,7 +69,12 @@ export default function TodayScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const today = new Date().toISOString().slice(0, 10);
+  // The user's calendar day, not UTC's (which is "yesterday" for hours after midnight east of UTC).
+  const today = localToday();
+  const parsedCapture = useMemo(
+    () => (capture.trim() ? parseQuickAdd(capture, { today }) : null),
+    [capture, today],
+  );
   const load = useCallback(async () => {
     if (!user) return;
     setLoading(true);
@@ -99,22 +106,26 @@ export default function TodayScreen() {
   const quickAdd = async () => {
     if (!user || !capture.trim()) return;
     const now = new Date().toISOString();
+    const parsed = parseQuickAdd(capture, { today });
     try {
+      const projectId = parsed.projectHint
+        ? matchProject(await projectUseCases.list(user.uid), parsed.projectHint)
+        : null;
       await taskUseCases.create({
         schemaVersion: 1,
         id: Crypto.randomUUID(),
         ownerId: user.uid,
-        title: capture.trim(),
+        title: parsed.title,
         description: null,
         state: "open",
         completedAt: null,
-        dueDate: filter === "today" ? today : null,
-        dueTime: null,
+        dueDate: parsed.dueDate ?? (filter === "today" ? today : null),
+        dueTime: parsed.dueTime,
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
-        priority: "none",
+        priority: parsed.priority,
         sortOrder: Date.now(),
-        tags: [],
-        projectId: null,
+        tags: [...parsed.tags],
+        projectId,
         sourceDocumentId: null,
         sourceBlockId: null,
         parentTaskId: null,
@@ -166,6 +177,7 @@ export default function TodayScreen() {
             accessibilityLabel={t("tasks.quickAdd")}
             addLabel={t("tasks.add")}
           />
+          {parsedCapture ? <QuickAddPreview parsed={parsedCapture} today={today} /> : null}
 
           <SearchField
             value={search}
@@ -264,6 +276,57 @@ export default function TodayScreen() {
         </ResponsiveContent>
       </ScrollView>
     </Screen>
+  );
+}
+
+function localToday(): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}
+
+/** Resolves `@hint` to a project by slug or title prefix, case-insensitively. */
+function matchProject(
+  projects: readonly { id: string; title: string; slug: string }[],
+  hint: string,
+): string | null {
+  const needle = hint.toLocaleLowerCase("tr");
+  const match =
+    projects.find((project) => project.slug.toLocaleLowerCase("tr") === needle) ??
+    projects.find((project) => project.title.toLocaleLowerCase("tr").startsWith(needle)) ??
+    projects.find((project) => project.slug.toLocaleLowerCase("tr").startsWith(needle));
+  return match?.id ?? null;
+}
+
+/** Shows what the capture line will become before it is submitted. */
+function QuickAddPreview({ parsed, today }: { parsed: QuickAddResult; today: string }) {
+  const { colors } = useTheme();
+  const { t, locale } = useI18n();
+  const parts: string[] = [];
+  if (parsed.dueDate) {
+    const label =
+      parsed.dueDate === today
+        ? t("tasks.today")
+        : new Intl.DateTimeFormat(locale, {
+            day: "numeric",
+            month: "short",
+            weekday: "short",
+          }).format(new Date(`${parsed.dueDate}T12:00:00`));
+    parts.push(parsed.dueTime ? `${label} ${parsed.dueTime}` : label);
+  }
+  if (parsed.priority !== "none") parts.push(formatTaskPriority(locale, parsed.priority));
+  for (const tag of parsed.tags) parts.push(`#${tag}`);
+  if (parsed.projectHint) parts.push(`@${parsed.projectHint}`);
+  if (parts.length === 0) return null;
+  return (
+    <View style={styles.preview} accessibilityLiveRegion="polite">
+      <Ionicons name="sparkles-outline" size={14} color={colors.primaryText} />
+      <StoneText variant="bodySmall" tone="secondary" numberOfLines={1} style={styles.previewText}>
+        {`${parsed.title} · ${parts.join(" · ")}`}
+      </StoneText>
+    </View>
   );
 }
 
@@ -469,6 +532,15 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   captureInput: { flex: 1, paddingVertical: spacing.md, ...typography.body },
+  preview: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+    marginTop: -spacing.xs,
+    marginBottom: spacing.md,
+    paddingHorizontal: spacing.lg,
+  },
+  previewText: { flex: 1 },
   captureAction: {
     width: 36,
     height: 36,

@@ -387,7 +387,7 @@ export const en = {
   "planning.subtitle.one": "{{count}} task · Offline changes stay on this device",
   "planning.subtitle.other": "{{count}} tasks · Offline changes stay on this device",
   "tasks.quickAdd": "Quick add task",
-  "tasks.quickAddPlaceholder": "Describe what needs doing",
+  "tasks.quickAddPlaceholder": "Try: tomorrow 3pm send report #work !high",
   "tasks.add": "Add task",
   "tasks.search": "Search tasks",
   "tasks.searchPlaceholder": "Title, description, or tag",
