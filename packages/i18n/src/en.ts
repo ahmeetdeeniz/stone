@@ -841,6 +841,8 @@ export const en = {
   "focus.linkHint":
     "Task, project, note and calendar-block links are preserved when started there.",
   "focus.noStreak": "Streaks are hidden until historical goal snapshots can make them trustworthy.",
+  "share.inboxTitle": "Inbox",
+  "share.saveFailed": "Could not save what you shared",
   "widgets.privacy": "Widget privacy",
   "widgets.privacyDescription":
     "Counts only is the safe default for information visible outside Stone.",

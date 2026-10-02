@@ -70,6 +70,18 @@ and EAS app-extension declaration. Confirm the host and extension signing teams,
 capability, WidgetKit families, Live Activity, and Dynamic Island in Xcode. This cannot be
 compiled or archived on Windows.
 
+iOS builds contain two app extensions, each with its own App Group, and EAS provisions both from
+the generated `appExtensions` list:
+
+| Target                  | Bundle identifier                          | App Group                                |
+| ----------------------- | ------------------------------------------ | ---------------------------------------- |
+| `StoneWidgetsExtension` | `<host bundle identifier>.widgets`         | `group.<host bundle identifier>.widgets` |
+| `StoneShare`            | `<host bundle identifier>.share-extension` | `group.<host bundle identifier>`         |
+
+The host app carries both groups; `apps/mobile/app.config.ts` merges them because the share plugin
+otherwise replaces the list. The share extension also needs the pnpm patch in `patches/` for the
+`xcode` package, which `pnpm install` applies automatically.
+
 The supported distribution plan is the owner's private TestFlight build, not a public App Store
 listing or public binary. Configure the owner's Apple Developer/EAS credentials outside Git.
 Private TestFlight installation and physical-iPhone validation remain pending.
