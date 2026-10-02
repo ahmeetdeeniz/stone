@@ -157,8 +157,10 @@ pnpm test
 pnpm test:integration
 ```
 
-Unconfigured client builds are supported: desktop sign-in shows a clear configuration error, while
-mobile native Firebase use requires your own public client config and native Firebase files.
+To connect your own Firebase project, run `pnpm setup:self-host` (and `pnpm doctor:self-host` to
+re-check). Unconfigured client builds are supported: desktop sign-in shows a clear configuration
+error, while mobile native Firebase use requires your own public client config and native Firebase
+files.
 
 - [Development and self-hosting setup](public-docs/SELF-HOSTING.md)
 - [Firebase, Firestore, Storage, rules, and deletion](public-docs/FIREBASE.md)

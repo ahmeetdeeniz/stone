@@ -161,6 +161,7 @@ export default function NotesScreen() {
                 size="sm"
                 onPress={() => void createNote()}
                 disabled={busy}
+                testID="notes-new"
               />
             </>
           }
