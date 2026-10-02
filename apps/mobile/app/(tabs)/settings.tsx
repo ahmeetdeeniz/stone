@@ -22,6 +22,7 @@ import { pickWorkspaceCalendarFile, shareWorkspaceExport } from "../../src/notes
 import { restoreCalendarWorkspaceFile } from "../../src/notes/workspace-bundle";
 import type { SyncState } from "../../src/infrastructure/storage/sync";
 import { useI18n } from "../../src/i18n/provider";
+import { calendarSubscriptions } from "../../src/calendar/subscription-service";
 import type { WidgetPrivacy } from "@stone/widgets";
 import { readWidgetPrivacy, writeWidgetPrivacy } from "../../src/widgets/widget-lifecycle";
 import { refreshNativeWidgets } from "../../src/widgets/snapshot";
@@ -202,6 +203,7 @@ export default function SettingsScreen() {
               await clearWidgetsForAccountLifecycle();
               await services.deleteRemoteData(user.uid);
               await services.purgeLocalData(user.uid);
+              await calendarSubscriptions.clear(user.uid);
               await service.deleteAccount();
             } catch (error) {
               Alert.alert(
