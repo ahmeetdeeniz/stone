@@ -5,6 +5,8 @@ tag, so no release date or semantic version is claimed.
 
 ## Unreleased
 
+- Added sharing into Stone from other apps (iOS share extension, Android share target): text and
+  links are filed into an Inbox note as tasks.
 - Added local-first Android Glance and iOS WidgetKit Today, Agenda, Focus, and Quick Capture
   widgets, an optional Android focus notification, and iOS Live Activity/Dynamic Island sources.
 - Added bounded versioned snapshot/action bridges, validated deep links, revision-safe actions,
@@ -12,6 +14,8 @@ tag, so no release date or semantic version is claimed.
 
 ### Fixed
 
+- The widget config plugin no longer replaces the host app's App Group list or other plugins'
+  EAS app-extension declarations.
 - Mobile startup no longer races two database initialisations (which could leave the app on an
   error screen), shows the real error with a retry, builds workspace packages before
   start/export/EAS, relies on native Firebase config, and targets iOS 16.1 for the widget module.

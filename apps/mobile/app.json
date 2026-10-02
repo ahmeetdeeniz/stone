@@ -23,6 +23,18 @@
             "deploymentTarget": "16.1"
           }
         }
+      ],
+      [
+        "expo-share-intent",
+        {
+          "iosActivationRules": {
+            "NSExtensionActivationSupportsText": true,
+            "NSExtensionActivationSupportsWebURLWithMaxCount": 1,
+            "NSExtensionActivationSupportsWebPageWithMaxCount": 1
+          },
+          "iosShareExtensionName": "Stone Share",
+          "androidIntentFilters": ["text/*"]
+        }
       ]
     ],
     "ios": {

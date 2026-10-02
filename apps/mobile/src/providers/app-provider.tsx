@@ -15,6 +15,7 @@ import { AuthProvider, useAuth } from "./auth-provider";
 import { registerBackgroundSync } from "../services/background-sync";
 import { WidgetLifecycle } from "../widgets/widget-lifecycle";
 import { NativeDeepLinkRouter } from "../widgets/native-deep-links";
+import { ShareInboxHandler } from "../share/share-inbox-handler";
 import { useI18n } from "../i18n/provider";
 
 export function AppProvider({ children }: PropsWithChildren) {
@@ -58,6 +59,7 @@ export function AppProvider({ children }: PropsWithChildren) {
             <ThemePreferenceLoader />
             <WidgetLifecycle />
             <NativeDeepLinkRouter />
+            <ShareInboxHandler />
             {children}
           </AuthProvider>
         </AppServicesContext.Provider>

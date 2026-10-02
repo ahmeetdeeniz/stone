@@ -844,6 +844,8 @@ export const tr = {
   "focus.linkHint":
     "Görev, proje, not ve takvim bloğu bağlantıları oradan başlatıldığında korunur.",
   "focus.noStreak": "Geçmiş hedef anlık görüntüleri güvenilir kılana kadar seriler gizlidir.",
+  "share.inboxTitle": "Gelen kutusu",
+  "share.saveFailed": "Paylaşılan içerik kaydedilemedi",
   "widgets.privacy": "Widget gizliliği",
   "widgets.privacyDescription":
     "Yalnızca sayılar, Stone dışında görünen bilgiler için güvenli varsayılandır.",

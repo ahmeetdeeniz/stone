@@ -56,6 +56,7 @@ presented as product evidence.
 
 ### Markdown workspace
 
+- Share text and links from any app into Stone: they land in an Inbox note as unchecked tasks
 - CodeMirror 6 Live Preview editing, search, formatting, tables, code, callouts, task lists, and
   source-preserving frontmatter
 - Local note creation, rename, pin, full-text search, import/export, trash, drafts, and revisions
