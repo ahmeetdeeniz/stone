@@ -40,6 +40,22 @@ assert(
   mobilePackage.dependencies?.["@react-native-firebase/storage"] === "^23.4.0",
   "@react-native-firebase/storage must be a mobile workspace dependency.",
 );
+// React Native Firebase modules must share one version, or native builds fail to link.
+assert(
+  mobilePackage.dependencies?.["@react-native-firebase/crashlytics"] ===
+    mobilePackage.dependencies?.["@react-native-firebase/app"],
+  "@react-native-firebase/crashlytics must use the same version range as @react-native-firebase/app.",
+);
+// Crash reporting is opt-in per device (Settings → Diagnostics); collection must start off.
+assert(
+  readJson(path.join(mobileRoot, "firebase.json"))["react-native"]
+    ?.crashlytics_auto_collection_enabled === false,
+  "apps/mobile/firebase.json must disable Crashlytics auto collection.",
+);
+assert(
+  appConfig.runtimeVersion?.policy === "fingerprint",
+  "OTA updates must use the fingerprint runtime version policy so JS never reaches incompatible native builds.",
+);
 assert(
   mobilePackage.dependencies?.["@stone/native-widgets"] === "workspace:*",
   "Stone native widgets must be a mobile workspace dependency.",

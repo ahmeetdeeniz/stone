@@ -53,6 +53,8 @@
     "submit:production:ios": "pnpm --dir apps/mobile exec eas submit --platform ios --profile production --latest",
     "eas:android:development": "pnpm --dir apps/mobile exec eas build --platform android --profile development",
     "eas:ios:simulator": "pnpm --dir apps/mobile exec eas build --platform ios --profile development-simulator",
+    "update:preview": "pnpm --dir apps/mobile exec eas update --channel preview --message",
+    "update:production": "pnpm --dir apps/mobile exec eas update --channel production --message",
     "mobile:android": "pnpm --filter @stone/mobile run android",
     "mobile:ios": "pnpm --filter @stone/mobile run ios"
   },
