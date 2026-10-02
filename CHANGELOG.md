@@ -5,6 +5,9 @@ tag, so no release date or semantic version is claimed.
 
 ## Unreleased
 
+- Desktop builds for macOS (universal DMG) and Linux (.deb and AppImage) alongside Windows, with
+  optional Developer ID signing/notarization and signed in-app auto-updates (Settings → Updates)
+  published through draft GitHub releases.
 - Added local-first Android Glance and iOS WidgetKit Today, Agenda, Focus, and Quick Capture
   widgets, an optional Android focus notification, and iOS Live Activity/Dynamic Island sources.
 - Added bounded versioned snapshot/action bridges, validated deep links, revision-safe actions,

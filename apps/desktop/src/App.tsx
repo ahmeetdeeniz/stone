@@ -26,6 +26,7 @@ import {
   type CalendarRecurrenceEditScope,
 } from "@stone/domain";
 import GithubPanel from "./GithubPanel";
+import { UpdateBanner, UpdateSettingsCard, useAppUpdates } from "./updates";
 import FocusPanel from "./FocusPanel";
 import {
   buildProjectSummaries,
@@ -225,6 +226,7 @@ function StoneShell({ session, onSignedOut }: { session: AuthSession; onSignedOu
   const [message, setMessage] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>("saved");
+  const updates = useAppUpdates();
   const editorHost = useRef<HTMLDivElement>(null);
   const editor = useRef<EditorView | null>(null);
   const draft = useRef("");
@@ -573,6 +575,7 @@ function StoneShell({ session, onSignedOut }: { session: AuthSession; onSignedOu
             </button>
           </div>
         </header>
+        <UpdateBanner state={updates.state} onInstall={() => void updates.install()} />
         {message && (
           <div className="toast" role="status">
             {message}
@@ -743,6 +746,12 @@ function StoneShell({ session, onSignedOut }: { session: AuthSession; onSignedOu
                 {t("desktop.signOut")}
               </button>
             </div>
+            <UpdateSettingsCard
+              state={updates.state}
+              version={updates.version}
+              onCheck={() => void updates.check()}
+              onInstall={() => void updates.install()}
+            />
             <GithubPanel />
           </section>
         )}
