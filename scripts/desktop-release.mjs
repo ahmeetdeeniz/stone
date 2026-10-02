@@ -1,6 +1,6 @@
 // Release helpers for the desktop workflow (.github/workflows/desktop-release.yml).
 //
-//   node scripts/desktop-release.mjs config            -> exports TAURI_CONFIG for this runner
+//   node scripts/desktop-release.mjs config            -> writes tauri.<platform>.conf.json
 //   node scripts/desktop-release.mjs collect <out>     -> copies installers + .sig, writes .sha256
 //   node scripts/desktop-release.mjs manifest <dir>    -> writes <dir>/latest.json for the updater
 //
@@ -21,13 +21,25 @@ const INSTALLER_PATTERNS = [
   /\.AppImage$/u,
 ];
 
-/** Updater platform keys served by each signed updater artifact. */
+/**
+ * Updater platform keys served by each signed updater artifact. The updater looks for
+ * `<os>-<arch>-<installer>` first, so a .deb install is never "updated" with an AppImage.
+ */
 const UPDATER_PLATFORMS = [
-  { pattern: /-setup\.exe$/u, platforms: ["windows-x86_64"] },
+  { pattern: /-setup\.exe$/u, platforms: ["windows-x86_64", "windows-x86_64-nsis"] },
   // The macOS build is universal, so one archive serves both architectures.
   { pattern: /\.app\.tar\.gz$/u, platforms: ["darwin-aarch64", "darwin-x86_64"] },
-  { pattern: /\.AppImage$/u, platforms: ["linux-x86_64"] },
+  { pattern: /\.AppImage$/u, platforms: ["linux-x86_64", "linux-x86_64-appimage"] },
+  { pattern: /\.deb$/u, platforms: ["linux-x86_64-deb"] },
 ];
+
+/** Tauri merges this file over tauri.conf.json when building on that platform. */
+export function platformConfigFile(platform) {
+  if (!["windows", "macos", "linux"].includes(platform)) {
+    throw new Error(`Unknown release platform: ${platform}`);
+  }
+  return `apps/desktop/src-tauri/tauri.${platform}.conf.json`;
+}
 
 /**
  * Tauri configuration merged into tauri.conf.json for a release build. The updater is only
@@ -135,8 +147,14 @@ function configCommand(root, env) {
       `  macOS signing: ${env.HAS_APPLE_CERTIFICATE === "true" ? "Developer ID" : "ad-hoc"}`,
     );
   }
-  if (Object.keys(config).length > 0 && env.GITHUB_ENV) {
-    fs.appendFileSync(env.GITHUB_ENV, `TAURI_CONFIG=${JSON.stringify(config)}\n`);
+  // A platform config file rather than the TAURI_CONFIG variable: the CLI only forwards that
+  // variable to the Rust build, so bundle settings such as createUpdaterArtifacts in it are
+  // silently ignored. The generated file is gitignored.
+  if (Object.keys(config).length > 0) {
+    fs.writeFileSync(
+      path.join(root, platformConfigFile(env.RELEASE_PLATFORM)),
+      `${JSON.stringify(config, null, 2)}\n`,
+    );
   }
 }
 

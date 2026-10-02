@@ -3,6 +3,7 @@ import {
   assertTagMatchesVersion,
   buildUpdateManifest,
   isInstaller,
+  platformConfigFile,
   releaseTauriConfig,
 } from "./desktop-release.mjs";
 
@@ -56,15 +57,20 @@ describe("desktop update manifest", () => {
         { name: "Stone_0.2.0_x64-setup.exe", signature: "sig-win\n" },
         { name: "Stone.app.tar.gz", signature: "sig-mac" },
         { name: "Stone_0.2.0_amd64.AppImage", signature: "sig-linux" },
-        { name: "Stone_0.2.0_amd64.deb", signature: "ignored" },
+        { name: "Stone_0.2.0_amd64.deb", signature: "sig-deb" },
+        { name: "Stone_0.2.0_universal.dmg", signature: "not an updater artifact" },
       ],
     });
     expect(Object.keys(manifest.platforms).sort()).toEqual([
       "darwin-aarch64",
       "darwin-x86_64",
       "linux-x86_64",
+      "linux-x86_64-appimage",
+      "linux-x86_64-deb",
       "windows-x86_64",
+      "windows-x86_64-nsis",
     ]);
+    expect(manifest.platforms["linux-x86_64-deb"].url).toMatch(/\.deb$/u);
     expect(manifest.platforms["windows-x86_64"]).toEqual({
       signature: "sig-win",
       url: "https://github.com/o/r/releases/download/v0.2.0/Stone_0.2.0_x64-setup.exe",
@@ -76,6 +82,11 @@ describe("desktop update manifest", () => {
     expect(() =>
       buildUpdateManifest({ version: "1", notes: "", pubDate: "", downloadBase: "x", files: [] }),
     ).toThrow(/No signed updater artifacts/u);
+  });
+
+  it("writes the per-platform config file Tauri merges", () => {
+    expect(platformConfigFile("macos")).toBe("apps/desktop/src-tauri/tauri.macos.conf.json");
+    expect(() => platformConfigFile("android")).toThrow(/Unknown release platform/u);
   });
 
   it("recognises shipped installers only", () => {

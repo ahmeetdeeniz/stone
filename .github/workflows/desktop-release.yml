@@ -122,9 +122,10 @@ jobs:
       - name: Report desktop build-time configuration status
         run: pnpm run report:desktop-build-env
 
-      # Exports TAURI_CONFIG (updater endpoint + public key, macOS ad-hoc signing) for this
-      # runner. It is told only whether the signing secrets exist, never their values, and on
-      # tag builds it fails when the tag does not match the app version.
+      # Writes the gitignored tauri.<platform>.conf.json (updater endpoint + public key, macOS
+      # ad-hoc signing) that Tauri merges into this build. It is told only whether the signing
+      # secrets exist, never their values, and on tag builds it fails when the tag does not
+      # match the app version.
       - name: Configure release signing
         shell: bash
         env:
