@@ -5,6 +5,7 @@ tag, so no release date or semantic version is claimed.
 
 ## Unreleased
 
+- Added a weekly review screen and read-only iCalendar feed subscriptions on mobile.
 - Added local-first Android Glance and iOS WidgetKit Today, Agenda, Focus, and Quick Capture
   widgets, an optional Android focus notification, and iOS Live Activity/Dynamic Island sources.
 - Added bounded versioned snapshot/action bridges, validated deep links, revision-safe actions,
