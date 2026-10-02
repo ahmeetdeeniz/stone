@@ -49,8 +49,8 @@ yollarını, repository adlarını veya içe aktarılan veriyi çevirmez ya da y
 - **Windows 10/11:** Tauri tabanlı not, görev, proje özeti, Today, takvim ve GitHub iş akışları.
 - **MCP:** OAuth, scope, revision, idempotency ve audit kayıtları olan provider-neutral servis.
 
-Windows henüz mobil proje düzenleme/Kanban, çizim, çöp, revision ve conflict UI parity’sine sahip
-değildir. macOS/Linux masaüstü uygulamaları desteklenmez. Native hatırlatıcı, harici takvim hesabı
+Windows artık proje oluşturup düzenleyebilir, çöp kutusu, not geçmişi ve çakışma çözme sunar; mobil
+Kanban ve çizim parity’si henüz yoktur. macOS/Linux masaüstü uygulamaları desteklenmez. Native hatırlatıcı, harici takvim hesabı
 ve davet bu sürümde yoktur.
 
 Android Glance ve iOS WidgetKit için Bugünün Görevleri, Ajanda, Odak ve Hızlı Yakalama widget’ları
