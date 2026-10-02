@@ -18,6 +18,7 @@ use uuid::Uuid;
 
 pub mod git;
 pub mod github;
+mod recovery;
 
 const MAX_MARKDOWN_BYTES: u64 = 10 * 1024 * 1024;
 const KEYCHAIN_SERVICE: &str = "com.imtempra.stone";
@@ -114,6 +115,11 @@ struct DocumentInput {
     title: String,
     markdown: String,
     path: Option<String>,
+    /// Only used when the document is created (e.g. a project's Project.md); kept afterwards.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    kind: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    project_id: Option<String>,
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -279,7 +285,16 @@ pub fn run() {
             restore_repositories,
             cancel_restore,
             open_external_path,
-            open_github_url
+            open_github_url,
+            list_projects,
+            save_project,
+            recovery::list_conflicts,
+            recovery::resolve_conflict,
+            recovery::delete_document,
+            recovery::restore_document,
+            recovery::list_trash,
+            recovery::list_document_revisions,
+            recovery::get_document_revision
         ])
         .run(tauri::generate_context!())
         .expect("error while running Stone");
@@ -342,6 +357,28 @@ impl Database {
             connection.pragma_update(None, "user_version", 6_i64)?;
             connection.execute(
                 "INSERT OR IGNORE INTO migrations(version, applied_at) VALUES(6, ?1)",
+                [Utc::now().to_rfc3339()],
+            )?;
+        }
+        if current < 7 {
+            // remote_fields keeps the synced document fields desktop does not edit (projectId,
+            // tags, isPinned, ...) so pushing an edit never drops them. Conflicts remember their
+            // entity type and base revision so they can be resolved after the outbox moves on.
+            connection.execute_batch("ALTER TABLE documents ADD COLUMN remote_fields TEXT; ALTER TABLE conflicts ADD COLUMN entity_type TEXT NOT NULL DEFAULT 'document'; ALTER TABLE conflicts ADD COLUMN base_revision INTEGER; UPDATE conflicts SET entity_type = COALESCE((SELECT outbox.entity_type FROM outbox WHERE outbox.entity_id = conflicts.entity_id AND outbox.status = 'blocked' ORDER BY outbox.created_at DESC LIMIT 1), 'document'), base_revision = (SELECT outbox.base_revision FROM outbox WHERE outbox.entity_id = conflicts.entity_id AND outbox.status = 'blocked' ORDER BY outbox.created_at DESC LIMIT 1); CREATE INDEX IF NOT EXISTS conflicts_open_entity_idx ON conflicts(status, entity_type, entity_id);")?;
+            connection.pragma_update(None, "user_version", 7_i64)?;
+            connection.execute(
+                "INSERT OR IGNORE INTO migrations(version, applied_at) VALUES(7, ?1)",
+                [Utc::now().to_rfc3339()],
+            )?;
+        }
+        if current < 8 {
+            // Projects are synced so desktop edits update the entity mobile treats as the source
+            // of truth. sync_backfills records which collections were fully listed once per
+            // owner, so a collection added later is backfilled without re-reading the others.
+            connection.execute_batch("CREATE TABLE IF NOT EXISTS projects (id TEXT PRIMARY KEY, payload TEXT NOT NULL, title TEXT NOT NULL, canonical_document_id TEXT, revision INTEGER NOT NULL, updated_at TEXT NOT NULL, deleted_at TEXT); CREATE TABLE IF NOT EXISTS sync_backfills (owner_id TEXT NOT NULL, collection TEXT NOT NULL, completed_at TEXT NOT NULL, PRIMARY KEY(owner_id, collection)); ALTER TABLE documents ADD COLUMN project_id TEXT; INSERT OR IGNORE INTO sync_backfills(owner_id, collection, completed_at) SELECT cursors.owner_id, collections.name, datetime('now') FROM sync_event_cursors AS cursors CROSS JOIN (SELECT 'documents' AS name UNION ALL SELECT 'tasks' UNION ALL SELECT 'calendar' UNION ALL SELECT 'focusSessions' UNION ALL SELECT 'focusGoals') AS collections;")?;
+            connection.pragma_update(None, "user_version", 8_i64)?;
+            connection.execute(
+                "INSERT OR IGNORE INTO migrations(version, applied_at) VALUES(8, ?1)",
                 [Utc::now().to_rfc3339()],
             )?;
         }
@@ -917,7 +954,7 @@ fn save_document(
         .map_err(|error| error.to_string())?;
     let revision = previous.unwrap_or(0) + 1;
     let timestamp = now();
-    transaction.execute("INSERT INTO documents(id, kind, title, markdown, path, revision, updated_at, created_at, deleted_at, updated_by_device_id) VALUES(?1, 'note', ?2, ?3, ?4, ?5, ?6, ?6, NULL, ?7) ON CONFLICT(id) DO UPDATE SET title=excluded.title, markdown=excluded.markdown, path=excluded.path, revision=excluded.revision, updated_at=excluded.updated_at, updated_by_device_id=excluded.updated_by_device_id", params![document.id, document.title, document.markdown, document.path, revision, timestamp, db.device_id]).map_err(|error| error.to_string())?;
+    transaction.execute("INSERT INTO documents(id, kind, title, markdown, path, revision, updated_at, created_at, deleted_at, updated_by_device_id, project_id) VALUES(?1, COALESCE(?8, 'note'), ?2, ?3, ?4, ?5, ?6, ?6, NULL, ?7, ?9) ON CONFLICT(id) DO UPDATE SET title=excluded.title, markdown=excluded.markdown, path=excluded.path, revision=excluded.revision, updated_at=excluded.updated_at, updated_by_device_id=excluded.updated_by_device_id, project_id=COALESCE(excluded.project_id, documents.project_id)", params![document.id, document.title, document.markdown, document.path, revision, timestamp, db.device_id, document.kind, document.project_id]).map_err(|error| error.to_string())?;
     transaction.execute("INSERT INTO document_revisions(id, document_id, revision, markdown, created_at) VALUES(?1, ?2, ?3, ?4, ?5)", params![Uuid::new_v4().to_string(), document.id, revision, document.markdown, timestamp]).map_err(|error| error.to_string())?;
     let payload = serde_json::to_string(&document).map_err(|error| error.to_string())?;
     transaction.execute("INSERT INTO outbox(id, owner_id, entity_type, entity_id, operation, base_revision, revision, payload, created_at, status) VALUES(?1, '', 'document', ?2, 'upsert', ?3, ?4, ?5, ?6, 'pending')", params![Uuid::new_v4().to_string(), document.id, previous.unwrap_or(0), revision, payload, timestamp]).map_err(|error| error.to_string())?;
@@ -950,6 +987,8 @@ fn open_markdown_file(
         ),
         markdown: content,
         path: Some(canonical.to_string_lossy().into_owned()),
+        kind: None,
+        project_id: None,
     };
     let result = save_document(document, state.clone())?;
     let db = state.lock().map_err(|_| "Veritabanı kilidi alınamadı.")?;
@@ -1173,17 +1212,15 @@ fn public_session(session: &AuthSession) -> PublicAuthSession {
         expires_at: session.expires_at,
     }
 }
-fn firebase_error(response: reqwest::Response) -> impl std::future::Future<Output = String> {
-    async move {
-        let status = response.status();
-        let body = response
-            .json::<FirebaseErrorEnvelope>()
-            .await
-            .ok()
-            .map(|envelope| envelope.error.message)
-            .unwrap_or_else(|| status.to_string());
-        format!("Firebase: {body}")
-    }
+async fn firebase_error(response: reqwest::Response) -> String {
+    let status = response.status();
+    let body = response
+        .json::<FirebaseErrorEnvelope>()
+        .await
+        .ok()
+        .map(|envelope| envelope.error.message)
+        .unwrap_or_else(|| status.to_string());
+    format!("Firebase: {body}")
 }
 async fn firebase_post(
     client: &Client,
@@ -1508,14 +1545,7 @@ fn apply_remote_tasks(
         let Some(task) = remote_task(remote) else {
             continue;
         };
-        let has_pending: bool = db
-            .connection
-            .query_row(
-                "SELECT EXISTS(SELECT 1 FROM outbox WHERE entity_type = 'task' AND entity_id = ?1 AND status = 'pending')",
-                [&task.id],
-                |row| row.get(0),
-            )
-            .map_err(|error| error.to_string())?;
+        let has_pending = has_unsynced_changes(&db.connection, "task", &task.id)?;
         let local_revision: Option<i64> = db
             .connection
             .query_row(
@@ -1557,10 +1587,7 @@ fn apply_remote_calendar(
             .get("revision")
             .and_then(|value| value.as_i64())
             .unwrap_or(0);
-        let pending: bool = db.connection.query_row(
-            "SELECT EXISTS(SELECT 1 FROM outbox WHERE entity_type='calendar' AND entity_id=?1 AND status='pending')",
-            [&id], |row| row.get(0),
-        ).map_err(|error| error.to_string())?;
+        let pending = has_unsynced_changes(&db.connection, "calendar", &id)?;
         let local: Option<i64> = db
             .connection
             .query_row(
@@ -1608,10 +1635,7 @@ fn apply_remote_focus(
             .get("revision")
             .and_then(|value| value.as_i64())
             .unwrap_or(0);
-        let pending: bool = db.connection.query_row(
-            "SELECT EXISTS(SELECT 1 FROM outbox WHERE entity_type='focus' AND entity_id=?1 AND status='pending')",
-            [&id], |row| row.get(0),
-        ).map_err(|error| error.to_string())?;
+        let pending = has_unsynced_changes(&db.connection, "focus", &id)?;
         let local: Option<i64> = db
             .connection
             .query_row(
@@ -1658,10 +1682,7 @@ fn apply_remote_focus_goals(
             .get("revision")
             .and_then(|value| value.as_i64())
             .unwrap_or(0);
-        let pending: bool = db.connection.query_row(
-            "SELECT EXISTS(SELECT 1 FROM outbox WHERE entity_type='focus_goal' AND entity_id=?1 AND status='pending')",
-            [&owner_id], |row| row.get(0),
-        ).map_err(|error| error.to_string())?;
+        let pending = has_unsynced_changes(&db.connection, "focus_goal", &owner_id)?;
         let local: Option<i64> = db
             .connection
             .query_row(
@@ -1684,6 +1705,164 @@ fn apply_remote_focus_goals(
     Ok(pulled)
 }
 
+fn apply_remote_projects(
+    database: &Mutex<Database>,
+    remote_items: &[serde_json::Value],
+) -> Result<u32, String> {
+    let db = database
+        .lock()
+        .map_err(|_| "Veritabanı kilidi alınamadı.")?;
+    let mut pulled = 0;
+    for remote in remote_items {
+        let payload = decoded_fields(remote);
+        if !payload.is_object() {
+            continue;
+        }
+        let id = json_text(&payload, "id")?;
+        let revision = payload
+            .get("revision")
+            .and_then(|value| value.as_i64())
+            .unwrap_or(0);
+        let local: Option<i64> = db
+            .connection
+            .query_row(
+                "SELECT revision FROM projects WHERE id = ?1",
+                [&id],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(|error| error.to_string())?;
+        if has_unsynced_changes(&db.connection, "project", &id)?
+            || local.is_some_and(|value| value >= revision)
+        {
+            continue;
+        }
+        upsert_project_row(&db.connection, &payload)?;
+        pulled += 1;
+    }
+    Ok(pulled)
+}
+
+fn upsert_project_row(connection: &Connection, payload: &serde_json::Value) -> Result<(), String> {
+    connection
+        .execute(
+            "INSERT INTO projects(id, payload, title, canonical_document_id, revision, updated_at, deleted_at) VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload, title=excluded.title, canonical_document_id=excluded.canonical_document_id, revision=excluded.revision, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at",
+            params![
+                json_text(payload, "id")?,
+                payload.to_string(),
+                payload.get("title").and_then(|value| value.as_str()).unwrap_or_default(),
+                payload.get("canonicalDocumentId").and_then(|value| value.as_str()),
+                payload.get("revision").and_then(|value| value.as_i64()).unwrap_or(0),
+                payload.get("updatedAt").and_then(|value| value.as_str()).unwrap_or_default(),
+                payload.get("deletedAt").and_then(|value| value.as_str()),
+            ],
+        )
+        .map(|_| ())
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn list_projects(state: State<'_, Mutex<Database>>) -> Result<Vec<serde_json::Value>, String> {
+    list_projects_in(&*state.lock().map_err(|_| "Veritabanı kilidi alınamadı.")?)
+}
+
+fn list_projects_in(db: &Database) -> Result<Vec<serde_json::Value>, String> {
+    let mut statement = db
+        .connection
+        .prepare("SELECT payload FROM projects WHERE deleted_at IS NULL ORDER BY updated_at DESC LIMIT 1000")
+        .map_err(|error| error.to_string())?;
+    let rows = statement
+        .query_map([], |row| row.get::<_, String>(0))
+        .map_err(|error| error.to_string())?;
+    rows.map(|row| {
+        row.map_err(|error| error.to_string())
+            .and_then(|payload| serde_json::from_str(&payload).map_err(|error| error.to_string()))
+    })
+    .collect()
+}
+
+const PROJECT_FIELDS: [&str; 20] = [
+    "id",
+    "ownerId",
+    "canonicalDocumentId",
+    "title",
+    "slug",
+    "status",
+    "priority",
+    "tags",
+    "targetDate",
+    "currentVersion",
+    "nextVersion",
+    "nextAction",
+    "repositoryUrl",
+    "platforms",
+    "health",
+    "revision",
+    "createdAt",
+    "updatedAt",
+    "deletedAt",
+    "updatedByDeviceId",
+];
+
+/// Saves a project entity (the record mobile reads) and queues it for sync. The caller writes
+/// the matching Project.md frontmatter through `save_document`.
+fn save_project_in(
+    database: &Database,
+    mut project: serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    let id = json_text(&project, "id")?;
+    let title = json_text(&project, "title")?;
+    json_text(&project, "canonicalDocumentId")?;
+    if title.trim().is_empty() || title.chars().count() > 512 {
+        return Err("Proje adı zorunludur ve 512 karakteri aşamaz.".to_owned());
+    }
+    let Some(object) = project.as_object_mut() else {
+        return Err("Geçersiz proje.".to_owned());
+    };
+    // The rules only accept known keys; drop anything else instead of failing the whole sync.
+    object.retain(|key, _| PROJECT_FIELDS.contains(&key.as_str()));
+    let transaction = database
+        .connection
+        .unchecked_transaction()
+        .map_err(|error| error.to_string())?;
+    let previous: Option<i64> = transaction
+        .query_row(
+            "SELECT revision FROM projects WHERE id = ?1",
+            [&id],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(|error| error.to_string())?;
+    let revision = previous.unwrap_or(0) + 1;
+    let timestamp = now();
+    project["revision"] = serde_json::json!(revision);
+    project["updatedAt"] = serde_json::json!(timestamp);
+    project["updatedByDeviceId"] = serde_json::json!(database.device_id);
+    if previous.is_none() {
+        project["createdAt"] = serde_json::json!(timestamp);
+    }
+    upsert_project_row(&transaction, &project)?;
+    transaction
+        .execute(
+            "INSERT INTO outbox(id, owner_id, entity_type, entity_id, operation, base_revision, revision, payload, created_at, status) VALUES(?1, '', 'project', ?2, 'upsert', ?3, ?4, ?5, ?6, 'pending')",
+            params![Uuid::new_v4().to_string(), id, previous.unwrap_or(0), revision, project.to_string(), timestamp],
+        )
+        .map_err(|error| error.to_string())?;
+    transaction.commit().map_err(|error| error.to_string())?;
+    Ok(project)
+}
+
+#[tauri::command]
+fn save_project(
+    project: serde_json::Value,
+    state: State<'_, Mutex<Database>>,
+) -> Result<serde_json::Value, String> {
+    save_project_in(
+        &*state.lock().map_err(|_| "Veritabanı kilidi alınamadı.")?,
+        project,
+    )
+}
+
 fn firestore_timestamp(value: &serde_json::Value) -> String {
     value
         .get("fields")
@@ -1701,6 +1880,8 @@ fn remote_document(value: &serde_json::Value) -> Option<DocumentInput> {
         title: firestore_text(value, "title").unwrap_or_else(|| "Adsız not".to_owned()),
         markdown: firestore_text(value, "markdown").unwrap_or_default(),
         path: firestore_text(value, "path"),
+        kind: None,
+        project_id: None,
     })
 }
 
@@ -1726,14 +1907,7 @@ fn apply_remote_documents(
             )
             .optional()
             .map_err(|error| error.to_string())?;
-        let has_pending: bool = db
-            .connection
-            .query_row(
-                "SELECT EXISTS(SELECT 1 FROM outbox WHERE entity_id = ?1 AND status = 'pending')",
-                [&document.id],
-                |row| row.get(0),
-            )
-            .map_err(|error| error.to_string())?;
+        let has_pending = has_unsynced_changes(&db.connection, "document", &document.id)?;
         if has_pending
             || local_revision
                 .map(|revision| revision >= remote_revision)
@@ -1744,8 +1918,11 @@ fn apply_remote_documents(
         let timestamp = firestore_timestamp(remote);
         // Soft deletes from other devices arrive as a set `deletedAt`.
         let deleted_at = firestore_text(remote, "deletedAt");
+        let kind = firestore_text(remote, "kind").unwrap_or_else(|| "note".to_owned());
+        let remote_fields = decoded_fields(remote).to_string();
+        let project_id = firestore_text(remote, "projectId");
         db.connection
-            .execute("INSERT INTO documents(id, kind, title, markdown, path, revision, updated_at, created_at, deleted_at, updated_by_device_id) VALUES(?1, 'note', ?2, ?3, ?4, ?5, ?6, ?6, ?7, 'remote') ON CONFLICT(id) DO UPDATE SET title=excluded.title, markdown=excluded.markdown, path=excluded.path, revision=excluded.revision, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, updated_by_device_id='remote'", params![document.id, document.title, document.markdown, document.path, remote_revision, timestamp, deleted_at])
+            .execute("INSERT INTO documents(id, kind, title, markdown, path, revision, updated_at, created_at, deleted_at, updated_by_device_id, remote_fields, project_id) VALUES(?1, ?8, ?2, ?3, ?4, ?5, ?6, ?6, ?7, 'remote', ?9, ?10) ON CONFLICT(id) DO UPDATE SET kind=excluded.kind, title=excluded.title, markdown=excluded.markdown, path=excluded.path, revision=excluded.revision, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, updated_by_device_id='remote', remote_fields=excluded.remote_fields, project_id=excluded.project_id", params![document.id, document.title, document.markdown, document.path, remote_revision, timestamp, deleted_at, kind, remote_fields, project_id])
             .map_err(|error| error.to_string())?;
         db.connection
             .execute("INSERT INTO document_revisions(id, document_id, revision, markdown, created_at) VALUES(?1, ?2, ?3, ?4, ?5)", params![Uuid::new_v4().to_string(), document.id, remote_revision, document.markdown, timestamp])
@@ -1784,14 +1961,8 @@ async fn sync_now(
     let mut pushed = 0;
     let mut conflicts = 0;
     for event in pending {
-        let collection = match event.entity_type.as_str() {
-            "document" => "documents",
-            "task" => "tasks",
-            "calendar" => "calendar",
-            "focus" => "focusSessions",
-            "focus_goal" => "focusGoals",
-            _ => return Err("Desteklenmeyen desktop sync entity.".to_owned()),
-        };
+        let collection = collection_for(&event.entity_type)
+            .ok_or_else(|| "Desteklenmeyen desktop sync entity.".to_owned())?;
         let entity_name = format!("{documents_root}/{collection}/{}", event.entity_id);
         let remote = match get_firestore_document(&client, &entity_name, &session.id_token).await {
             Ok(remote) => remote,
@@ -1909,10 +2080,13 @@ async fn sync_now(
 
     let cursor = load_event_cursor(&database, &session.uid)?;
     let mut pulled = 0;
-    if cursor.is_none() {
-        // First sync on this device: entities written before the event log existed (or by older
-        // desktop builds that never wrote events) only live in the entity collections.
-        for (collection, apply) in REMOTE_COLLECTIONS {
+    // Entities written before the event log existed (or by older desktop builds that never wrote
+    // events) only live in the entity collections, so each collection is listed in full once.
+    for (collection, apply) in REMOTE_COLLECTIONS {
+        if is_backfilled(&database, &session.uid, collection)? {
+            continue;
+        }
+        {
             let documents = match list_firestore_collection(
                 &client,
                 &format!("{documents_root}/{collection}"),
@@ -1926,6 +2100,7 @@ async fn sync_now(
             };
             pulled += apply(&database, &documents)?;
         }
+        mark_backfilled(&database, &session.uid, collection)?;
     }
     // Afterwards only the syncEvents log is read, from the stored cursor, like the mobile client.
     match pull_sync_events(
@@ -1956,8 +2131,9 @@ const SESSION_REFRESH_MARGIN_SECONDS: i64 = 120;
 
 type RemoteApplier = fn(&Mutex<Database>, &[serde_json::Value]) -> Result<u32, String>;
 
-const REMOTE_COLLECTIONS: [(&str, RemoteApplier); 5] = [
+const REMOTE_COLLECTIONS: [(&str, RemoteApplier); 6] = [
     ("documents", apply_remote_documents),
+    ("projects", apply_remote_projects),
     ("tasks", apply_remote_tasks),
     ("calendar", apply_remote_calendar),
     ("focusSessions", apply_remote_focus),
@@ -2065,14 +2241,9 @@ fn decode_sync_event(documents_root: &str, event: &serde_json::Value) -> RemoteE
         .and_then(|payload| payload.pointer("/mapValue/fields"))
         .cloned()
         .unwrap_or_else(|| serde_json::json!({}));
-    let collection = match entity_type.as_str() {
-        "document" => "documents",
-        "task" => "tasks",
-        "calendar" => "calendar",
-        "focus" => "focusSessions",
-        "focus_goal" => "focusGoals",
-        // Projects, versions, drawings, devices and settings are mobile-only today.
-        _ => return RemoteEvent::Unsupported,
+    // Versions, drawings, devices and settings are mobile-only today.
+    let Some(collection) = collection_for(&entity_type) else {
+        return RemoteEvent::Unsupported;
     };
     if entity_id.is_empty() {
         return RemoteEvent::Unsupported;
@@ -2117,14 +2288,7 @@ fn apply_purge(
     let db = database
         .lock()
         .map_err(|_| "Veritabanı kilidi alınamadı.")?;
-    let has_pending: bool = db
-        .connection
-        .query_row(
-            "SELECT EXISTS(SELECT 1 FROM outbox WHERE entity_type = ?1 AND entity_id = ?2 AND status = 'pending')",
-            params![entity_type, entity_id],
-            |row| row.get(0),
-        )
-        .map_err(|error| error.to_string())?;
+    let has_pending = has_unsynced_changes(&db.connection, entity_type, entity_id)?;
     if has_pending {
         return Ok(0);
     }
@@ -2134,6 +2298,7 @@ fn apply_purge(
         "calendar" => "DELETE FROM calendar_items WHERE id = ?1",
         "focus" => "DELETE FROM focus_sessions WHERE id = ?1",
         "focus_goal" => "DELETE FROM focus_goals WHERE owner_id = ?1",
+        "project" => "DELETE FROM projects WHERE id = ?1",
         _ => return Ok(0),
     };
     let removed = db
@@ -2418,6 +2583,16 @@ fn is_precondition_failure(code: &str) -> bool {
 
 /// Desktop outbox rows store a `DesktopDocument`, which lacks fields `validDocument` in
 /// firestore.rules requires (and mobile stores in NOT NULL columns); fill them from the local row.
+/// Written fresh on every push by `firestore_fields`, never copied from a previous remote copy.
+const SERVER_MANAGED_FIELDS: [&str; 6] = [
+    "ownerId",
+    "revision",
+    "updatedAt",
+    "updatedByDeviceId",
+    "idempotencyKey",
+    "lastEventId",
+];
+
 fn complete_document_payload(
     database: &Mutex<Database>,
     payload: &mut serde_json::Value,
@@ -2430,17 +2605,48 @@ fn complete_document_payload(
         .and_then(|value| value.as_str())
         .unwrap_or_default()
         .to_owned();
-    let row: Option<(String, String, Option<String>)> = database
+    type Row = (
+        String,
+        String,
+        Option<String>,
+        Option<String>,
+        Option<String>,
+    );
+    let row: Option<Row> = database
         .lock()
         .map_err(|_| "Veritabanı kilidi alınamadı.")?
         .connection
         .query_row(
-            "SELECT kind, created_at, deleted_at FROM documents WHERE id = ?1",
+            "SELECT kind, created_at, deleted_at, remote_fields, project_id FROM documents WHERE id = ?1",
             [&id],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?)),
         )
         .optional()
         .map_err(|error| error.to_string())?;
+    let (row, remote_fields, project_id) = match row {
+        Some((kind, created_at, deleted_at, remote_fields, project_id)) => (
+            Some((kind, created_at, deleted_at)),
+            remote_fields,
+            project_id,
+        ),
+        None => (None, None, None),
+    };
+    // Fields another client owns (projectId, tags, isPinned, ...) ride along unchanged; the
+    // full-document commit would otherwise erase them.
+    if let Some(serde_json::Value::Object(remote)) = remote_fields
+        .as_deref()
+        .and_then(|fields| serde_json::from_str(fields).ok())
+    {
+        for (key, value) in remote {
+            // kind/createdAt/deletedAt come from the local row below: pulls keep them current
+            // and a local trash or restore must win over the last pulled value.
+            if !SERVER_MANAGED_FIELDS.contains(&key.as_str())
+                && !matches!(key.as_str(), "kind" | "createdAt" | "deletedAt")
+            {
+                object.entry(key).or_insert(value);
+            }
+        }
+    }
     let updated_at = object
         .get("updatedAt")
         .cloned()
@@ -2461,7 +2667,9 @@ fn complete_document_payload(
     object
         .entry("deletedAt")
         .or_insert(deleted_at.map_or(serde_json::Value::Null, serde_json::Value::String));
-    object.entry("projectId").or_insert(serde_json::Value::Null);
+    object
+        .entry("projectId")
+        .or_insert(project_id.map_or(serde_json::Value::Null, serde_json::Value::String));
     object
         .entry("isPinned")
         .or_insert(serde_json::Value::Bool(false));
@@ -2501,6 +2709,85 @@ fn acknowledge_outbox(database: &Mutex<Database>, event_id: &str) -> Result<(), 
         .map_err(|error| error.to_string())
 }
 
+fn is_backfilled(
+    database: &Mutex<Database>,
+    owner_id: &str,
+    collection: &str,
+) -> Result<bool, String> {
+    database
+        .lock()
+        .map_err(|_| "Veritabanı kilidi alınamadı.")?
+        .connection
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM sync_backfills WHERE owner_id = ?1 AND collection = ?2)",
+            params![owner_id, collection],
+            |row| row.get(0),
+        )
+        .map_err(|error| error.to_string())
+}
+
+fn mark_backfilled(
+    database: &Mutex<Database>,
+    owner_id: &str,
+    collection: &str,
+) -> Result<(), String> {
+    database
+        .lock()
+        .map_err(|_| "Veritabanı kilidi alınamadı.")?
+        .connection
+        .execute(
+            "INSERT OR IGNORE INTO sync_backfills(owner_id, collection, completed_at) VALUES(?1, ?2, ?3)",
+            params![owner_id, collection, now()],
+        )
+        .map(|_| ())
+        .map_err(|error| error.to_string())
+}
+
+/// Firestore collection that stores a desktop outbox entity type.
+fn collection_for(entity_type: &str) -> Option<&'static str> {
+    match entity_type {
+        "document" => Some("documents"),
+        "task" => Some("tasks"),
+        "calendar" => Some("calendar"),
+        "focus" => Some("focusSessions"),
+        "focus_goal" => Some("focusGoals"),
+        "project" => Some("projects"),
+        _ => None,
+    }
+}
+
+/// Remote changes must not overwrite an entity that still has unsent local edits or an open
+/// conflict: the local copy is what the user is about to push or is choosing between.
+fn has_unsynced_changes(
+    connection: &Connection,
+    entity_type: &str,
+    entity_id: &str,
+) -> Result<bool, String> {
+    connection
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM outbox WHERE entity_type = ?1 AND entity_id = ?2 AND status = 'pending') OR EXISTS(SELECT 1 FROM conflicts WHERE entity_type = ?1 AND entity_id = ?2 AND status = 'open')",
+            params![entity_type, entity_id],
+            |row| row.get(0),
+        )
+        .map_err(|error| error.to_string())
+}
+
+/// Decodes a Firestore REST document's `fields` into plain JSON.
+fn decoded_fields(value: &serde_json::Value) -> serde_json::Value {
+    value
+        .get("fields")
+        .and_then(|fields| fields.as_object())
+        .map(|fields| {
+            serde_json::Value::Object(
+                fields
+                    .iter()
+                    .map(|(key, value)| (key.clone(), decode_firestore_value(value)))
+                    .collect(),
+            )
+        })
+        .unwrap_or(serde_json::Value::Null)
+}
+
 fn record_conflict(
     database: &Mutex<Database>,
     event: &PendingOutbox,
@@ -2509,7 +2796,7 @@ fn record_conflict(
     let db = database
         .lock()
         .map_err(|_| "Veritabanı kilidi alınamadı.")?;
-    db.connection.execute("INSERT INTO conflicts(id, entity_id, local_payload, remote_payload, created_at, status) VALUES(?1, ?2, ?3, ?4, ?5, 'open')", params![Uuid::new_v4().to_string(), event.entity_id, event.payload.to_string(), remote.unwrap_or_else(|| serde_json::json!({})).to_string(), now()]).map_err(|error| error.to_string())?;
+    db.connection.execute("INSERT INTO conflicts(id, entity_id, local_payload, remote_payload, created_at, status, entity_type, base_revision) VALUES(?1, ?2, ?3, ?4, ?5, 'open', ?6, ?7)", params![Uuid::new_v4().to_string(), event.entity_id, event.payload.to_string(), remote.unwrap_or_else(|| serde_json::json!({})).to_string(), now(), event.entity_type, event.base_revision]).map_err(|error| error.to_string())?;
     db.connection.execute("UPDATE outbox SET status = 'blocked', last_error = 'Revision conflict requires user resolution.' WHERE id = ?1", [&event.id]).map_err(|error| error.to_string())?;
     Ok(())
 }
@@ -2971,6 +3258,101 @@ mod sync_tests {
         let _ = fs::remove_file(path);
     }
 
+    #[test]
+    fn projects_round_trip_through_the_outbox_and_pull() {
+        let (database, path) = test_database();
+        let project = serde_json::json!({
+            "id": "project-1",
+            "ownerId": "",
+            "canonicalDocumentId": "doc-1",
+            "title": "Stone",
+            "status": "active",
+            "unexpected": true,
+        });
+        let saved = save_project_in(&database.lock().unwrap(), project).unwrap();
+        assert_eq!(saved["revision"], 1);
+        assert!(
+            saved.get("unexpected").is_none(),
+            "unknown keys would fail the rules"
+        );
+        // A remote copy must not overwrite the unsent local edit.
+        let remote = serde_json::json!({
+            "name": "projects/p/databases/(default)/documents/users/u/projects/project-1",
+            "fields": {
+                "id": { "stringValue": "project-1" },
+                "title": { "stringValue": "Remote" },
+                "revision": { "integerValue": "5" },
+                "updatedAt": { "stringValue": "2026-03-01T00:00:00Z" },
+            }
+        });
+        assert_eq!(
+            apply_remote_projects(&database, std::slice::from_ref(&remote)).unwrap(),
+            0
+        );
+        database
+            .lock()
+            .unwrap()
+            .connection
+            .execute("UPDATE outbox SET status = 'acknowledged'", [])
+            .unwrap();
+        assert_eq!(
+            apply_remote_projects(&database, std::slice::from_ref(&remote)).unwrap(),
+            1
+        );
+        let projects = list_projects_in(&database.lock().unwrap()).unwrap();
+        assert_eq!(projects[0]["title"], "Remote");
+        assert!(!is_backfilled(&database, "u", "projects").unwrap());
+        mark_backfilled(&database, "u", "projects").unwrap();
+        assert!(is_backfilled(&database, "u", "projects").unwrap());
+        drop(database);
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn pushes_keep_fields_desktop_does_not_edit() {
+        let (database, path) = test_database();
+        let remote = serde_json::json!({
+            "name": "projects/p/databases/(default)/documents/users/u/documents/doc-1",
+            "fields": {
+                "id": { "stringValue": "doc-1" },
+                "title": { "stringValue": "Project" },
+                "markdown": { "stringValue": "# Project" },
+                "kind": { "stringValue": "project" },
+                "projectId": { "stringValue": "project-1" },
+                "isPinned": { "booleanValue": true },
+                "createdAt": { "stringValue": "2026-01-01T00:00:00Z" },
+                "deletedAt": { "nullValue": null },
+                "revision": { "integerValue": "4" },
+                "idempotencyKey": { "stringValue": "mobile:event" },
+            }
+        });
+        apply_remote_documents(&database, std::slice::from_ref(&remote)).unwrap();
+        database
+            .lock()
+            .unwrap()
+            .connection
+            .execute(
+                "UPDATE documents SET deleted_at = '2026-03-01T00:00:00Z' WHERE id = 'doc-1'",
+                [],
+            )
+            .unwrap();
+        let mut payload = serde_json::json!({
+            "id": "doc-1",
+            "title": "Project",
+            "markdown": "# Project\n\nEdited on desktop",
+            "path": null,
+        });
+        complete_document_payload(&database, &mut payload).unwrap();
+        assert_eq!(payload["kind"], "project");
+        assert_eq!(payload["projectId"], "project-1");
+        assert_eq!(payload["isPinned"], true);
+        assert_eq!(payload["deletedAt"], "2026-03-01T00:00:00Z");
+        assert_eq!(payload["markdown"], "# Project\n\nEdited on desktop");
+        assert!(payload.get("idempotencyKey").is_none());
+        drop(database);
+        let _ = fs::remove_file(path);
+    }
+
     fn test_database() -> (Mutex<Database>, PathBuf) {
         let path = std::env::temp_dir().join(format!("stone-sync-test-{}.sqlite3", Uuid::new_v4()));
         (Mutex::new(Database::open(path.clone()).unwrap()), path)
@@ -3017,9 +3399,19 @@ mod sync_tests {
             }
         );
 
-        let mut project = event;
+        let mut project = event.clone();
         project["fields"]["entityType"] = serde_json::json!({ "stringValue": "project" });
-        assert_eq!(decode_sync_event(root, &project), RemoteEvent::Unsupported);
+        assert!(matches!(
+            decode_sync_event(root, &project),
+            RemoteEvent::Entity {
+                collection: "projects",
+                ..
+            }
+        ));
+
+        let mut version = event;
+        version["fields"]["entityType"] = serde_json::json!({ "stringValue": "version" });
+        assert_eq!(decode_sync_event(root, &version), RemoteEvent::Unsupported);
     }
 
     #[test]

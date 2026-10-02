@@ -141,8 +141,9 @@ presented as product evidence.
 | Tablet/stylus | Responsive ink implementation                      | Schema, gesture, persistence, and large-fixture tests    | Physical Android tablet/iPad stylus validation pending                      |
 | MCP           | Provider-neutral server contract                   | Typecheck, tests, verifier, build                        | Hosting, credentials, and provider connection are operator tasks            |
 
-“Implemented” does not mean production-certified. Windows lacks mobile project editing/Kanban,
-drawing, trash, revision, and conflict UI parity. macOS/Linux desktop apps are not supported.
+“Implemented” does not mean production-certified. Windows now has project create/edit, trash,
+note history, and conflict resolution, but still lacks mobile Kanban and drawing parity. macOS/Linux
+desktop apps are not supported.
 
 ## Quick start
 
