@@ -492,6 +492,30 @@ function addInlineDecorations(
           : text.startsWith("__") || text.startsWith("**")
             ? 2
             : 1;
+  if (token.type === "wikiLink") {
+    // [[Target]] shows "Target"; [[Target|Alias]] shows "Alias". Brackets and the target are hidden.
+    const pipe = text.indexOf("|");
+    const labelFrom = token.from + (pipe > 0 ? pipe + 1 : 2);
+    const labelTo = token.to - 2;
+    if (labelTo > labelFrom) {
+      ranges.push({
+        from: token.from,
+        to: labelFrom,
+        decoration: Decoration.replace({ widget: new EmptyWidget() }),
+      });
+      ranges.push({
+        from: labelTo,
+        to: token.to,
+        decoration: Decoration.replace({ widget: new EmptyWidget() }),
+      });
+      ranges.push({
+        from: labelFrom,
+        to: labelTo,
+        decoration: linkMark("stone-live-link stone-live-wikilink", token.url),
+      });
+    }
+    return;
+  }
   if (token.type === "link") {
     const close = text.lastIndexOf(")");
     const labelEnd = text.indexOf("](");
@@ -509,7 +533,7 @@ function addInlineDecorations(
       ranges.push({
         from: token.from + 1,
         to: token.from + labelEnd,
-        decoration: Decoration.mark({ class: "stone-live-link" }),
+        decoration: linkMark("stone-live-link", token.url),
       });
     }
     return;
@@ -531,6 +555,18 @@ function addInlineDecorations(
       decoration: Decoration.mark({ class: `stone-live-${token.type}` }),
     });
   }
+}
+
+/**
+ * Renders a link label as an anchor carrying its URL, which the web entry's click handler turns
+ * into an `openLink` bridge message.
+ */
+function linkMark(className: string, url: string | undefined): Decoration {
+  return Decoration.mark({
+    class: className,
+    tagName: "a",
+    attributes: url ? { "data-stone-url": url } : {},
+  });
 }
 
 function editLine(

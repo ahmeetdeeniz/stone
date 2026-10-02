@@ -7,7 +7,7 @@ import type {
   NoteRepository,
 } from "@stone/domain";
 import { StorageError } from "@stone/domain";
-import { normalizeMarkdown } from "@stone/markdown";
+import { extractWikiLinks, normalizeMarkdown, normalizeNoteTitle } from "@stone/markdown";
 import { File } from "expo-file-system";
 import type { StoneDatabase } from "./database";
 import { enqueueOutbox, saveLocalTombstone } from "./sync";
@@ -110,6 +110,43 @@ export class SQLiteNoteRepository implements NoteRepository {
         id,
       );
       return row ? toDocument(row) : null;
+    });
+  }
+
+  /** The live document whose title matches a `[[link]]` target (case/space-insensitive). */
+  public findByTitle(ownerId: string, title: string): Promise<Document | null> {
+    return withStorageError(async () => {
+      const wanted = normalizeNoteTitle(title);
+      // SQLite's lower() only folds ASCII (not İ/ı), so compare titles in JavaScript.
+      const rows = await this.database.getAllAsync<{ id: string; title: string }>(
+        "SELECT id, title FROM documents WHERE owner_id = ? AND deleted_at IS NULL ORDER BY updated_at DESC",
+        ownerId,
+      );
+      const match = rows.find((row) => normalizeNoteTitle(row.title) === wanted);
+      return match ? this.getById(ownerId, match.id) : null;
+    });
+  }
+
+  /** Notes that contain a `[[link]]` to the given title, newest first. */
+  public listBacklinks(
+    ownerId: string,
+    title: string,
+    excludeId: string,
+  ): Promise<readonly Document[]> {
+    return withStorageError(async () => {
+      const wanted = normalizeNoteTitle(title);
+      const rows = await this.database.getAllAsync<DocumentRow>(
+        `SELECT id, owner_id, kind, title, markdown, path, project_id, is_pinned, revision, created_at, updated_at, deleted_at, updated_by_device_id
+         FROM documents WHERE owner_id = ? AND deleted_at IS NULL AND id != ? AND instr(markdown, '[[') > 0
+         ORDER BY updated_at DESC LIMIT 2000`,
+        ownerId,
+        excludeId,
+      );
+      return rows
+        .filter((row) =>
+          extractWikiLinks(row.markdown).some((link) => normalizeNoteTitle(link.target) === wanted),
+        )
+        .map(toDocument);
     });
   }
 
