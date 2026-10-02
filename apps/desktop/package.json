@@ -13,7 +13,9 @@
     "test": "vitest run src",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
-    "tauri:build:nsis": "tauri build --bundles nsis"
+    "tauri:build:nsis": "tauri build --bundles nsis",
+    "tauri:build:macos": "tauri build --bundles app,dmg --target universal-apple-darwin",
+    "tauri:build:linux": "tauri build --bundles deb,appimage"
   },
   "dependencies": {
     "@codemirror/view": "^6.43.6",
@@ -22,12 +24,14 @@
     "@stone/i18n": "workspace:*",
     "@stone/markdown": "workspace:*",
     "@stone/sync": "workspace:*",
-    "@tauri-apps/api": "^2.11.1",
+    "@tauri-apps/api": "^2.12.1",
+    "@tauri-apps/plugin-process": "^2.4.0",
+    "@tauri-apps/plugin-updater": "^2.13.1",
     "react": "19.1.0",
     "react-dom": "19.1.0"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "^2.11.4",
+    "@tauri-apps/cli": "^2.12.1",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
     "@vitejs/plugin-react": "^4.7.0",

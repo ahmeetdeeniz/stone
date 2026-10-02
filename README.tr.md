@@ -50,7 +50,8 @@ yollarını, repository adlarını veya içe aktarılan veriyi çevirmez ya da y
 - **MCP:** OAuth, scope, revision, idempotency ve audit kayıtları olan provider-neutral servis.
 
 Windows henüz mobil proje düzenleme/Kanban, çizim, çöp, revision ve conflict UI parity’sine sahip
-değildir. macOS/Linux masaüstü uygulamaları desteklenmez. Native hatırlatıcı, harici takvim hesabı
+değildir. macOS ve Linux sürümleri aynı Tauri uygulamasından derlenir ancak henüz gerçek cihazlarda
+kurulum testi yapılmamıştır. Native hatırlatıcı, harici takvim hesabı
 ve davet bu sürümde yoktur.
 
 Android Glance ve iOS WidgetKit için Bugünün Görevleri, Ajanda, Odak ve Hızlı Yakalama widget’ları
