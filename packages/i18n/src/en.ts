@@ -61,11 +61,15 @@ export const en = {
   "settings.signOutFailed": "Could not sign out",
   "settings.exportWorkspace": "Export workspace",
   "settings.exportFailed": "Could not export workspace",
-  "settings.restoreCalendar": "Restore workspace calendar",
-  "settings.calendarRestored": "Workspace calendar restored",
-  "settings.restoreSummary":
-    "{{created}} records added, {{duplicates}} duplicates skipped, {{detached}} missing relationships safely detached.",
-  "settings.restoreFailed": "Could not restore workspace calendar",
+  "settings.restoreWorkspace": "Restore from export",
+  "settings.restoreWorkspaceDetail":
+    "Choose a .stone-workspace.json export. Notes, projects, tasks, drawings, calendar and focus history that are missing here are added; nothing existing is overwritten. Records are re-owned by this account and then synced.",
+  "settings.restoreWorkspaceConfirm": "Choose file",
+  "settings.workspaceRestored": "Workspace restored",
+  "settings.workspaceRestoreSummary":
+    "Added {{notes}} notes, {{projects}} projects, {{tasks}} tasks, {{events}} calendar items, {{focus}} focus sessions and {{drawings}} drawings. {{duplicates}} already existed and were skipped.",
+  "settings.workspaceRestoreSkipped": "{{count}} entries could not be restored and were skipped.",
+  "settings.restoreFailed": "Could not restore the workspace",
   "settings.dangerZone": "Irreversible",
   "settings.deleteAccount": "Delete account and data",
   "settings.deleteAccountConfirm": "Delete account and all data?",

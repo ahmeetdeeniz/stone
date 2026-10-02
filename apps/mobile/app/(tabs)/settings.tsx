@@ -18,8 +18,9 @@ import type { StatusTone } from "../../src/design/tokens";
 import { useTheme } from "../../src/design/theme";
 import { useAuth } from "../../src/providers/auth-provider";
 import { useAppServices } from "../../src/providers/app-provider";
-import { pickWorkspaceCalendarFile, shareWorkspaceExport } from "../../src/notes/workspace-files";
-import { restoreCalendarWorkspaceFile } from "../../src/notes/workspace-bundle";
+import { pickWorkspaceBundle, shareWorkspaceExport } from "../../src/notes/workspace-files";
+import { restoreWorkspace } from "../../src/notes/workspace-restore";
+import { createWorkspaceRestoreTarget } from "../../src/notes/workspace-restore-target";
 import type { SyncState } from "../../src/infrastructure/storage/sync";
 import { useI18n } from "../../src/i18n/provider";
 import type { WidgetPrivacy } from "@stone/widgets";
@@ -155,30 +156,45 @@ export default function SettingsScreen() {
       setBusy(false);
     }
   };
-  const restoreCalendar = async () => {
+  const restoreFromExport = async () => {
     if (!user) return;
     setBusy(true);
     try {
-      const source = await pickWorkspaceCalendarFile();
-      if (source === null) return;
-      const [tasks, projects, documents] = await Promise.all([
-        services.taskUseCases.list(user.uid),
-        services.projectUseCases.list(user.uid),
-        services.noteUseCases.list(user.uid),
-      ]);
-      const summary = await restoreCalendarWorkspaceFile(source, user.uid, services.calendar, {
-        taskIds: new Set(tasks.map((task) => task.id)),
-        projectIds: new Set(projects.map((project) => project.id)),
-        documentIds: new Set(documents.map((document) => document.id)),
-      });
-      Alert.alert(
-        t("settings.calendarRestored"),
-        t("settings.restoreSummary", {
-          created: summary.created,
-          duplicates: summary.duplicates,
-          detached: summary.detachedRelationships,
-        }),
+      const files = await pickWorkspaceBundle();
+      if (files === null) return;
+      const summary = await restoreWorkspace(
+        files,
+        createWorkspaceRestoreTarget(services, user.uid),
       );
+      const groups = [
+        summary.notes,
+        summary.projects,
+        summary.versions,
+        summary.tasks,
+        summary.drawings,
+        ...(summary.calendar ? [summary.calendar] : []),
+        ...(summary.focus ? [summary.focus] : []),
+      ];
+      Alert.alert(
+        t("settings.workspaceRestored"),
+        [
+          t("settings.workspaceRestoreSummary", {
+            notes: summary.notes.created,
+            projects: summary.projects.created,
+            tasks: summary.tasks.created,
+            events: summary.calendar?.created ?? 0,
+            focus: summary.focus?.created ?? 0,
+            drawings: summary.drawings.created,
+            duplicates: groups.reduce((total, group) => total + group.duplicates, 0),
+          }),
+          summary.skipped.length > 0
+            ? t("settings.workspaceRestoreSkipped", { count: summary.skipped.length })
+            : null,
+        ]
+          .filter(Boolean)
+          .join("\n\n"),
+      );
+      void services.sync(user.uid).catch(() => undefined);
     } catch (error) {
       Alert.alert(
         t("settings.restoreFailed"),
@@ -187,6 +203,12 @@ export default function SettingsScreen() {
     } finally {
       setBusy(false);
     }
+  };
+  const confirmRestore = () => {
+    Alert.alert(t("settings.restoreWorkspace"), t("settings.restoreWorkspaceDetail"), [
+      { text: t("common.cancel"), style: "cancel" },
+      { text: t("settings.restoreWorkspaceConfirm"), onPress: () => void restoreFromExport() },
+    ]);
   };
   const deleteAccount = () => {
     if (!user || !service) return;
@@ -362,11 +384,11 @@ export default function SettingsScreen() {
                 disabled={busy || !user}
               />
               <StoneButton
-                label={t("settings.restoreCalendar")}
+                label={t("settings.restoreWorkspace")}
                 variant="secondary"
                 icon="cloud-download-outline"
                 size="sm"
-                onPress={() => void restoreCalendar()}
+                onPress={confirmRestore}
                 disabled={busy || !user}
               />
             </View>
