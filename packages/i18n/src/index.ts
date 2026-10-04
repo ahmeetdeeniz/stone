@@ -37,7 +37,9 @@ export function translate(
   parameters: TranslationParameters = {},
   localizedResource: Readonly<Partial<Record<TranslationKey, string>>> = resources[locale],
 ): string {
-  const template = localizedResource[key] ?? en[key];
+  // A key built at runtime (e.g. from a stored enum value) may not exist; show the key instead of
+  // throwing and taking the whole screen down.
+  const template: string = localizedResource[key] ?? en[key] ?? key;
   return template.replace(/\{\{([a-zA-Z][a-zA-Z0-9_]*)\}\}/gu, (_, name: string) => {
     const value = parameters[name];
     return value === undefined ? `{{${name}}}` : String(value);
@@ -252,7 +254,9 @@ export function formatReleaseStatus(locale: Locale, status: string): string {
 }
 
 export function formatProjectHealth(locale: Locale, health: string): string {
-  return translate(locale, `projects.healthLabel.${health}` as TranslationKey);
+  // The domain calls a healthy project "good"; its label key is "healthy".
+  const key = health === "good" ? "healthy" : health;
+  return translate(locale, `projects.healthLabel.${key}` as TranslationKey);
 }
 
 function dateOnlyValue(date: string): Date {
