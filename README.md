@@ -83,7 +83,8 @@ presented as product evidence.
 - Pressure-aware pen/highlighter strokes and vector shapes in `.stoneink`, with PNG previews
 - Firebase Auth, Firestore, and Storage sync using owner-scoped rules
 - Durable local-first mobile writes, revision history, soft delete, and explicit conflict handling
-- Versioned full-workspace export container; full-workspace restore UI is not implemented
+- Versioned full-workspace export container and a mobile restore that adds missing notes,
+  projects, versions, tasks, drawings, calendar and focus history without overwriting anything
 
 ### Calendar and Agenda
 
@@ -217,12 +218,12 @@ private notes in public issues.
 
 - Final visual/accessibility inspection, real Firebase/GitHub restart flows, signed Android
   physical-device use, private TestFlight/iPhone use, and tablet stylus validation remain open.
-- Mobile full-workspace restore UI, public iOS binaries, macOS/Linux desktop, and a maintainer-hosted
+- Public iOS binaries, macOS/Linux desktop, and a maintainer-hosted
   backend are not available.
 - MCP hosting and provider publication are not automatic.
 - Reminders are local notifications planned on each device; they are not pushed from a server and
   do not fire on a device where Stone has never been opened.
-- Full-workspace restore beyond the calendar segment, Agenda virtualization, and physical-device
+- Agenda virtualization and physical-device
   acceptance for focus, native widgets, and Live Activities remain pending.
 
 ## Roadmap

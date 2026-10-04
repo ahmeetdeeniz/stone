@@ -63,11 +63,15 @@ export const tr = {
   "settings.signOutFailed": "Çıkış yapılamadı",
   "settings.exportWorkspace": "Workspace'i dışa aktar",
   "settings.exportFailed": "Workspace dışa aktarılamadı",
-  "settings.restoreCalendar": "Workspace takvimini geri yükle",
-  "settings.calendarRestored": "Workspace takvimi geri yüklendi",
-  "settings.restoreSummary":
-    "{{created}} kayıt eklendi, {{duplicates}} yinelenen kayıt atlandı, {{detached}} eksik ilişki güvenle kaldırıldı.",
-  "settings.restoreFailed": "Workspace takvimi geri yüklenemedi",
+  "settings.restoreWorkspace": "Dışa aktarımdan geri yükle",
+  "settings.restoreWorkspaceDetail":
+    "Bir .stone-workspace.json dosyası seçin. Burada olmayan notlar, projeler, görevler, çizimler, takvim ve odak geçmişi eklenir; var olan hiçbir şeyin üzerine yazılmaz. Kayıtlar bu hesaba aktarılır ve ardından senkronize edilir.",
+  "settings.restoreWorkspaceConfirm": "Dosya seç",
+  "settings.workspaceRestored": "Workspace geri yüklendi",
+  "settings.workspaceRestoreSummary":
+    "{{notes}} not, {{projects}} proje, {{tasks}} görev, {{events}} takvim kaydı, {{focus}} odak oturumu ve {{drawings}} çizim eklendi. Zaten var olan {{duplicates}} kayıt atlandı.",
+  "settings.workspaceRestoreSkipped": "{{count}} kayıt geri yüklenemedi ve atlandı.",
+  "settings.restoreFailed": "Workspace geri yüklenemedi",
   "settings.dangerZone": "Geri alınamaz",
   "settings.deleteAccount": "Hesabı ve verileri sil",
   "settings.deleteAccountConfirm": "Hesabı ve tüm verileri sil?",
