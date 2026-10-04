@@ -18,6 +18,9 @@ tag, so no release date or semantic version is claimed.
 - Added a weekly review screen and read-only iCalendar feed subscriptions on mobile.
 - Added sharing into Stone from other apps (iOS share extension, Android share target): text and
   links are filed into an Inbox note as tasks.
+- Windows can now create and edit projects (the synced project entity and its Project.md, like
+  mobile), move notes to Trash and restore them, browse and restore earlier note versions, and
+  resolve sync conflicts (keep mine, keep theirs, or a three-way Markdown merge) without a phone.
 - Added local-first Android Glance and iOS WidgetKit Today, Agenda, Focus, and Quick Capture
   widgets, an optional Android focus notification, and iOS Live Activity/Dynamic Island sources.
 - Added bounded versioned snapshot/action bridges, validated deep links, revision-safe actions,
@@ -35,6 +38,10 @@ tag, so no release date or semantic version is claimed.
   now open, and only `http(s)`, `mailto` and `tel` URLs are handed to the system.
 - The widget config plugin no longer replaces the host app's App Group list or other plugins'
   EAS app-extension declarations.
+- Editing a mobile project, version or pinned note on Windows no longer strips its `kind`,
+  `projectId`, `isPinned` and other fields it does not edit, and remote changes no longer overwrite
+  a note that has an open conflict. Synced notes with workspace paths are no longer treated as
+  missing linked files.
 - Mobile startup no longer races two database initialisations (which could leave the app on an
   error screen), shows the real error with a retry, builds workspace packages before
   start/export/EAS, relies on native Firebase config, and targets iOS 16.1 for the widget module.
