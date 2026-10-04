@@ -9,6 +9,7 @@ import {
   formatInstant,
   formatMonthName,
   formatPercentage,
+  formatProjectHealth,
   formatRecurrence,
   formatRelativeDate,
   formatTime,
@@ -63,6 +64,19 @@ describe("locale resolution and translation", () => {
         throw new Error("quota");
       }),
     ).resolves.toBe(false);
+  });
+});
+
+describe("project health labels", () => {
+  it("labels every domain health value, including the default 'good'", () => {
+    for (const health of ["good", "attention", "risk", "paused"]) {
+      expect(formatProjectHealth("en", health)).not.toMatch(/healthLabel/u);
+    }
+    expect(formatProjectHealth("tr", "good")).toBe("Sağlıklı");
+  });
+
+  it("falls back to the key instead of throwing for an unknown runtime key", () => {
+    expect(formatProjectHealth("en", "unknown")).toBe("projects.healthLabel.unknown");
   });
 });
 
