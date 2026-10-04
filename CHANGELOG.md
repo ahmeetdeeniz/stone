@@ -21,6 +21,9 @@ tag, so no release date or semantic version is claimed.
 - Windows can now create and edit projects (the synced project entity and its Project.md, like
   mobile), move notes to Trash and restore them, browse and restore earlier note versions, and
   resolve sync conflicts (keep mine, keep theirs, or a three-way Markdown merge) without a phone.
+- Desktop builds for macOS (universal DMG) and Linux (.deb and AppImage) alongside Windows, with
+  optional Developer ID signing/notarization and signed in-app auto-updates (Settings → Updates)
+  published through draft GitHub releases.
 - Added local-first Android Glance and iOS WidgetKit Today, Agenda, Focus, and Quick Capture
   widgets, an optional Android focus notification, and iOS Live Activity/Dynamic Island sources.
 - Added bounded versioned snapshot/action bridges, validated deep links, revision-safe actions,

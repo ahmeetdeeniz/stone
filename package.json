@@ -24,6 +24,8 @@
     "desktop:test": "pnpm --filter @stone/desktop run test",
     "desktop:tauri:build": "pnpm --filter @stone/desktop run tauri:build",
     "desktop:tauri:build:nsis": "pnpm --filter @stone/desktop run tauri:build:nsis",
+    "desktop:tauri:build:macos": "pnpm --filter @stone/desktop run tauri:build:macos",
+    "desktop:tauri:build:linux": "pnpm --filter @stone/desktop run tauri:build:linux",
     "verify:desktop": "node scripts/verify-desktop.mjs",
     "report:desktop-build-env": "node scripts/report-desktop-build-env.mjs",
     "verify:github": "node scripts/verify-github-desktop.mjs",

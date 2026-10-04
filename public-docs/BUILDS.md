@@ -1,6 +1,6 @@
 # Self-hosted builds
 
-## Windows preview installer
+## Desktop installers (Windows, macOS, Linux)
 
 For local development:
 
@@ -9,20 +9,64 @@ pnpm desktop:dev
 pnpm desktop:build
 ```
 
-For a native NSIS installer on Windows:
+Native installers are built on their own platform:
 
 ```sh
-pnpm desktop:tauri:build:nsis
+pnpm desktop:tauri:build:nsis    # Windows: NSIS setup.exe
+pnpm desktop:tauri:build:macos   # macOS: universal .app and .dmg (Apple Silicon + Intel)
+pnpm desktop:tauri:build:linux   # Linux: .deb and .AppImage
 ```
 
-The `Desktop Windows Release` workflow also builds NSIS on `workflow_dispatch` or a `v*.*.*` tag.
-It accepts only public client identifiers through repository **Variables**, reports configured vs.
-missing status without values, creates SHA-256 files, and retains the workflow artifact for 30
-days. It does not publish a GitHub Release or sign the installer. The artifact name is
-`stone-desktop-windows-nsis`.
+Linux builds need the WebKitGTK 4.1 development packages (on Ubuntu/Debian:
+`libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf`), and the signed-in session
+is stored through the Secret Service (GNOME Keyring or KWallet).
 
-The workflow has previously produced an installer that was downloaded, installed, and launched,
-but each release candidate still needs checksum, reputation/signing, and smoke review.
+The `Desktop Release` workflow builds all three on `workflow_dispatch` or a `v*.*.*` tag. It
+accepts only public client identifiers through repository **Variables**, reports configured vs.
+missing status without values, writes SHA-256 files and keeps the `stone-desktop-<platform>`
+artifacts for 30 days. A tag must equal `v` + the version in
+`apps/desktop/src-tauri/tauri.conf.json`; it then also creates a **draft** GitHub Release with
+every installer. Publish the draft after a smoke test: installed apps update to the latest
+published release.
+
+### Auto-update (optional)
+
+Updates are signed with a key only you hold. Generate it on your own machine (never in a shared
+or cloud environment) and keep a backup; losing it means installed apps can no longer update:
+
+```sh
+pnpm --filter @stone/desktop exec tauri signer generate -w ~/.tauri/stone-updater.key
+```
+
+Then add, under **Settings → Secrets and variables → Actions**:
+
+| Kind     | Name                                 | Value                                        |
+| -------- | ------------------------------------ | -------------------------------------------- |
+| Secret   | `TAURI_SIGNING_PRIVATE_KEY`          | contents of `~/.tauri/stone-updater.key`     |
+| Secret   | `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | the password you chose (omit if none)        |
+| Variable | `TAURI_UPDATER_PUBKEY`               | contents of `~/.tauri/stone-updater.key.pub` |
+
+Release builds then include signed update packages and the draft release gets a `latest.json`.
+The app checks it shortly after launch and from **Settings → Updates**. Builds without the key
+(local builds, forks) simply show that automatic updates are not set up.
+
+### macOS signing and notarization (optional)
+
+Without a certificate the macOS app is ad-hoc signed: it runs, but Gatekeeper asks users to
+open it from the context menu the first time. With an Apple Developer ID, add these secrets and
+the workflow signs and notarizes the app and DMG:
+
+| Secret                       | Value                                                    |
+| ---------------------------- | -------------------------------------------------------- |
+| `APPLE_CERTIFICATE`          | base64 of the exported "Developer ID Application" `.p12` |
+| `APPLE_CERTIFICATE_PASSWORD` | the `.p12` export password                               |
+| `APPLE_SIGNING_IDENTITY`     | e.g. `Developer ID Application: Your Name (TEAMID)`      |
+| `APPLE_ID`                   | the Apple ID email used for notarization                 |
+| `APPLE_PASSWORD`             | an app-specific password for that Apple ID               |
+| `APPLE_TEAM_ID`              | your 10-character team ID                                |
+
+Windows installers are not code-signed, so SmartScreen may warn until the installer builds
+reputation. Each release candidate still needs checksum and smoke review on every platform.
 
 ## Android
 

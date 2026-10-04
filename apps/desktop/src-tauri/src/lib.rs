@@ -220,6 +220,7 @@ pub struct RestoreSummary {
 
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_process::init())
         .setup(|app| {
             let app_data = app
                 .path()
@@ -233,6 +234,13 @@ pub fn run() {
             app.manage(RestoreCancellation(Mutex::new(
                 std::collections::HashSet::new(),
             )));
+            // Release builds get `plugins.updater` (endpoint + public key) injected by CI only
+            // when an updater signing key is configured; local and self-hosted builds without
+            // it simply have no auto-update instead of failing to start.
+            if app.config().plugins.0.contains_key("updater") {
+                app.handle()
+                    .plugin(tauri_plugin_updater::Builder::new().build())?;
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -384,13 +392,22 @@ impl Database {
         }
         let device_id = connection.query_row("SELECT id FROM devices LIMIT 1", [], |row| row.get(0)).optional()?.unwrap_or_else(|| {
             let id = Uuid::new_v4().to_string();
-            let _ = connection.execute("INSERT INTO devices(id, platform, name, created_at) VALUES(?1, 'windows', 'Stone Desktop', ?2)", params![id, Utc::now().to_rfc3339()]);
+            let _ = connection.execute("INSERT INTO devices(id, platform, name, created_at) VALUES(?1, ?2, 'Stone Desktop', ?3)", params![id, device_platform(), Utc::now().to_rfc3339()]);
             id
         });
         Ok(Self {
             connection,
             device_id,
         })
+    }
+}
+
+/// Platform name recorded for this device; matches the mobile device platform values.
+fn device_platform() -> &'static str {
+    match std::env::consts::OS {
+        "macos" => "macos",
+        "linux" => "linux",
+        _ => "windows",
     }
 }
 
@@ -1167,12 +1184,21 @@ fn open_external(target: String, path: String) -> Result<(), String> {
 
 /// Editor CLIs are installed as `.cmd` shims on Windows (`code.cmd`, npm's `codex.cmd`), which
 /// `Command::new` does not resolve from a bare name; Rust escapes arguments for batch files.
+/// Apps opened from Finder or the Dock do not inherit the shell PATH on macOS, so the usual
+/// Homebrew and VS Code locations are tried explicitly.
 fn external_programs(target: &str) -> Result<&'static [&'static str], String> {
-    match (target, cfg!(windows)) {
-        ("vscode", true) => Ok(&["code.cmd", "code"]),
-        ("vscode", false) => Ok(&["code"]),
-        ("codex", true) => Ok(&["codex.cmd", "codex"]),
-        ("codex", false) => Ok(&["codex"]),
+    match (target, std::env::consts::OS) {
+        ("vscode", "windows") => Ok(&["code.cmd", "code"]),
+        ("vscode", "macos") => Ok(&[
+            "code",
+            "/usr/local/bin/code",
+            "/opt/homebrew/bin/code",
+            "/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code",
+        ]),
+        ("vscode", _) => Ok(&["code"]),
+        ("codex", "windows") => Ok(&["codex.cmd", "codex"]),
+        ("codex", "macos") => Ok(&["codex", "/usr/local/bin/codex", "/opt/homebrew/bin/codex"]),
+        ("codex", _) => Ok(&["codex"]),
         _ => Err("Bilinmeyen dış uygulama.".to_owned()),
     }
 }
@@ -3156,7 +3182,12 @@ fn open_github_url(url: String) -> Result<(), String> {
     }
     #[cfg(not(windows))]
     {
-        Command::new("xdg-open")
+        let opener = if cfg!(target_os = "macos") {
+            "open"
+        } else {
+            "xdg-open"
+        };
+        Command::new(opener)
             .arg(url)
             .spawn()
             .map(|_| ())

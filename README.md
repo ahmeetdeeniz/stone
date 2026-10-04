@@ -149,14 +149,15 @@ presented as product evidence.
 | Surface       | Implemented                                        | Automated evidence                                       | Manual status / limits                                                      |
 | ------------- | -------------------------------------------------- | -------------------------------------------------------- | --------------------------------------------------------------------------- |
 | Windows 10/11 | Editor, local files, sync, calendar, Today, GitHub | Tests, web build, Rust checks, prior NSIS install/launch | Final visual/accessibility pass and live credential restart recheck pending |
+| macOS / Linux | Same Tauri app (universal DMG, .deb, AppImage)     | Rust checks on Linux, release workflow builds            | Install, keychain, and update smoke tests pending                           |
 | Android       | Full mobile workspace, projects, sync, ink         | Expo Doctor/export and unit/integration/rules tests      | Signed APK on a physical device pending                                     |
 | iOS           | Same React Native mobile implementation            | Expo Doctor/iOS export                                   | Native private TestFlight and physical iPhone validation pending            |
 | Tablet/stylus | Responsive ink implementation                      | Schema, gesture, persistence, and large-fixture tests    | Physical Android tablet/iPad stylus validation pending                      |
 | MCP           | Provider-neutral server contract                   | Typecheck, tests, verifier, build                        | Hosting, credentials, and provider connection are operator tasks            |
 
 “Implemented” does not mean production-certified. Windows now has project create/edit, trash,
-note history, and conflict resolution, but still lacks mobile Kanban and drawing parity. macOS/Linux
-desktop apps are not supported.
+note history, and conflict resolution, but still lacks mobile Kanban and drawing parity. macOS and
+Linux builds come from the same Tauri app but have not yet been install-tested on real machines.
 
 ## Quick start
 
@@ -176,7 +177,7 @@ mobile native Firebase use requires your own public client config and native Fir
 
 - [Development and self-hosting setup](public-docs/SELF-HOSTING.md)
 - [Firebase, Firestore, Storage, rules, and deletion](public-docs/FIREBASE.md)
-- [Windows, Android, and private iOS builds](public-docs/BUILDS.md)
+- [Desktop, Android, and private iOS builds](public-docs/BUILDS.md)
 - [GitHub Device Flow](public-docs/GITHUB.md)
 - [MCP setup](services/mcp/README.md)
 - [Backup, export, restore, updates, and troubleshooting](public-docs/OPERATIONS.md)
@@ -230,8 +231,7 @@ private notes in public issues.
 
 - Final visual/accessibility inspection, real Firebase/GitHub restart flows, signed Android
   physical-device use, private TestFlight/iPhone use, and tablet stylus validation remain open.
-- Public iOS binaries, macOS/Linux desktop, and a maintainer-hosted
-  backend are not available.
+- Public iOS binaries and a maintainer-hosted backend are not available.
 - MCP hosting and provider publication are not automatic.
 - Reminders are local notifications planned on each device; they are not pushed from a server and
   do not fire on a device where Stone has never been opened.

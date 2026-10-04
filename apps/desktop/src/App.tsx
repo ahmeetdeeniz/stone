@@ -26,6 +26,7 @@ import {
   type CalendarRecurrenceEditScope,
 } from "@stone/domain";
 import GithubPanel from "./GithubPanel";
+import { UpdateBanner, UpdateSettingsCard, useAppUpdates } from "./updates";
 import { ConflictsPanel, HistoryPanel, TrashPanel } from "./RecoveryPanels";
 import { NewProjectForm, ProjectEditorForm } from "./ProjectEditing";
 import { isLinkedFilePath } from "./project-editing";
@@ -229,6 +230,7 @@ function StoneShell({ session, onSignedOut }: { session: AuthSession; onSignedOu
   const [message, setMessage] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>("saved");
+  const updates = useAppUpdates();
   const [projectEntities, setProjectEntities] = useState<DesktopProject[]>([]);
   const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
@@ -645,6 +647,7 @@ function StoneShell({ session, onSignedOut }: { session: AuthSession; onSignedOu
             </button>
           </div>
         </header>
+        <UpdateBanner state={updates.state} onInstall={() => void updates.install()} />
         {message && (
           <div className="toast" role="status">
             {message}
@@ -874,6 +877,12 @@ function StoneShell({ session, onSignedOut }: { session: AuthSession; onSignedOu
                 {t("desktop.signOut")}
               </button>
             </div>
+            <UpdateSettingsCard
+              state={updates.state}
+              version={updates.version}
+              onCheck={() => void updates.check()}
+              onInstall={() => void updates.install()}
+            />
             <ConflictsPanel
               refreshKey={recoveryKey}
               onResolved={(copiedDocumentId) => {

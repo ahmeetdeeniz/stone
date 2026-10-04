@@ -1694,3 +1694,15 @@ nav {
 .project-summary-item > .text-button {
   justify-self: end;
 }
+.update-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 10px 14px;
+  color: var(--text);
+  background: var(--accent-soft);
+  border: var(--hairline) solid var(--accent-soft-line);
+  border-radius: var(--radius-md);
+}
