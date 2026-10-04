@@ -8,16 +8,10 @@ import { hairline, spacing, typography } from "../../src/design/tokens";
 import { useI18n } from "../../src/i18n/provider";
 
 type TabIcon = { active: keyof typeof Ionicons.glyphMap; idle: keyof typeof Ionicons.glyphMap };
-type TabName = "notes" | "projects" | "today" | "calendar" | "focus" | "settings";
+type TabName = "today" | "notes" | "projects" | "calendar" | "focus";
 
-const tabNames: readonly TabName[] = [
-  "notes",
-  "projects",
-  "today",
-  "calendar",
-  "focus",
-  "settings",
-];
+/** Five destinations, Today first; Settings opens from the Today header instead of a tab. */
+const tabNames: readonly TabName[] = ["today", "notes", "projects", "calendar", "focus"];
 
 const icons: Readonly<Record<TabName, TabIcon>> = {
   notes: { active: "document-text", idle: "document-text-outline" },
@@ -25,7 +19,6 @@ const icons: Readonly<Record<TabName, TabIcon>> = {
   today: { active: "sunny", idle: "sunny-outline" },
   calendar: { active: "calendar", idle: "calendar-outline" },
   focus: { active: "timer", idle: "timer-outline" },
-  settings: { active: "settings", idle: "settings-outline" },
 };
 
 const nativeIcons = {
@@ -34,7 +27,6 @@ const nativeIcons = {
   today: { selected: "sun.max.fill", idle: "sun.max" },
   calendar: { selected: "calendar", idle: "calendar" },
   focus: { selected: "timer", idle: "timer" },
-  settings: { selected: "gearshape.fill", idle: "gearshape" },
 } as const;
 
 export default function TabsLayout() {
@@ -44,8 +36,8 @@ export default function TabsLayout() {
 
 function IOSNativeTabs() {
   const { t } = useI18n();
-  const selected = DynamicColorIOS({ light: "#2E0702", dark: "#F0B3A6" });
-  const idle = DynamicColorIOS({ light: "#745F59", dark: "#D8C0BA" });
+  const selected = DynamicColorIOS({ light: "#A13D27", dark: "#F08D74" });
+  const idle = DynamicColorIOS({ light: "#857F7A", dark: "#948E89" });
 
   return (
     <NativeTabs

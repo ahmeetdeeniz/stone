@@ -23,7 +23,7 @@ export default function SignUpScreen() {
     setError(null);
     try {
       await service.signUp(email, password);
-      router.replace("/(tabs)/notes");
+      router.replace("/(tabs)/today");
     } catch (caught) {
       setError(t(authErrorKey(caught, "auth.createFailed")));
     } finally {

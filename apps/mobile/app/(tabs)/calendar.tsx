@@ -6,8 +6,21 @@ import { buildAgendaItems, zonedWallTimeToInstant, type AgendaItem } from "@ston
 import { formatDateOnly, formatInstant } from "@stone/i18n";
 import { EmptyState, ErrorState, LoadingState } from "../../src/components/states";
 import { ResponsiveContent } from "../../src/components/responsive";
-import { Screen, StoneButton, StoneInput, StoneText, Surface } from "../../src/components/ui";
-import { colors, spacing } from "../../src/design/tokens";
+import {
+  ActionSheet,
+  IconButton,
+  ListGroup,
+  Overline,
+  Screen,
+  ScreenHeader,
+  StoneButton,
+  StoneInput,
+  StoneText,
+  Surface,
+  numeric,
+} from "../../src/components/ui";
+import { radii, spacing } from "../../src/design/tokens";
+import { useTheme } from "../../src/design/theme";
 import { useAppServices } from "../../src/providers/app-provider";
 import { useAuth } from "../../src/providers/auth-provider";
 import {
@@ -28,12 +41,15 @@ export default function CalendarScreen() {
   const { user } = useAuth();
   const { calendar, deviceId, taskUseCases, projectUseCases } = useAppServices();
   const { locale, t } = useI18n();
+  const { colors } = useTheme();
   const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [agendaItems, setAgendaItems] = useState<readonly AgendaItem[]>([]);
   const [title, setTitle] = useState("");
   const [startTime, setStartTime] = useState("09:00");
   const [endTime, setEndTime] = useState("10:00");
   const [loading, setLoading] = useState(true);
+  const [composing, setComposing] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -187,166 +203,246 @@ export default function CalendarScreen() {
     return date.toISOString().slice(0, 10);
   });
   const today = new Date().toISOString().slice(0, 10);
+  const monthLabel = new Intl.DateTimeFormat(locale, { month: "long", year: "numeric" }).format(
+    new Date(`${selectedDate}T12:00:00`),
+  );
+  const exportIcs = () =>
+    user &&
+    void shareCalendarIcs(user.uid, calendar).catch((caught: unknown) =>
+      Alert.alert(
+        t("calendar.exportFailed"),
+        caught instanceof Error ? caught.message : t("app.unknownError"),
+      ),
+    );
+  const openItem = (item: AgendaItem) => {
+    if (!item.calendarItemId) return;
+    if (isSubscriptionItemId(item.calendarItemId)) {
+      Alert.alert(item.title, t("subscriptions.readOnlyItem"));
+      return;
+    }
+    router.push({ pathname: "/calendar/[id]", params: { id: item.calendarItemId } });
+  };
 
   return (
     <Screen padded={false}>
       <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.page}>
         <ResponsiveContent>
-          <StoneText variant="title1">{t("calendar.title")}</StoneText>
-          <StoneText variant="bodySmall">{t("calendar.offlineNoReminder")}</StoneText>
-          <View style={styles.fileActions}>
-            <StoneButton
-              label={t("subscriptions.title")}
-              variant="secondary"
-              onPress={() => router.push("/calendar/subscriptions")}
-            />
-            <StoneButton
-              label={t("calendar.importIcs")}
-              variant="secondary"
-              onPress={() => void importIcs()}
-            />
-            <StoneButton
-              label={t("calendar.exportIcs")}
-              variant="secondary"
-              onPress={() =>
-                user &&
-                void shareCalendarIcs(user.uid, calendar).catch((caught: unknown) =>
-                  Alert.alert(
-                    t("calendar.exportFailed"),
-                    caught instanceof Error ? caught.message : t("app.unknownError"),
-                  ),
-                )
-              }
-            />
-          </View>
-          <View style={styles.navigation}>
-            <StoneButton
-              label={t("calendar.previousDay")}
-              onPress={() => move(-1)}
-              variant="secondary"
-            />
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={t("calendar.selectedTodayA11y", {
-                date: formatDateOnly(locale, selectedDate, { dateStyle: "full" }),
-              })}
-              onPress={() => setSelectedDate(new Date().toISOString().slice(0, 10))}
-            >
-              <StoneText variant="title3">
-                {formatDateOnly(locale, selectedDate, { dateStyle: "full" })}
-              </StoneText>
-            </Pressable>
-            <StoneButton
-              label={t("calendar.nextDay")}
-              onPress={() => move(1)}
-              variant="secondary"
-            />
-          </View>
-          <View style={styles.week} accessibilityRole="tablist">
-            {week.map((weekDate) => (
-              <Pressable
-                key={weekDate}
-                accessibilityRole="tab"
-                accessibilityState={{ selected: weekDate === selectedDate }}
-                accessibilityLabel={
-                  weekDate === selectedDate
-                    ? t("calendar.selectedA11y", {
-                        date: formatDateOnly(locale, weekDate, { dateStyle: "full" }),
-                      })
-                    : formatDateOnly(locale, weekDate, { dateStyle: "full" })
-                }
-                style={[styles.weekDay, weekDate === selectedDate && styles.weekDaySelected]}
-                onPress={() => setSelectedDate(weekDate)}
-              >
-                <StoneText variant="caption">
-                  {formatDateOnly(locale, weekDate, { weekday: "narrow", day: "numeric" })}
-                </StoneText>
-              </Pressable>
-            ))}
-          </View>
-          {selectedDate === today ? (
-            <StoneText variant="caption" accessibilityLiveRegion="polite">
-              {t("calendar.now", {
-                time: formatInstant(
-                  locale,
-                  new Date(),
-                  Intl.DateTimeFormat().resolvedOptions().timeZone,
-                  { hour: "2-digit", minute: "2-digit" },
-                ),
-              })}
-            </StoneText>
-          ) : null}
-          <Surface>
-            <StoneText variant="title3">{t("calendar.quickEvent")}</StoneText>
-            <StoneInput
-              label={t("calendar.titleField")}
-              value={title}
-              onChangeText={setTitle}
-              placeholder={t("calendar.titlePlaceholder")}
-            />
-            <View style={styles.times}>
-              <View style={styles.time}>
-                <StoneInput
-                  label={t("calendar.start")}
-                  value={startTime}
-                  onChangeText={setStartTime}
-                  placeholder="09:00"
+          <ScreenHeader
+            title={t("tabs.calendar")}
+            subtitle={monthLabel}
+            actions={
+              <>
+                <IconButton
+                  icon="today-outline"
+                  accessibilityLabel={t("calendar.selectedTodayA11y", {
+                    date: formatDateOnly(locale, today, { dateStyle: "full" }),
+                  })}
+                  onPress={() => setSelectedDate(today)}
                 />
-              </View>
-              <View style={styles.time}>
-                <StoneInput
-                  label={t("calendar.end")}
-                  value={endTime}
-                  onChangeText={setEndTime}
-                  placeholder="10:00"
+                <IconButton
+                  icon="ellipsis-horizontal"
+                  accessibilityLabel={t("common.more")}
+                  onPress={() => setMenuOpen(true)}
                 />
-              </View>
+                <IconButton
+                  icon={composing ? "close" : "add"}
+                  tone="accent"
+                  active
+                  accessibilityLabel={t("calendar.quickEvent")}
+                  onPress={() => setComposing((open) => !open)}
+                />
+              </>
+            }
+          />
+
+          <View style={styles.weekRow}>
+            <IconButton
+              icon="chevron-back"
+              accessibilityLabel={t("calendar.previousWeek")}
+              onPress={() => move(-7)}
+            />
+            <View style={styles.week} accessibilityRole="tablist">
+              {week.map((weekDate) => {
+                const selected = weekDate === selectedDate;
+                const isToday = weekDate === today;
+                return (
+                  <Pressable
+                    key={weekDate}
+                    accessibilityRole="tab"
+                    accessibilityState={{ selected }}
+                    accessibilityLabel={
+                      selected
+                        ? t("calendar.selectedA11y", {
+                            date: formatDateOnly(locale, weekDate, { dateStyle: "full" }),
+                          })
+                        : formatDateOnly(locale, weekDate, { dateStyle: "full" })
+                    }
+                    style={styles.weekDay}
+                    onPress={() => setSelectedDate(weekDate)}
+                  >
+                    <StoneText variant="caption" tone="muted">
+                      {formatDateOnly(locale, weekDate, { weekday: "narrow" })}
+                    </StoneText>
+                    <View
+                      style={[styles.dayNumber, selected && { backgroundColor: colors.primary }]}
+                    >
+                      <StoneText
+                        variant="label"
+                        style={[
+                          numeric,
+                          {
+                            color: selected
+                              ? colors.onPrimary
+                              : isToday
+                                ? colors.primaryText
+                                : colors.text,
+                          },
+                        ]}
+                      >
+                        {formatDateOnly(locale, weekDate, { day: "numeric" })}
+                      </StoneText>
+                    </View>
+                  </Pressable>
+                );
+              })}
             </View>
-            <StoneButton
-              label={t("calendar.createEvent")}
-              onPress={() => void create()}
-              disabled={!title.trim()}
+            <IconButton
+              icon="chevron-forward"
+              accessibilityLabel={t("calendar.nextWeek")}
+              onPress={() => move(7)}
             />
-          </Surface>
-          <StoneText variant="title3">{t("calendar.dayAgenda")}</StoneText>
-          {loading ? (
+          </View>
+
+          {composing ? (
+            <Surface style={styles.composer}>
+              <StoneInput
+                label={t("calendar.titleField")}
+                value={title}
+                onChangeText={setTitle}
+                placeholder={t("calendar.titlePlaceholder")}
+                autoFocus
+              />
+              <View style={styles.times}>
+                <View style={styles.time}>
+                  <StoneInput
+                    label={t("calendar.start")}
+                    value={startTime}
+                    onChangeText={setStartTime}
+                    placeholder="09:00"
+                  />
+                </View>
+                <View style={styles.time}>
+                  <StoneInput
+                    label={t("calendar.end")}
+                    value={endTime}
+                    onChangeText={setEndTime}
+                    placeholder="10:00"
+                  />
+                </View>
+              </View>
+              <StoneButton
+                label={t("calendar.createEvent")}
+                onPress={() => void create().then(() => setComposing(false))}
+                disabled={!title.trim()}
+              />
+            </Surface>
+          ) : null}
+
+          <View style={styles.dayHeader}>
+            <Overline>
+              {formatDateOnly(locale, selectedDate, {
+                weekday: "long",
+                day: "numeric",
+                month: "long",
+              })}
+            </Overline>
+            {selectedDate === today ? (
+              <StoneText variant="caption" tone="accent" accessibilityLiveRegion="polite">
+                {t("calendar.now", {
+                  time: formatInstant(
+                    locale,
+                    new Date(),
+                    Intl.DateTimeFormat().resolvedOptions().timeZone,
+                    { hour: "2-digit", minute: "2-digit" },
+                  ),
+                })}
+              </StoneText>
+            ) : null}
+          </View>
+          {loading && agendaItems.length === 0 ? (
             <LoadingState label={t("calendar.agendaLoading")} />
           ) : error ? (
             <ErrorState message={error} onRetry={() => void load()} />
           ) : agendaItems.length === 0 ? (
-            <EmptyState title={t("calendar.emptyDay")} description={t("calendar.emptyDayDetail")} />
+            <EmptyState
+              icon="calendar-clear-outline"
+              title={t("calendar.emptyDay")}
+              description={t("calendar.emptyDayDetail")}
+            />
           ) : (
-            agendaItems.map((item) => (
-              <Pressable
-                key={item.id}
-                accessibilityRole={item.calendarItemId ? "button" : undefined}
-                accessibilityLabel={`${agendaKindLabel(item.kind, t)} ${item.title}`}
-                disabled={!item.calendarItemId}
-                onPress={() => {
-                  if (!item.calendarItemId) return;
-                  if (isSubscriptionItemId(item.calendarItemId)) {
-                    Alert.alert(item.title, t("subscriptions.readOnlyItem"));
-                    return;
-                  }
-                  router.push({
-                    pathname: "/calendar/[id]",
-                    params: { id: item.calendarItemId },
-                  });
-                }}
-              >
-                <Surface>
-                  <StoneText variant="caption">{agendaKindLabel(item.kind, t)}</StoneText>
-                  <StoneText variant="title3">{item.title}</StoneText>
-                  <StoneText variant="bodySmall">
+            <ListGroup>
+              {agendaItems.map((item) => (
+                <Pressable
+                  key={item.id}
+                  accessibilityRole={item.calendarItemId ? "button" : undefined}
+                  accessibilityLabel={`${agendaKindLabel(item.kind, t)} ${item.title}`}
+                  disabled={!item.calendarItemId}
+                  onPress={() => openItem(item)}
+                  style={({ pressed }) => [
+                    styles.agendaRow,
+                    pressed && { backgroundColor: colors.surfacePressed },
+                  ]}
+                >
+                  <StoneText variant="label" tone="secondary" style={[styles.agendaTime, numeric]}>
                     {item.sortTime ?? t("calendar.allDay")}
-                    {item.completed ? ` · ${t("tasks.completed")}` : ""}
                   </StoneText>
-                </Surface>
-              </Pressable>
-            ))
+                  <View
+                    style={[
+                      styles.agendaBar,
+                      {
+                        backgroundColor:
+                          item.calendarItemId && isSubscriptionItemId(item.calendarItemId)
+                            ? colors.borderStrong
+                            : colors.primary,
+                      },
+                    ]}
+                  />
+                  <View style={styles.agendaBody}>
+                    <StoneText
+                      variant="body"
+                      numberOfLines={1}
+                      tone={item.completed ? "muted" : "default"}
+                    >
+                      {item.title}
+                    </StoneText>
+                    <StoneText variant="caption" tone="muted">
+                      {agendaKindLabel(item.kind, t)}
+                      {item.completed ? ` · ${t("tasks.completed")}` : ""}
+                    </StoneText>
+                  </View>
+                </Pressable>
+              ))}
+            </ListGroup>
           )}
         </ResponsiveContent>
       </ScrollView>
+      <ActionSheet
+        visible={menuOpen}
+        onClose={() => setMenuOpen(false)}
+        options={[
+          {
+            label: t("subscriptions.title"),
+            icon: "link-outline",
+            onPress: () => router.push("/calendar/subscriptions"),
+          },
+          {
+            label: t("calendar.importIcs"),
+            icon: "download-outline",
+            onPress: () => void importIcs(),
+          },
+          { label: t("calendar.exportIcs"), icon: "share-outline", onPress: exportIcs },
+        ]}
+      />
     </Screen>
   );
 }
@@ -361,24 +457,36 @@ function agendaKindLabel(kind: AgendaItem["kind"], t: ReturnType<typeof useI18n>
 }
 
 const styles = StyleSheet.create({
-  page: { paddingHorizontal: spacing.lg, paddingTop: spacing.xl, paddingBottom: spacing.giant },
-  fileActions: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm, marginTop: spacing.md },
-  navigation: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: spacing.sm,
-    marginVertical: spacing.lg,
-  },
-  week: { flexDirection: "row", gap: spacing.xs, marginBottom: spacing.lg },
-  weekDay: {
-    flex: 1,
-    minHeight: 44,
+  page: { paddingHorizontal: spacing.lg, paddingTop: spacing.lg, paddingBottom: spacing.giant },
+  weekRow: { flexDirection: "row", alignItems: "center", marginHorizontal: -spacing.sm },
+  week: { flex: 1, flexDirection: "row" },
+  weekDay: { flex: 1, alignItems: "center", gap: spacing.xs, paddingVertical: spacing.xs },
+  dayNumber: {
+    width: 34,
+    height: 34,
+    borderRadius: radii.pill,
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: 8,
   },
-  weekDaySelected: { borderWidth: 2, borderColor: colors.brand.purple600 },
+  composer: { gap: spacing.md, marginTop: spacing.md },
+  dayHeader: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    justifyContent: "space-between",
+    marginTop: spacing.xl,
+    marginBottom: spacing.sm,
+  },
+  agendaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    minHeight: 56,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+  },
+  agendaTime: { width: 60 },
+  agendaBar: { width: 3, height: 32, borderRadius: radii.pill },
+  agendaBody: { flex: 1, gap: 2 },
   times: { flexDirection: "row", gap: spacing.md },
   time: { flex: 1 },
 });

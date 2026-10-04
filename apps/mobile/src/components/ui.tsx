@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import {
   AccessibilityInfo,
   Animated,
+  Modal,
   Pressable,
   StyleSheet,
   Text,
@@ -198,6 +199,7 @@ export function IconButton({
   tone = "secondary",
   active = false,
   disabled = false,
+  testID,
 }: {
   icon: IconName;
   onPress: () => void;
@@ -205,6 +207,7 @@ export function IconButton({
   tone?: TextTone;
   active?: boolean;
   disabled?: boolean;
+  testID?: string;
 }) {
   const { colors, tones } = useTheme();
   const color =
@@ -219,6 +222,7 @@ export function IconButton({
             : tones[tone].fg;
   return (
     <Pressable
+      testID={testID}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
       accessibilityState={{ disabled, selected: active }}
@@ -404,11 +408,14 @@ export function Surface({
 export function Card({
   children,
   onPress,
+  onLongPress,
   accessibilityLabel,
   padded = true,
   style,
 }: PropsWithChildren<{
   onPress?: () => void;
+  /** Secondary actions (e.g. change status) live behind a long press, not a row of icons. */
+  onLongPress?: () => void;
   accessibilityLabel?: string;
   padded?: boolean;
   style?: StyleProp<ViewStyle>;
@@ -428,6 +435,8 @@ export function Card({
         accessibilityRole="button"
         accessibilityLabel={accessibilityLabel}
         onPress={onPress}
+        onLongPress={onLongPress}
+        delayLongPress={350}
         onPressIn={press.onPressIn}
         onPressOut={press.onPressOut}
         style={({ pressed }) => [
@@ -453,14 +462,28 @@ export function ScreenHeader({
   eyebrow,
   subtitle,
   actions,
+  onBack,
 }: {
   title: string;
   eyebrow?: string | undefined;
   subtitle?: string | undefined;
   actions?: ReactNode;
+  /** Stack screens show a back chevron before the title. */
+  onBack?: () => void;
 }) {
+  const { t } = useI18n();
   return (
     <View style={styles.header}>
+      {onBack ? (
+        <View style={styles.headerBack}>
+          <IconButton
+            icon="chevron-back"
+            accessibilityLabel={t("common.back")}
+            onPress={onBack}
+            tone="default"
+          />
+        </View>
+      ) : null}
       <View style={styles.headerText}>
         {eyebrow ? <Overline tone="accent">{eyebrow}</Overline> : null}
         <StoneText variant="title1" style={eyebrow ? styles.headerTitle : undefined}>
@@ -510,12 +533,10 @@ export function SectionCard({
 }: PropsWithChildren<{ title: string; description?: string; icon?: IconName }>) {
   const { colors } = useTheme();
   return (
-    <Surface style={styles.sectionCard}>
+    <Surface style={styles.sectionCard} elevated="none">
       <View style={styles.sectionCardHead}>
         {icon ? (
-          <View style={[styles.sectionIcon, { backgroundColor: colors.primarySoft }]}>
-            <Ionicons name={icon} size={17} color={colors.primaryText} />
-          </View>
+          <Ionicons name={icon} size={18} color={colors.textSecondary} style={styles.sectionIcon} />
         ) : null}
         <View style={styles.headerText}>
           <StoneText variant="title3">{title}</StoneText>
@@ -552,6 +573,7 @@ export function Chip({
       accessibilityState={{ selected }}
       accessibilityLabel={accessibilityLabel ?? label}
       onPress={onPress}
+      hitSlop={6}
       style={({ pressed }) => [
         styles.chip,
         {
@@ -662,6 +684,222 @@ export function Metric({
 
 export const numeric: TextStyle = { fontVariant: ["tabular-nums"] };
 
+/** Compact single-choice control for 2-5 short options (views, modes, ranges). */
+export function SegmentedControl<T extends string>({
+  options,
+  value,
+  onChange,
+  accessibilityLabel,
+}: {
+  options: readonly { value: T; label: string }[];
+  value: T;
+  onChange: (value: T) => void;
+  accessibilityLabel: string;
+}) {
+  const { colors, elevation } = useTheme();
+  return (
+    <View
+      accessibilityRole="tablist"
+      accessibilityLabel={accessibilityLabel}
+      style={[styles.segmented, { backgroundColor: colors.surfaceSunken }]}
+    >
+      {options.map((option) => {
+        const selected = option.value === value;
+        return (
+          <Pressable
+            key={option.value}
+            accessibilityRole="tab"
+            accessibilityState={{ selected }}
+            onPress={() => onChange(option.value)}
+            hitSlop={4}
+            style={[
+              styles.segment,
+              selected && [{ backgroundColor: colors.surface }, elevation.sm],
+            ]}
+          >
+            <StoneText
+              variant="label"
+              numberOfLines={1}
+              style={{ color: selected ? colors.text : colors.textSecondary }}
+            >
+              {option.label}
+            </StoneText>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+/** A white group of rows separated by inset hairlines: the default way to show a list. */
+export function ListGroup({
+  children,
+  style,
+}: PropsWithChildren<{ style?: StyleProp<ViewStyle> }>) {
+  const { colors } = useTheme();
+  const rows = (Array.isArray(children) ? children : [children]).flat().filter(Boolean);
+  return (
+    <View
+      style={[
+        styles.listGroup,
+        { backgroundColor: colors.surface, borderColor: colors.border },
+        style,
+      ]}
+    >
+      {rows.map((row, index) => (
+        <View key={index}>
+          {index > 0 ? (
+            <View style={[styles.listSeparator, { backgroundColor: colors.border }]} />
+          ) : null}
+          {row}
+        </View>
+      ))}
+    </View>
+  );
+}
+
+export function ListRow({
+  title,
+  subtitle,
+  meta,
+  leading,
+  trailing,
+  onPress,
+  onLongPress,
+  chevron = false,
+  accessibilityLabel,
+  titleLines = 1,
+}: {
+  title: string;
+  subtitle?: string | null | undefined;
+  /** Small right-aligned text, e.g. a date or count. */
+  meta?: string | null | undefined;
+  leading?: ReactNode;
+  trailing?: ReactNode;
+  onPress?: () => void;
+  onLongPress?: () => void;
+  chevron?: boolean;
+  accessibilityLabel?: string;
+  titleLines?: number;
+}) {
+  const { colors } = useTheme();
+  const body = (
+    <>
+      {leading ? <View style={styles.listLeading}>{leading}</View> : null}
+      <View style={styles.listText}>
+        <View style={styles.listTitleRow}>
+          <StoneText variant="title3" style={styles.listTitle} numberOfLines={titleLines}>
+            {title}
+          </StoneText>
+          {meta ? (
+            <StoneText variant="caption" tone="muted" style={numeric}>
+              {meta}
+            </StoneText>
+          ) : null}
+        </View>
+        {subtitle ? (
+          <StoneText variant="bodySmall" tone="secondary" numberOfLines={2}>
+            {subtitle}
+          </StoneText>
+        ) : null}
+      </View>
+      {trailing}
+      {chevron ? <Ionicons name="chevron-forward" size={16} color={colors.textMuted} /> : null}
+    </>
+  );
+  if (!onPress && !onLongPress) return <View style={styles.listRow}>{body}</View>;
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel ?? title}
+      onPress={onPress}
+      onLongPress={onLongPress}
+      delayLongPress={350}
+      style={({ pressed }) => [
+        styles.listRow,
+        pressed && { backgroundColor: colors.surfacePressed },
+      ]}
+    >
+      {body}
+    </Pressable>
+  );
+}
+
+export interface ActionSheetOption {
+  label: string;
+  icon?: IconName;
+  destructive?: boolean;
+  onPress: () => void;
+}
+
+/** Bottom sheet of actions: keeps secondary commands out of headers and rows. */
+export function ActionSheet({
+  visible,
+  title,
+  options,
+  onClose,
+}: {
+  visible: boolean;
+  title?: string | undefined;
+  options: readonly ActionSheetOption[];
+  onClose: () => void;
+}) {
+  const { colors, tones } = useTheme();
+  const { t } = useI18n();
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={t("common.close")}
+        onPress={onClose}
+        style={[styles.sheetOverlay, { backgroundColor: colors.overlay }]}
+      >
+        <SafeAreaView edges={["bottom"]} style={styles.sheetSafe}>
+          <Pressable style={[styles.sheet, { backgroundColor: colors.surface }]}>
+            {title ? (
+              <StoneText variant="label" tone="muted" style={styles.sheetTitle}>
+                {title}
+              </StoneText>
+            ) : null}
+            {options.map((option) => {
+              const color = option.destructive ? tones.danger.fg : colors.text;
+              return (
+                <Pressable
+                  key={option.label}
+                  accessibilityRole="button"
+                  onPress={() => {
+                    onClose();
+                    option.onPress();
+                  }}
+                  style={({ pressed }) => [
+                    styles.sheetRow,
+                    pressed && { backgroundColor: colors.surfacePressed },
+                  ]}
+                >
+                  {option.icon ? <Ionicons name={option.icon} size={19} color={color} /> : null}
+                  <StoneText variant="body" style={{ color }}>
+                    {option.label}
+                  </StoneText>
+                </Pressable>
+              );
+            })}
+            <Pressable
+              accessibilityRole="button"
+              onPress={onClose}
+              style={({ pressed }) => [
+                styles.sheetCancel,
+                { backgroundColor: pressed ? colors.surfacePressed : colors.surfaceSunken },
+              ]}
+            >
+              <StoneText variant="title3">{t("common.cancel")}</StoneText>
+            </Pressable>
+          </Pressable>
+        </SafeAreaView>
+      </Pressable>
+    </Modal>
+  );
+}
+
 const styles = StyleSheet.create({
   screen: { flex: 1 },
   screenPadded: { paddingHorizontal: spacing.lg, paddingTop: spacing.lg },
@@ -724,7 +962,8 @@ const styles = StyleSheet.create({
   headerText: { flex: 1, gap: spacing.xxs },
   headerTitle: { marginTop: spacing.xxs },
   headerSubtitle: { marginTop: spacing.xxs },
-  headerActions: { flexDirection: "row", alignItems: "center", gap: spacing.xs },
+  headerActions: { flexDirection: "row", alignItems: "center", gap: spacing.xxs },
+  headerBack: { marginLeft: -spacing.md, marginTop: -2 },
 
   sectionHeader: {
     flexDirection: "row",
@@ -732,23 +971,17 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: spacing.md,
   },
-  sectionCard: { gap: spacing.lg },
-  sectionCardHead: { flexDirection: "row", alignItems: "flex-start", gap: spacing.md },
+  sectionCard: { gap: spacing.md },
+  sectionCardHead: { flexDirection: "row", alignItems: "flex-start", gap: spacing.sm },
   sectionCardBody: { gap: spacing.md },
-  sectionIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: radii.sm,
-    alignItems: "center",
-    justifyContent: "center",
-  },
+  sectionIcon: { marginTop: 2 },
 
   chip: {
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.xs,
-    minHeight: touchTarget,
-    paddingHorizontal: spacing.lg,
+    minHeight: 34,
+    paddingHorizontal: spacing.md,
     borderRadius: radii.pill,
     borderWidth: hairline,
   },
@@ -770,5 +1003,55 @@ const styles = StyleSheet.create({
   progressFill: { height: "100%", borderRadius: radii.pill },
 
   metric: { gap: spacing.xxs, minWidth: 92 },
+
+  segmented: {
+    flexDirection: "row",
+    borderRadius: radii.md,
+    padding: 3,
+    gap: 2,
+  },
+  segment: {
+    flex: 1,
+    minHeight: 34,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: spacing.sm,
+    borderRadius: radii.sm,
+  },
+
+  listGroup: { borderWidth: hairline, borderRadius: radii.lg, overflow: "hidden" },
+  listSeparator: { height: hairline, marginLeft: spacing.lg },
+  listRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    minHeight: 56,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+  },
+  listLeading: { alignItems: "center", justifyContent: "center" },
+  listText: { flex: 1, gap: 2 },
+  listTitleRow: { flexDirection: "row", alignItems: "baseline", gap: spacing.sm },
+  listTitle: { flex: 1, fontFamily: "Inter_500Medium", fontSize: 16 },
+
+  sheetOverlay: { flex: 1, justifyContent: "flex-end" },
+  sheetSafe: { paddingHorizontal: spacing.md, paddingBottom: spacing.md },
+  sheet: { borderRadius: radii.xl, padding: spacing.sm, gap: 2 },
+  sheetTitle: { paddingHorizontal: spacing.md, paddingTop: spacing.sm, paddingBottom: spacing.xs },
+  sheetRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    minHeight: 50,
+    paddingHorizontal: spacing.md,
+    borderRadius: radii.md,
+  },
+  sheetCancel: {
+    marginTop: spacing.xs,
+    minHeight: 50,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: radii.md,
+  },
   metricValue: { fontVariant: ["tabular-nums"] },
 });

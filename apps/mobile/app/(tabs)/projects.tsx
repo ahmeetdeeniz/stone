@@ -1,10 +1,10 @@
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { Alert, FlatList, Modal, ScrollView, StyleSheet, View } from "react-native";
+import Ionicons from "@expo/vector-icons/Ionicons";
 import type { Project, ProjectPlatform, ProjectStatus, ProjectTask } from "@stone/domain";
 import { projectPlatforms, projectPriorities, projectStatuses } from "@stone/domain";
 import {
-  formatInstant,
   formatProjectPlatform,
   formatProjectHealth,
   formatProjectPriority,
@@ -15,6 +15,7 @@ import type { ProjectTemplate } from "@stone/markdown";
 import { ResponsiveContent } from "../../src/components/responsive";
 import { EmptyState, ErrorState, LoadingState } from "../../src/components/states";
 import {
+  ActionSheet,
   Badge,
   Card,
   Chip,
@@ -29,6 +30,7 @@ import {
   StoneText,
 } from "../../src/components/ui";
 import { spacing } from "../../src/design/tokens";
+import { useTheme } from "../../src/design/theme";
 import type { StatusTone } from "../../src/design/tokens";
 import { useAuth } from "../../src/providers/auth-provider";
 import { useAppServices } from "../../src/providers/app-provider";
@@ -57,13 +59,6 @@ const statusTone: Readonly<Record<ProjectStatus, StatusTone>> = {
   archived: "neutral",
 };
 
-const priorityTone: Readonly<Record<Project["priority"], StatusTone>> = {
-  low: "neutral",
-  medium: "neutral",
-  high: "warning",
-  critical: "danger",
-};
-
 interface ProjectListItem {
   project: Project;
   tasks: readonly ProjectTask[];
@@ -81,6 +76,8 @@ export default function ProjectsScreen() {
   const [tagFilter, setTagFilter] = useState("");
   const [platformFilter, setPlatformFilter] = useState<ProjectPlatform | undefined>();
   const [search, setSearch] = useState("");
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [statusSheetFor, setStatusSheetFor] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -155,25 +152,17 @@ export default function ProjectsScreen() {
     }
   };
 
-  const changeStatus = (project: Project) => {
-    Alert.alert(
-      t("projects.statusTitle"),
-      t("projects.chooseStatus", { project: project.title }),
-      projectStatuses.map((status) => ({
-        text: formatProjectStatus(locale, status),
-        onPress: () =>
-          void projectUseCases
-            .update(user!.uid, project.id, { status }, deviceId)
-            .then(load)
-            .catch((caught: unknown) =>
-              Alert.alert(
-                t("projects.statusUpdateFailed"),
-                caught instanceof Error ? caught.message : t("app.unknownError"),
-              ),
-            ),
-      })),
-    );
-  };
+  const changeStatus = (project: Project) => setStatusSheetFor(project);
+  const applyStatus = (project: Project, status: ProjectStatus) =>
+    void projectUseCases
+      .update(user!.uid, project.id, { status }, deviceId)
+      .then(load)
+      .catch((caught: unknown) =>
+        Alert.alert(
+          t("projects.statusUpdateFailed"),
+          caught instanceof Error ? caught.message : t("app.unknownError"),
+        ),
+      );
 
   const columns = useMemo(
     () =>
@@ -190,11 +179,16 @@ export default function ProjectsScreen() {
     <Screen>
       <ResponsiveContent>
         <ScreenHeader
-          eyebrow="Stone"
           title={t("tabs.projects")}
           subtitle={loading ? undefined : tp("projects.count", items.length)}
           actions={
             <>
+              <IconButton
+                icon="options-outline"
+                active={filtersOpen || filtersActive}
+                accessibilityLabel={t("projects.filters")}
+                onPress={() => setFiltersOpen((open) => !open)}
+              />
               <IconButton
                 icon={view === "list" ? "grid-outline" : "list-outline"}
                 accessibilityLabel={
@@ -202,80 +196,78 @@ export default function ProjectsScreen() {
                 }
                 onPress={() => setView(view === "list" ? "kanban" : "list")}
               />
-              <StoneButton
-                label={t("projects.new")}
+              <IconButton
                 icon="add"
-                size="sm"
+                tone="accent"
+                active
+                accessibilityLabel={t("projects.new")}
                 onPress={() => setCreateOpen(true)}
                 disabled={busy}
               />
             </>
           }
         />
-        <View style={styles.searchRow}>
-          <SearchField
-            value={search}
-            onChangeText={setSearch}
-            placeholder={t("projects.searchPlaceholder")}
-            accessibilityLabel={t("projects.search")}
-            onClear={() => setSearch("")}
-          />
-          <SearchField
-            value={tagFilter}
-            onChangeText={setTagFilter}
-            placeholder={t("projects.tagPlaceholder")}
-            accessibilityLabel={t("projects.tagFilter")}
-            onClear={() => setTagFilter("")}
-            icon="pricetag-outline"
-            autoCapitalize="none"
-          />
-        </View>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.filters}
-        >
-          <Chip
-            label={
-              statusFilter ? formatProjectStatus(locale, statusFilter) : t("projects.allStatuses")
-            }
-            selected={Boolean(statusFilter)}
-            icon="flag-outline"
-            onPress={cycleStatusFilter}
-          />
-          <Chip
-            label={
-              priorityFilter
-                ? formatProjectPriority(locale, priorityFilter)
-                : t("projects.allPriorities")
-            }
-            selected={Boolean(priorityFilter)}
-            icon="arrow-up-circle-outline"
-            onPress={cyclePriorityFilter}
-          />
-          <Chip
-            label={
-              platformFilter
-                ? formatProjectPlatform(locale, platformFilter)
-                : t("projects.allPlatforms")
-            }
-            selected={Boolean(platformFilter)}
-            icon="phone-portrait-outline"
-            onPress={cyclePlatformFilter}
-          />
-          {filtersActive ? (
-            <Chip
-              label={t("projects.clearFilters")}
-              icon="close"
-              onPress={() => {
-                setStatusFilter(undefined);
-                setPriorityFilter(undefined);
-                setTagFilter("");
-                setPlatformFilter(undefined);
-              }}
+        <SearchField
+          value={search}
+          onChangeText={setSearch}
+          placeholder={t("projects.searchPlaceholder")}
+          accessibilityLabel={t("projects.search")}
+          onClear={() => setSearch("")}
+        />
+        {filtersOpen ? (
+          <View style={styles.filterPanel}>
+            <FilterRow
+              label={t("projects.statusTitle")}
+              options={projectStatuses.map((value) => ({
+                value,
+                label: formatProjectStatus(locale, value),
+              }))}
+              value={statusFilter}
+              onChange={setStatusFilter}
             />
-          ) : null}
-        </ScrollView>
+            <FilterRow
+              label={t("projects.priority")}
+              options={projectPriorities.map((value) => ({
+                value,
+                label: formatProjectPriority(locale, value),
+              }))}
+              value={priorityFilter}
+              onChange={setPriorityFilter}
+            />
+            <FilterRow
+              label={t("projects.platforms")}
+              options={projectPlatforms.map((value) => ({
+                value,
+                label: formatProjectPlatform(locale, value),
+              }))}
+              value={platformFilter}
+              onChange={setPlatformFilter}
+            />
+            <SearchField
+              value={tagFilter}
+              onChangeText={setTagFilter}
+              placeholder={t("projects.tagPlaceholder")}
+              accessibilityLabel={t("projects.tagFilter")}
+              onClear={() => setTagFilter("")}
+              icon="pricetag-outline"
+              autoCapitalize="none"
+            />
+            {filtersActive ? (
+              <StoneButton
+                label={t("projects.clearFilters")}
+                variant="quiet"
+                size="sm"
+                icon="close"
+                onPress={() => {
+                  setStatusFilter(undefined);
+                  setPriorityFilter(undefined);
+                  setTagFilter("");
+                  setPlatformFilter(undefined);
+                }}
+              />
+            ) : null}
+          </View>
+        ) : null}
         {loading ? (
           <LoadingState label={t("projects.loading")} />
         ) : error ? (
@@ -444,26 +436,58 @@ export default function ProjectsScreen() {
           </Screen>
         </Modal>
       </ResponsiveContent>
+      <ActionSheet
+        visible={statusSheetFor !== null}
+        title={statusSheetFor ? t("projects.chooseStatus", { project: statusSheetFor.title }) : ""}
+        onClose={() => setStatusSheetFor(null)}
+        options={
+          statusSheetFor
+            ? projectStatuses.map((status) => ({
+                label: formatProjectStatus(locale, status),
+                icon:
+                  status === statusSheetFor.status
+                    ? ("checkmark" as const)
+                    : ("ellipse-outline" as const),
+                onPress: () => applyStatus(statusSheetFor, status),
+              }))
+            : []
+        }
+      />
     </Screen>
   );
+}
 
-  function cycleStatusFilter() {
-    const current = statusFilter ? projectStatuses.indexOf(statusFilter) : -1;
-    const next = current + 1;
-    setStatusFilter(next >= projectStatuses.length ? undefined : projectStatuses[next]);
-  }
-
-  function cyclePriorityFilter() {
-    const current = priorityFilter ? projectPriorities.indexOf(priorityFilter) : -1;
-    const next = current + 1;
-    setPriorityFilter(next >= projectPriorities.length ? undefined : projectPriorities[next]);
-  }
-
-  function cyclePlatformFilter() {
-    const current = platformFilter ? projectPlatforms.indexOf(platformFilter) : -1;
-    const next = current + 1;
-    setPlatformFilter(next >= projectPlatforms.length ? undefined : projectPlatforms[next]);
-  }
+/** One filter dimension: tap a value to filter by it, tap it again to clear. */
+function FilterRow<T extends string>({
+  label,
+  options,
+  value,
+  onChange,
+}: {
+  label: string;
+  options: readonly { value: T; label: string }[];
+  value: T | undefined;
+  onChange: (value: T | undefined) => void;
+}) {
+  return (
+    <View style={styles.optionGroup}>
+      <Overline>{label}</Overline>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.filterChips}
+      >
+        {options.map((option) => (
+          <Chip
+            key={option.value}
+            label={option.label}
+            selected={value === option.value}
+            onPress={() => onChange(value === option.value ? undefined : option.value)}
+          />
+        ))}
+      </ScrollView>
+    </View>
+  );
 }
 
 function OptionGroup({ label, children }: { label: string; children: ReactNode }) {
@@ -486,76 +510,90 @@ function ProjectCard({
 }) {
   const { project, tasks } = item;
   const { locale, t } = useI18n();
+  const { tones } = useTheme();
   const completed = tasks.filter((task) => task.completed && !task.canceled).length;
   const total = tasks.filter((task) => !task.canceled).length;
   const progress = total === 0 ? 0 : completed / total;
+  const meta = [
+    total > 0 ? t("projects.tasksProgress", { completed, total }) : null,
+    project.targetDate
+      ? t("projects.targetDate", {
+          date: new Intl.DateTimeFormat(locale, { day: "numeric", month: "short" }).format(
+            new Date(`${project.targetDate}T12:00:00`),
+          ),
+        })
+      : null,
+    project.priority === "high" || project.priority === "critical"
+      ? formatProjectPriority(locale, project.priority)
+      : null,
+  ].filter(Boolean);
   return (
-    <Card accessibilityLabel={t("projects.openA11y", { title: project.title })} onPress={onOpen}>
+    <Card
+      accessibilityLabel={t("projects.openA11y", { title: project.title })}
+      onPress={onOpen}
+      onLongPress={onStatus}
+    >
       <View style={styles.cardHead}>
         <StoneText variant="title3" numberOfLines={2} style={styles.cardTitle}>
           {project.title}
         </StoneText>
-        <IconButton
-          icon="swap-horizontal-outline"
-          accessibilityLabel={t("projects.changeStatus")}
-          onPress={onStatus}
-        />
-      </View>
-      <View style={styles.badgeRow}>
         <Badge
           label={formatProjectStatus(locale, project.status)}
           tone={statusTone[project.status]}
         />
-        <Badge
-          label={formatProjectPriority(locale, project.priority)}
-          tone={priorityTone[project.priority]}
-        />
-        <Badge
-          label={t("projects.health", { health: formatProjectHealth(locale, project.health) })}
-          tone="neutral"
-        />
       </View>
-      <View style={styles.progressBlock}>
-        <View style={styles.progressLabels}>
-          <StoneText variant="caption" tone="secondary">
-            {t("projects.tasksProgress", { completed, total })}
-          </StoneText>
-          <StoneText variant="caption" tone="muted">
-            {project.targetDate
-              ? t("projects.targetDate", { date: project.targetDate })
-              : t("projects.noTargetDate")}
+      {meta.length > 0 ? (
+        <StoneText variant="caption" tone="muted" style={styles.cardMeta}>
+          {meta.join(" · ")}
+        </StoneText>
+      ) : null}
+      {total > 0 ? (
+        <View style={styles.progressBlock}>
+          <ProgressBar
+            value={progress}
+            accessibilityLabel={t("projects.tasksProgress", { completed, total })}
+          />
+        </View>
+      ) : null}
+      {project.nextAction ? (
+        <View style={styles.nextAction}>
+          <Ionicons name="arrow-forward" size={14} color={tones.accent.fg} />
+          <StoneText
+            variant="bodySmall"
+            tone="secondary"
+            numberOfLines={2}
+            style={styles.cardTitle}
+          >
+            {project.nextAction}
           </StoneText>
         </View>
-        <ProgressBar
-          value={progress}
-          accessibilityLabel={t("projects.tasksProgress", { completed, total })}
-        />
-      </View>
-      <StoneText variant="bodySmall" tone="secondary" numberOfLines={2}>
-        {project.nextAction ?? t("projects.noNextAction")}
-      </StoneText>
-      <View style={styles.cardFooter}>
-        <StoneText variant="caption" tone="muted" numberOfLines={1} style={styles.cardTitle}>
-          {project.currentVersion ?? t("projects.noVersion")} →{" "}
-          {project.nextVersion ?? t("projects.noNextVersion")}
+      ) : null}
+      {project.health === "risk" || project.health === "attention" ? (
+        <StoneText
+          variant="caption"
+          style={[
+            styles.cardMeta,
+            { color: project.health === "risk" ? tones.danger.fg : tones.warning.fg },
+          ]}
+        >
+          {formatProjectHealth(locale, project.health)}
         </StoneText>
-        <StoneText variant="caption" tone="muted">
-          {formatInstant(
-            locale,
-            project.updatedAt,
-            Intl.DateTimeFormat().resolvedOptions().timeZone,
-            { dateStyle: "medium" },
-          )}
-        </StoneText>
-      </View>
+      ) : null}
     </Card>
   );
 }
 
 const styles = StyleSheet.create({
-  searchRow: { gap: spacing.sm, marginBottom: spacing.xs },
-  filters: { gap: spacing.sm, paddingVertical: spacing.md, paddingRight: spacing.lg },
-  list: { gap: spacing.md, paddingTop: spacing.xs, paddingBottom: spacing.giant },
+  filterPanel: { gap: spacing.md, paddingTop: spacing.md },
+  filterChips: { gap: spacing.xs, paddingRight: spacing.lg },
+  cardMeta: { marginTop: spacing.xs },
+  nextAction: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+    marginTop: spacing.sm,
+  },
+  list: { gap: spacing.sm, paddingTop: spacing.md, paddingBottom: spacing.giant },
   emptyList: { flexGrow: 1 },
   cardHead: {
     flexDirection: "row",
@@ -564,16 +602,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   cardTitle: { flex: 1 },
-  badgeRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing.xs, marginTop: spacing.sm },
-  progressBlock: { gap: spacing.xs, marginVertical: spacing.md },
-  progressLabels: { flexDirection: "row", justifyContent: "space-between", gap: spacing.sm },
-  cardFooter: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: spacing.sm,
-    marginTop: spacing.md,
-  },
+  progressBlock: { marginTop: spacing.sm },
   kanban: { flex: 1 },
   kanbanContent: { gap: spacing.md, paddingVertical: spacing.md, paddingBottom: spacing.giant },
   column: { width: 272, gap: spacing.sm },
