@@ -1,6 +1,7 @@
 import { Directory, File, Paths } from "expo-file-system";
 import type { AppServices } from "../services/composition-root";
 import type { WorkspaceRestoreTarget } from "./workspace-restore";
+import { writeLocalAttachmentBase64 } from "../attachments/expo-attachment-files";
 
 /** Binds the full-workspace restore to this device's local repositories. */
 export function createWorkspaceRestoreTarget(
@@ -29,6 +30,11 @@ export function createWorkspaceRestoreTarget(
     },
     createDrawing: (drawing, source, previewPath) =>
       services.drawings.save(drawing, source, previewPath, services.deviceId),
+    writeAttachment: async (fileName, base64) => {
+      const created = writeLocalAttachmentBase64(ownerId, fileName, base64);
+      await services.attachments.enqueueExisting(ownerId, fileName);
+      return created;
+    },
     calendar: services.calendar,
     focus: services.focus,
     relationshipIds: async () => {

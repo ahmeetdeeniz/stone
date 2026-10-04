@@ -87,7 +87,7 @@ export class FirebaseDrawingStorage {
   }
 
   public async deleteOwnerDrawings(ownerId: string): Promise<void> {
-    await deleteTree(storage().ref(`users/${ownerId}/drawings`));
+    await deleteStorageTree(storage().ref(`users/${ownerId}/drawings`));
   }
 
   public async deleteRevision(ownerId: string, drawingId: string, revision: number): Promise<void> {
@@ -113,13 +113,15 @@ export class FirebaseDrawingStorage {
 
   public async deleteDrawing(ownerId: string, drawingId: string): Promise<void> {
     const path = drawingId ? `users/${ownerId}/drawings/${drawingId}` : `users/${ownerId}/drawings`;
-    await deleteTree(storage().ref(path));
+    await deleteStorageTree(storage().ref(path));
   }
 }
 
-async function deleteTree(reference: ReturnType<ReturnType<typeof storage>["ref"]>): Promise<void> {
+export async function deleteStorageTree(
+  reference: ReturnType<ReturnType<typeof storage>["ref"]>,
+): Promise<void> {
   const result = await reference.listAll();
-  for (const prefix of result.prefixes) await deleteTree(prefix);
+  for (const prefix of result.prefixes) await deleteStorageTree(prefix);
   for (const item of result.items) await deleteObject(item);
 }
 
@@ -129,11 +131,11 @@ async function deleteObject(
   try {
     await reference.delete();
   } catch (error) {
-    if (!isNotFoundError(error)) throw error;
+    if (!isStorageNotFoundError(error)) throw error;
   }
 }
 
-function isNotFoundError(error: unknown): boolean {
+export function isStorageNotFoundError(error: unknown): boolean {
   return (
     typeof error === "object" &&
     error !== null &&

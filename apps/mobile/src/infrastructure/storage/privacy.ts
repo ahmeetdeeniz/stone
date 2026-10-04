@@ -1,4 +1,5 @@
 import { File } from "expo-file-system";
+import { deleteLocalAttachments } from "../../attachments/expo-attachment-files";
 import type { StoneDatabase } from "./database";
 
 export class SQLitePrivacyRepository {
@@ -24,6 +25,7 @@ export class SQLitePrivacyRepository {
       const file = new File(row.path);
       if (file.exists) file.delete();
     }
+    deleteLocalAttachments(ownerId);
     await this.database.withTransactionAsync(async () => {
       await this.database.runAsync(
         "DELETE FROM project_tags WHERE project_id IN (SELECT id FROM projects WHERE owner_id = ?)",
@@ -44,6 +46,7 @@ export class SQLitePrivacyRepository {
         "conflicts",
         "outbox",
         "sync_tombstones",
+        "attachment_uploads",
         "sync_state_cursors",
         "sync_state",
         "settings",

@@ -25,6 +25,7 @@ function fakeTarget(ownerId = "new-owner") {
   const drawings = new Map<string, { drawing: Drawing; source: string; previewPath: string }>();
   const calendar = new Map<string, CalendarItem>();
   const focus = new Map<string, FocusSession>();
+  const attachments = new Map<string, string>();
   let goal: FocusGoal | null = null;
   const target: WorkspaceRestoreTarget = {
     ownerId,
@@ -50,6 +51,11 @@ function fakeTarget(ownerId = "new-owner") {
     writeDrawingPreview: (id) => Promise.resolve(`file:///previews/${id}.png`),
     createDrawing: (drawing, source, previewPath) =>
       Promise.resolve(drawings.set(drawing.id, { drawing, source, previewPath })),
+    writeAttachment: (fileName, base64) => {
+      const created = !attachments.has(fileName);
+      attachments.set(fileName, base64);
+      return Promise.resolve(created);
+    },
     calendar: {
       getById: (_owner, id) => Promise.resolve(calendar.get(id) ?? null),
       create: (item) => {
@@ -77,7 +83,7 @@ function fakeTarget(ownerId = "new-owner") {
         calendarItemIds: new Set(calendar.keys()),
       }),
   };
-  return { target, documents, projects, versions, tasks, drawings, calendar };
+  return { target, documents, projects, versions, tasks, drawings, calendar, attachments };
 }
 
 function exportFiles(): ExportedProjectFile[] {
@@ -203,6 +209,12 @@ function exportFiles(): ExportedProjectFile[] {
       }),
       mimeType: "application/json",
     },
+    {
+      path: `attachments/${"a".repeat(64)}.png`,
+      content: "iVBORw0KGgo=",
+      encoding: "base64",
+      mimeType: "image/png",
+    },
     { path: "manifest.json", content: JSON.stringify(manifest) },
   ];
 }
@@ -218,8 +230,10 @@ describe("full workspace restore", () => {
       notes: { created: 2, duplicates: 0 },
       tasks: { created: 1, duplicates: 0 },
       drawings: { created: 1, duplicates: 0 },
+      attachments: { created: 1, duplicates: 0 },
       skipped: [],
     });
+    expect(fake.attachments.get(`${"a".repeat(64)}.png`)).toBe("iVBORw0KGgo=");
     const note = fake.documents.get("note-1")!;
     // Re-owned and reset to revision 1 so the owner-scoped create rules accept the sync.
     expect(note).toMatchObject({
@@ -263,6 +277,7 @@ describe("full workspace restore", () => {
       notes: { created: 0, duplicates: 2 },
       tasks: { created: 0, duplicates: 1 },
       drawings: { created: 0, duplicates: 1 },
+      attachments: { created: 0, duplicates: 1 },
     });
   });
 

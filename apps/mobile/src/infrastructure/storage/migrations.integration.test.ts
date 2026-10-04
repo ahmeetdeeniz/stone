@@ -5,7 +5,7 @@ import { assertSupportedMigrationVersion, latestMigrationVersion, migrations } f
 describe("SQLite migration plan", () => {
   it("is ordered, versioned, and creates the local-first tables", () => {
     expect(migrations.map((migration) => migration.version)).toEqual([
-      1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
+      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,
     ]);
     const statements = migrations.flatMap((migration) => migration.statements).join(";");
     expect(statements).toContain("CREATE TABLE IF NOT EXISTS documents");
@@ -28,6 +28,7 @@ describe("SQLite migration plan", () => {
     expect(statements).toContain("ALTER TABLE settings ADD COLUMN revision");
     expect(statements).toContain("CREATE TABLE IF NOT EXISTS drawings");
     expect(statements).toContain("CREATE TABLE IF NOT EXISTS drawing_revisions");
+    expect(statements).toContain("CREATE TABLE IF NOT EXISTS attachment_uploads");
     expect(statements).toContain("CREATE TABLE IF NOT EXISTS sync_tombstones");
   });
 

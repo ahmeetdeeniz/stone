@@ -8,12 +8,14 @@ describe("desktop environment configuration", () => {
       VITE_FIREBASE_API_KEY: "desktop-key",
       VITE_FIREBASE_PROJECT_ID: "desktop-project",
       VITE_FIREBASE_AUTH_DOMAIN: "desktop.firebaseapp.com",
+      VITE_FIREBASE_STORAGE_BUCKET: "desktop-project.appspot.com",
       VITE_GITHUB_CLIENT_ID: "desktop-client-id",
     });
     expect(config).toEqual({
       firebaseApiKey: "desktop-key",
       firebaseProjectId: "desktop-project",
       firebaseAuthDomain: "desktop.firebaseapp.com",
+      firebaseStorageBucket: "desktop-project.appspot.com",
       githubClientId: "desktop-client-id",
     });
   });
@@ -28,6 +30,7 @@ describe("desktop environment configuration", () => {
       firebaseApiKey: "",
       firebaseProjectId: "",
       firebaseAuthDomain: "",
+      firebaseStorageBucket: "",
       githubClientId: "",
     });
   });
@@ -62,6 +65,7 @@ describe("desktop Vite env directory wiring", () => {
       "VITE_FIREBASE_API_KEY",
       "VITE_FIREBASE_PROJECT_ID",
       "VITE_FIREBASE_AUTH_DOMAIN",
+      "VITE_FIREBASE_STORAGE_BUCKET",
     ]) {
       expect(example).toMatch(new RegExp(`^${key}=`, "m"));
     }

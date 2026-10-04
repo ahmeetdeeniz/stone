@@ -47,6 +47,34 @@ service firebase.storage {
         && fileName in ['source.stoneink', 'preview.png'];
       allow create, update: if false;
     }
+    // Note attachments are immutable and named after the SHA-256 of their bytes, so a file is
+    // only ever created once and never updated. The extension fixes the allowed content type.
+    match /users/{uid}/attachments/{fileName} {
+      function owner() {
+        return request.auth != null && request.auth.uid == uid;
+      }
+
+      function contentTypeFor(extension) {
+        return {
+          'png': 'image/png',
+          'jpg': 'image/jpeg',
+          'gif': 'image/gif',
+          'webp': 'image/webp',
+          'heic': 'image/heic',
+          'pdf': 'application/pdf'
+        }.get(extension, '');
+      }
+
+      allow read: if owner();
+      allow create: if owner()
+        && resource == null
+        && fileName.matches('^[a-f0-9]{64}[.](png|jpg|gif|webp|heic|pdf)$')
+        && request.resource.size > 0
+        && request.resource.size <= 20 * 1024 * 1024
+        && request.resource.contentType == contentTypeFor(fileName.split('[.]')[1]);
+      allow update: if false;
+      allow delete: if owner();
+    }
     match /{allPaths=**} {
       allow read, write: if false;
     }

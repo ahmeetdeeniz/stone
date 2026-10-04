@@ -29,6 +29,14 @@ describe("Firebase Storage drawing boundary", () => {
     expect(rules).toContain("allow read, write: if false");
   });
 
+  it("keeps note attachments owner-scoped, immutable and type/size constrained", () => {
+    const rules = readFileSync(resolve(process.cwd(), "storage.rules"), "utf8");
+    expect(rules).toContain("match /users/{uid}/attachments/{fileName}");
+    expect(rules).toContain("fileName.matches('^[a-f0-9]{64}[.](png|jpg|gif|webp|heic|pdf)$')");
+    expect(rules).toContain("request.resource.size <= 20 * 1024 * 1024");
+    expect(rules).toContain("contentTypeFor(fileName.split('[.]')[1])");
+  });
+
   it("keeps account deletion wired to owner-scoped drawing cleanup", () => {
     const remote = readFileSync(
       resolve(process.cwd(), "apps/mobile/src/infrastructure/firebase/firestore.ts"),
@@ -109,6 +117,41 @@ describe.runIf(Boolean(process.env.FIREBASE_STORAGE_EMULATOR_HOST))(
       });
       await assertSucceeds(getBytes(ref(owner, legacyPath)));
       await assertFails(getBytes(ref(other, legacyPath)));
+    });
+
+    it("allows only immutable, hash-named owner attachments with a matching type", async () => {
+      const owner = environment.authenticatedContext("owner").storage();
+      const other = environment.authenticatedContext("other").storage();
+      const bytes = new Uint8Array([137, 80, 78, 71]);
+      const png = `users/owner/attachments/${"a".repeat(64)}.png`;
+      const pdf = `users/owner/attachments/${"b".repeat(64)}.pdf`;
+
+      await assertSucceeds(uploadBytes(ref(owner, png), bytes, { contentType: "image/png" }));
+      await assertSucceeds(getBytes(ref(owner, png)));
+      await assertFails(getBytes(ref(other, png)));
+      await assertFails(uploadBytes(ref(owner, png), bytes, { contentType: "image/png" }));
+      await assertFails(uploadBytes(ref(owner, pdf), bytes, { contentType: "image/png" }));
+      await assertSucceeds(uploadBytes(ref(owner, pdf), bytes, { contentType: "application/pdf" }));
+      await assertFails(
+        uploadBytes(ref(other, `users/owner/attachments/${"c".repeat(64)}.png`), bytes, {
+          contentType: "image/png",
+        }),
+      );
+      await assertFails(
+        uploadBytes(ref(owner, "users/owner/attachments/photo.png"), bytes, {
+          contentType: "image/png",
+        }),
+      );
+      await assertFails(
+        uploadBytes(ref(owner, `users/owner/attachments/${"d".repeat(64)}.svg`), bytes, {
+          contentType: "image/svg+xml",
+        }),
+      );
+      await assertFails(
+        uploadBytes(ref(owner, `users/owner/attachments/${"e".repeat(64)}.png`), new Uint8Array(), {
+          contentType: "image/png",
+        }),
+      );
     });
   },
 );

@@ -27,6 +27,10 @@ tag, so no release date or semantic version is claimed.
 - `pnpm setup:self-host` walks a self-hoster through connecting their own Firebase project
   (desktop env, `.firebaserc`, app identifiers, native config checks, next steps) and
   `pnpm doctor:self-host` re-checks it; Maestro smoke flows cover launch, sign-in and note creation.
+- Added note attachments on mobile and desktop: images (PNG, JPEG, GIF, WebP, HEIC) and PDFs up
+  to 20 MB are stored under their SHA-256, linked from the note with portable Markdown, uploaded
+  to the owner's Firebase Storage on sync and downloaded when a note is opened elsewhere. They are
+  included in workspace export/restore and removed with the account.
 - Optional, per-device Crashlytics crash reporting (off by default, Settings → Diagnostics &
   updates) and EAS over-the-air updates with per-profile channels and fingerprint runtime
   versions (`pnpm update:preview` / `pnpm update:production`).

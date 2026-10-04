@@ -17,6 +17,11 @@ import { SyncEngine, type SyncRunResult } from "@stone/sync";
 import { SQLitePrivacyRepository } from "../infrastructure/storage/privacy";
 import { exportWorkspace } from "../infrastructure/storage/workspace-export";
 import { SQLiteDrawingRepository } from "../infrastructure/storage/drawings";
+import { SQLiteAttachmentUploadQueue } from "../infrastructure/storage/attachments";
+import { FirebaseAttachmentStorage } from "../infrastructure/firebase/attachment-storage";
+import { AttachmentService } from "../attachments/attachment-service";
+import { referencedAttachmentFiles } from "@stone/markdown";
+import { expoAttachmentFiles } from "../attachments/expo-attachment-files";
 import { SQLiteTaskRepository } from "../infrastructure/storage/tasks";
 import { SQLiteCalendarRepository } from "../infrastructure/storage/calendar";
 import { SQLiteFocusRepository } from "../infrastructure/storage/focus";
@@ -34,6 +39,7 @@ export interface AppServices {
   focus: SQLiteFocusRepository;
   taskUseCases: TaskUseCases;
   drawings: SQLiteDrawingRepository;
+  attachments: AttachmentService;
   device: SQLiteDeviceRepository;
   deviceId: string;
   syncStore: SQLiteSyncStore;
@@ -77,6 +83,11 @@ async function createAppServices(): Promise<AppServices> {
   await device.getOrCreate(deviceIdentity);
   const syncStore = new SQLiteSyncStore(database);
   const privacy = new SQLitePrivacyRepository(database);
+  const attachments = new AttachmentService(
+    expoAttachmentFiles,
+    new FirebaseAttachmentStorage(),
+    new SQLiteAttachmentUploadQueue(database),
+  );
   // Auth changes, app resume, widgets and the background task can all request a sync at once;
   // callers for the same owner share the in-flight run instead of pushing the outbox twice.
   const inFlight = new Map<string, Promise<SyncRunResult>>();
@@ -98,7 +109,11 @@ async function createAppServices(): Promise<AppServices> {
       },
     });
     try {
-      return await engine.run(ownerId);
+      const result = await engine.run(ownerId);
+      // Attachment uploads ride along with every sync; a failed upload stays queued and must
+      // not fail the sync of the notes themselves.
+      await attachments.flush(ownerId).catch(() => undefined);
+      return result;
     } catch (error) {
       await syncStore.setState(ownerId, {
         status: "error",
@@ -122,12 +137,23 @@ async function createAppServices(): Promise<AppServices> {
     focus,
     taskUseCases,
     drawings,
+    attachments,
     device,
     deviceId: deviceIdentity.id,
     syncStore,
     sync,
     deleteRemoteData,
     purgeLocalData: (ownerId) => privacy.purgeOwner(ownerId),
-    exportWorkspace: (ownerId) => exportWorkspace(database, ownerId),
+    exportWorkspace: async (ownerId) => {
+      // Best effort: fetch attachments this device has not opened yet so the export is complete.
+      const rows = await database.getAllAsync<{ markdown: string }>(
+        "SELECT markdown FROM documents WHERE owner_id = ? AND deleted_at IS NULL",
+        ownerId,
+      );
+      const referenced = new Set(rows.flatMap((row) => referencedAttachmentFiles(row.markdown)));
+      for (const fileName of referenced)
+        await attachments.resolve(ownerId, fileName).catch(() => undefined);
+      return exportWorkspace(database, ownerId);
+    },
   };
 }

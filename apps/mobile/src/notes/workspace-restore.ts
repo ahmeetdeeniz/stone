@@ -15,7 +15,11 @@ import {
   type ProjectVersion,
   type Task,
 } from "@stone/domain";
-import { parseProjectFrontmatter, parseVersionFrontmatter } from "@stone/markdown";
+import {
+  parseAttachmentLinkTarget,
+  parseProjectFrontmatter,
+  parseVersionFrontmatter,
+} from "@stone/markdown";
 import {
   restoreCalendarWorkspaceFile,
   restoreFocusWorkspaceFile,
@@ -39,6 +43,8 @@ export interface WorkspaceRestoreTarget {
   /** Writes the PNG preview somewhere durable and returns its path. */
   writeDrawingPreview(id: string, base64: string): Promise<string>;
   createDrawing(drawing: Drawing, source: string, previewPath: string): Promise<unknown>;
+  /** Stores an attachment and queues its upload; false when this device already had it. */
+  writeAttachment(fileName: string, base64: string): Promise<boolean>;
   calendar: {
     getById(ownerId: string, id: string, includeDeleted?: boolean): Promise<CalendarItem | null>;
     create(item: CalendarItem): Promise<CalendarItem>;
@@ -69,6 +75,7 @@ export interface WorkspaceRestoreSummary {
   versions: RestoreCount;
   tasks: RestoreCount;
   drawings: RestoreCount;
+  attachments: RestoreCount;
   calendar: CalendarRestoreSummary | null;
   focus: CalendarRestoreSummary | null;
   /** Human-readable reasons for entries that could not be restored. */
@@ -149,6 +156,7 @@ export async function restoreWorkspace(
     versions: { created: 0, duplicates: 0 },
     tasks: { created: 0, duplicates: 0 },
     drawings: { created: 0, duplicates: 0 },
+    attachments: { created: 0, duplicates: 0 },
     calendar: null,
     focus: null,
     skipped,
@@ -298,6 +306,18 @@ export async function restoreWorkspace(
       previewPath,
     );
     summary.drawings.created += 1;
+  }
+
+  // Attachments are content-addressed, so the exported name is also the stored name.
+  for (const file of files) {
+    const fileName = parseAttachmentLinkTarget(file.path);
+    if (!fileName) continue;
+    if (file.encoding !== "base64") {
+      skipped.push(`${file.path}: attachment is not binary`);
+      continue;
+    }
+    if (await target.writeAttachment(fileName, file.content)) summary.attachments.created += 1;
+    else summary.attachments.duplicates += 1;
   }
 
   const calendarFile = byPath.get("calendar.json");

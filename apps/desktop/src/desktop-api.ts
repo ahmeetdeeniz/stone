@@ -47,6 +47,8 @@ export interface DesktopConfig {
   firebaseApiKey: string;
   firebaseProjectId: string;
   firebaseAuthDomain: string;
+  /** Optional; empty means `<project id>.firebasestorage.app`. */
+  firebaseStorageBucket: string;
   githubClientId: string;
 }
 
@@ -63,6 +65,7 @@ export function resolveDesktopConfig(environment: Record<string, unknown>): Desk
     firebaseApiKey: environmentString("VITE_FIREBASE_API_KEY"),
     firebaseProjectId: environmentString("VITE_FIREBASE_PROJECT_ID"),
     firebaseAuthDomain: environmentString("VITE_FIREBASE_AUTH_DOMAIN"),
+    firebaseStorageBucket: environmentString("VITE_FIREBASE_STORAGE_BUCKET"),
     githubClientId: environmentString("VITE_GITHUB_CLIENT_ID"),
   };
 }
@@ -163,7 +166,14 @@ export const desktopApi = {
     call<SyncSummary>("sync_now", {
       apiKey: config.firebaseApiKey,
       projectId: config.firebaseProjectId,
+      storageBucket: config.firebaseStorageBucket || null,
     }),
+  pickAttachment: () => call<AttachmentImport | null>("pick_attachment"),
+  /** Image bytes for an in-app preview; downloads the file first when it is not local. */
+  readAttachment: (fileName: string) =>
+    call<ArrayBuffer>("read_attachment", { ...attachmentRemote(), fileName }),
+  openAttachment: (fileName: string) =>
+    call<void>("open_attachment", { ...attachmentRemote(), fileName }),
   githubDeviceStart: () =>
     call<GitHubDeviceStart>("github_device_start", { clientId: config.githubClientId }),
   githubDevicePoll: (deviceCode: string) =>
@@ -266,6 +276,20 @@ export interface SyncSummary {
   pulled: number;
   conflicts: number;
   offline: boolean;
+  attachmentsUploaded: number;
+}
+
+export interface AttachmentImport {
+  fileName: string;
+  label: string;
+}
+
+function attachmentRemote() {
+  return {
+    apiKey: config.firebaseApiKey,
+    projectId: config.firebaseProjectId,
+    storageBucket: config.firebaseStorageBucket || null,
+  };
 }
 
 export interface GitHubAccount {

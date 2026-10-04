@@ -977,6 +977,19 @@ export const tr = {
     "Bu etkinlik abone olunan bir takvimden geliyor; yalnızca kaynak uygulamada değiştirilebilir.",
   "share.inboxTitle": "Gelen kutusu",
   "share.saveFailed": "Paylaşılan içerik kaydedilemedi",
+  "editor.toolbar.attach": "Ekle",
+  "attachments.adding": "Ekleniyor…",
+  "attachments.addFailed": "Dosya eklenemedi",
+  "attachments.tooLarge": "Ekler en fazla 20 MB olabilir.",
+  "attachments.empty": "Seçilen dosya boş.",
+  "attachments.unsupported":
+    "Yalnızca görseller (PNG, JPEG, GIF, WebP, HEIC) ve PDF dosyaları eklenebilir.",
+  "attachments.unavailable": "Henüz kullanılamıyor",
+  "attachments.unavailableDetail":
+    "Bu ek henüz bu cihaza ulaşmadı. Ekleyen cihaz eşitlendiğinde ve sen çevrimiçi olduğunda indirilir.",
+  "attachments.openA11y": "{{name}} ekini aç",
+  "attachments.share": "Paylaş",
+  "attachments.listA11y": "Ekler",
   "widgets.privacy": "Widget gizliliği",
   "widgets.privacyDescription":
     "Yalnızca sayılar, Stone dışında görünen bilgiler için güvenli varsayılandır.",
