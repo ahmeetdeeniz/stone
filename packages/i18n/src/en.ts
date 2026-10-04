@@ -923,6 +923,8 @@ export const en = {
   "subscriptions.removeConfirm": "Remove {{name}}?",
   "subscriptions.readOnlyItem":
     "This event comes from a subscribed calendar and can only be changed in its source app.",
+  "share.inboxTitle": "Inbox",
+  "share.saveFailed": "Could not save what you shared",
   "widgets.privacy": "Widget privacy",
   "widgets.privacyDescription":
     "Counts only is the safe default for information visible outside Stone.",

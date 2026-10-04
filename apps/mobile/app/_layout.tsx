@@ -2,6 +2,7 @@ import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { ShareIntentProvider } from "expo-share-intent";
 import { useStoneFonts } from "../src/design/fonts";
 import { LoadingState } from "../src/components/states";
 import { AppProvider } from "../src/providers/app-provider";
@@ -23,14 +24,17 @@ function RootNavigator() {
 
 export default function RootLayout() {
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
-      <SafeAreaProvider>
-        <I18nProvider>
-          <AppProvider>
-            <RootNavigator />
-          </AppProvider>
-        </I18nProvider>
-      </SafeAreaProvider>
-    </GestureHandlerRootView>
+    // The share provider must sit above everything else so it can read a cold-start share.
+    <ShareIntentProvider>
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <SafeAreaProvider>
+          <I18nProvider>
+            <AppProvider>
+              <RootNavigator />
+            </AppProvider>
+          </I18nProvider>
+        </SafeAreaProvider>
+      </GestureHandlerRootView>
+    </ShareIntentProvider>
   );
 }

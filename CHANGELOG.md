@@ -16,6 +16,8 @@ tag, so no release date or semantic version is claimed.
 - Added `[[wiki links]]` with backlinks, note templates and a daily note, and a global search
   screen across notes, tasks, projects and calendar items.
 - Added a weekly review screen and read-only iCalendar feed subscriptions on mobile.
+- Added sharing into Stone from other apps (iOS share extension, Android share target): text and
+  links are filed into an Inbox note as tasks.
 - Added local-first Android Glance and iOS WidgetKit Today, Agenda, Focus, and Quick Capture
   widgets, an optional Android focus notification, and iOS Live Activity/Dynamic Island sources.
 - Added bounded versioned snapshot/action bridges, validated deep links, revision-safe actions,
@@ -31,6 +33,8 @@ tag, so no release date or semantic version is claimed.
   after midnight east of UTC.
 - Tapping a Markdown link in the editor did nothing (the rendered label was not an anchor); links
   now open, and only `http(s)`, `mailto` and `tel` URLs are handed to the system.
+- The widget config plugin no longer replaces the host app's App Group list or other plugins'
+  EAS app-extension declarations.
 - Mobile startup no longer races two database initialisations (which could leave the app on an
   error screen), shows the real error with a retry, builds workspace packages before
   start/export/EAS, relies on native Firebase config, and targets iOS 16.1 for the widget module.

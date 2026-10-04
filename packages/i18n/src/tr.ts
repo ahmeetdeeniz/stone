@@ -928,6 +928,8 @@ export const tr = {
   "subscriptions.removeConfirm": "{{name}} kaldırılsın mı?",
   "subscriptions.readOnlyItem":
     "Bu etkinlik abone olunan bir takvimden geliyor; yalnızca kaynak uygulamada değiştirilebilir.",
+  "share.inboxTitle": "Gelen kutusu",
+  "share.saveFailed": "Paylaşılan içerik kaydedilemedi",
   "widgets.privacy": "Widget gizliliği",
   "widgets.privacyDescription":
     "Yalnızca sayılar, Stone dışında görünen bilgiler için güvenli varsayılandır.",
