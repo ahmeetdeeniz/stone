@@ -15,6 +15,7 @@ tag, so no release date or semantic version is claimed.
   `#tags`, `!priority` and `@project` are parsed with a live preview.
 - Added `[[wiki links]]` with backlinks, note templates and a daily note, and a global search
   screen across notes, tasks, projects and calendar items.
+- Added a weekly review screen and read-only iCalendar feed subscriptions on mobile.
 - Added local-first Android Glance and iOS WidgetKit Today, Agenda, Focus, and Quick Capture
   widgets, an optional Android focus notification, and iOS Live Activity/Dynamic Island sources.
 - Added bounded versioned snapshot/action bridges, validated deep links, revision-safe actions,

@@ -81,6 +81,8 @@ presented as product evidence.
   project
 - Portable Markdown task lists are indexed after note saves; fenced code is excluded, and a linked
   completion updates only the source checkbox
+- A weekly review: what was completed and what slipped in the last seven days, what is due or
+  scheduled in the next seven, and focus time per day
 - Today combines due, overdue and project work; Upcoming, Overdue, Completed and project-filtered
   views use indexed local data
 
@@ -107,6 +109,8 @@ presented as product evidence.
 - Explicit occurrence/future/series recurrence editing; workspace-calendar restore and a
   standards-conscious `.ics` subset for basic VEVENT, all-day, supported recurrence and
   cancellation dates
+- Read-only iCalendar subscriptions (`webcal://` / `https://` feeds from iCloud, Google, Outlook,
+  holidays) shown beside your events, kept on the device and never copied into the synced calendar
 - Local reminders for due tasks and upcoming events (configurable lead time, Complete/Snooze
   actions); no external calendar accounts or invitations
 

@@ -167,7 +167,17 @@ export default function TodayScreen() {
         contentContainerStyle={styles.page}
       >
         <ResponsiveContent>
-          <ScreenHeader title={t("planning.title")} subtitle={subtitle} />
+          <ScreenHeader
+            title={t("planning.title")}
+            subtitle={subtitle}
+            actions={
+              <IconButton
+                icon="stats-chart-outline"
+                accessibilityLabel={t("review.title")}
+                onPress={() => router.push("/review")}
+              />
+            }
+          />
 
           <QuickCapture
             value={capture}

@@ -16,6 +16,12 @@ import {
 } from "../../src/calendar/calendar-import";
 import { pickCalendarIcs, shareCalendarIcs } from "../../src/calendar/calendar-files";
 import { useI18n } from "../../src/i18n/provider";
+import { calendarSubscriptions } from "../../src/calendar/subscription-service";
+import {
+  isSubscriptionItemId,
+  subscriptionItems,
+  type CalendarSubscription,
+} from "../../src/calendar/subscriptions";
 
 export default function CalendarScreen() {
   const router = useRouter();
@@ -35,12 +41,22 @@ export default function CalendarScreen() {
     try {
       setLoading(true);
       setError(null);
-      const [nextItems, tasks, projects] = await Promise.all([
+      const [nextItems, tasks, projects, subscriptions] = await Promise.all([
         calendar.list(user.uid, { startDate: selectedDate, endDate: selectedDate }),
         taskUseCases.list(user.uid),
         projectUseCases.list(user.uid),
+        calendarSubscriptions.list(user.uid).catch(() => [] as readonly CalendarSubscription[]),
       ]);
-      setAgendaItems(buildAgendaItems(nextItems, tasks, projects, selectedDate, selectedDate));
+      // Subscribed feeds are shown read-only alongside synced items; they are never saved to them.
+      setAgendaItems(
+        buildAgendaItems(
+          [...nextItems, ...subscriptionItems(subscriptions)],
+          tasks,
+          projects,
+          selectedDate,
+          selectedDate,
+        ),
+      );
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : t("calendar.loadFailed"));
     } finally {
@@ -48,6 +64,23 @@ export default function CalendarScreen() {
     }
   }, [calendar, projectUseCases, selectedDate, taskUseCases, user]);
   useFocusEffect(useCallback(() => void load(), [load]));
+
+  // Refresh stale feeds in the background and redraw once if anything was fetched.
+  useFocusEffect(
+    useCallback(() => {
+      if (!user) return;
+      void calendarSubscriptions
+        .refresh(user.uid, {
+          deviceId,
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+          now: new Date().toISOString(),
+        })
+        .then((subscriptions) => {
+          if (subscriptions.length > 0) void load();
+        })
+        .catch(() => undefined);
+    }, [deviceId, load, user]),
+  );
 
   const create = async () => {
     if (!user || !title.trim()) return;
@@ -162,6 +195,11 @@ export default function CalendarScreen() {
           <StoneText variant="title1">{t("calendar.title")}</StoneText>
           <StoneText variant="bodySmall">{t("calendar.offlineNoReminder")}</StoneText>
           <View style={styles.fileActions}>
+            <StoneButton
+              label={t("subscriptions.title")}
+              variant="secondary"
+              onPress={() => router.push("/calendar/subscriptions")}
+            />
             <StoneButton
               label={t("calendar.importIcs")}
               variant="secondary"
@@ -284,13 +322,17 @@ export default function CalendarScreen() {
                 accessibilityRole={item.calendarItemId ? "button" : undefined}
                 accessibilityLabel={`${agendaKindLabel(item.kind, t)} ${item.title}`}
                 disabled={!item.calendarItemId}
-                onPress={() =>
-                  item.calendarItemId &&
+                onPress={() => {
+                  if (!item.calendarItemId) return;
+                  if (isSubscriptionItemId(item.calendarItemId)) {
+                    Alert.alert(item.title, t("subscriptions.readOnlyItem"));
+                    return;
+                  }
                   router.push({
                     pathname: "/calendar/[id]",
                     params: { id: item.calendarItemId },
-                  })
-                }
+                  });
+                }}
               >
                 <Surface>
                   <StoneText variant="caption">{agendaKindLabel(item.kind, t)}</StoneText>

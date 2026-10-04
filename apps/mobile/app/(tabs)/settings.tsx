@@ -23,6 +23,7 @@ import { restoreWorkspace } from "../../src/notes/workspace-restore";
 import { createWorkspaceRestoreTarget } from "../../src/notes/workspace-restore-target";
 import type { SyncState } from "../../src/infrastructure/storage/sync";
 import { useI18n } from "../../src/i18n/provider";
+import { calendarSubscriptions } from "../../src/calendar/subscription-service";
 import {
   readReminderSettings,
   reminderPermissionGranted,
@@ -252,6 +253,7 @@ export default function SettingsScreen() {
               await clearWidgetsForAccountLifecycle();
               await services.deleteRemoteData(user.uid);
               await services.purgeLocalData(user.uid);
+              await calendarSubscriptions.clear(user.uid);
               await service.deleteAccount();
             } catch (error) {
               Alert.alert(
