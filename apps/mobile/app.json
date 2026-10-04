@@ -16,6 +16,7 @@
     "plugins": [
       "expo-router",
       "@react-native-firebase/app",
+      "expo-notifications",
       [
         "expo-build-properties",
         {
