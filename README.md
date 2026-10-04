@@ -86,7 +86,8 @@ presented as product evidence.
 - Pressure-aware pen/highlighter strokes and vector shapes in `.stoneink`, with PNG previews
 - Firebase Auth, Firestore, and Storage sync using owner-scoped rules
 - Durable local-first mobile writes, revision history, soft delete, and explicit conflict handling
-- Versioned full-workspace export container; full-workspace restore UI is not implemented
+- Versioned full-workspace export container and a mobile restore that adds missing notes,
+  projects, versions, tasks, drawings, calendar and focus history without overwriting anything
 
 ### Calendar and Agenda
 
@@ -103,7 +104,8 @@ presented as product evidence.
 - Explicit occurrence/future/series recurrence editing; workspace-calendar restore and a
   standards-conscious `.ics` subset for basic VEVENT, all-day, supported recurrence and
   cancellation dates
-- No native reminders, external calendar accounts, or invitations
+- Local reminders for due tasks and upcoming events (configurable lead time, Complete/Snooze
+  actions); no external calendar accounts or invitations
 
 ### Focus and productivity
 
@@ -219,16 +221,17 @@ private notes in public issues.
 
 - Final visual/accessibility inspection, real Firebase/GitHub restart flows, signed Android
   physical-device use, private TestFlight/iPhone use, and tablet stylus validation remain open.
-- Mobile full-workspace restore UI, public iOS binaries, macOS/Linux desktop, and a maintainer-hosted
+- Public iOS binaries, macOS/Linux desktop, and a maintainer-hosted
   backend are not available.
 - MCP hosting and provider publication are not automatic.
-- Due times and calendar records do not schedule operating-system notifications.
-- Full-workspace restore beyond the calendar segment, Agenda virtualization, and physical-device
+- Reminders are local notifications planned on each device; they are not pushed from a server and
+  do not fire on a device where Stone has never been opened.
+- Agenda virtualization and physical-device
   acceptance for focus, native widgets, and Live Activities remain pending.
 
 ## Roadmap
 
-Possible post-preview directions include reminder notifications, Android/iOS
+Possible post-preview directions include Android/iOS
 improved tablet layouts, Agenda virtualization, and richer revision restore. They are not
 implemented commitments.
 

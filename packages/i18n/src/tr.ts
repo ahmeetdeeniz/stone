@@ -63,11 +63,15 @@ export const tr = {
   "settings.signOutFailed": "Çıkış yapılamadı",
   "settings.exportWorkspace": "Workspace'i dışa aktar",
   "settings.exportFailed": "Workspace dışa aktarılamadı",
-  "settings.restoreCalendar": "Workspace takvimini geri yükle",
-  "settings.calendarRestored": "Workspace takvimi geri yüklendi",
-  "settings.restoreSummary":
-    "{{created}} kayıt eklendi, {{duplicates}} yinelenen kayıt atlandı, {{detached}} eksik ilişki güvenle kaldırıldı.",
-  "settings.restoreFailed": "Workspace takvimi geri yüklenemedi",
+  "settings.restoreWorkspace": "Dışa aktarımdan geri yükle",
+  "settings.restoreWorkspaceDetail":
+    "Bir .stone-workspace.json dosyası seçin. Burada olmayan notlar, projeler, görevler, çizimler, takvim ve odak geçmişi eklenir; var olan hiçbir şeyin üzerine yazılmaz. Kayıtlar bu hesaba aktarılır ve ardından senkronize edilir.",
+  "settings.restoreWorkspaceConfirm": "Dosya seç",
+  "settings.workspaceRestored": "Workspace geri yüklendi",
+  "settings.workspaceRestoreSummary":
+    "{{notes}} not, {{projects}} proje, {{tasks}} görev, {{events}} takvim kaydı, {{focus}} odak oturumu ve {{drawings}} çizim eklendi. Zaten var olan {{duplicates}} kayıt atlandı.",
+  "settings.workspaceRestoreSkipped": "{{count}} kayıt geri yüklenemedi ve atlandı.",
+  "settings.restoreFailed": "Workspace geri yüklenemedi",
   "settings.dangerZone": "Geri alınamaz",
   "settings.deleteAccount": "Hesabı ve verileri sil",
   "settings.deleteAccountConfirm": "Hesabı ve tüm verileri sil?",
@@ -844,6 +848,26 @@ export const tr = {
   "focus.linkHint":
     "Görev, proje, not ve takvim bloğu bağlantıları oradan başlatıldığında korunur.",
   "focus.noStreak": "Geçmiş hedef anlık görüntüleri güvenilir kılana kadar seriler gizlidir.",
+  "reminders.title": "Hatırlatıcılar",
+  "reminders.description":
+    "Son tarihi olan görevler ve yaklaşan takvim etkinlikleri için yerel bildirimler. Yalnızca bu cihazda planlanır.",
+  "reminders.on": "Açık",
+  "reminders.off": "Kapalı",
+  "reminders.leadTime": "Hatırlatma zamanı",
+  "reminders.atTime": "Tam zamanında",
+  "reminders.minutesBefore": "{{minutes}} dk önce",
+  "reminders.allDayHint":
+    "Saati olmayan görevler ve tüm gün etkinlikleri {{time}} saatinde hatırlatılır.",
+  "reminders.allow": "Bildirimlere izin ver",
+  "reminders.permissionDenied":
+    "Stone için bildirimler kapalı. Hatırlatıcı almak için sistem ayarlarından açın.",
+  "reminders.channel": "Hatırlatıcılar",
+  "reminders.complete": "Tamamla",
+  "reminders.snooze": "{{minutes}} dk ertele",
+  "reminders.taskDueAt": "Son saat {{time}}",
+  "reminders.taskDueToday": "Bugün son gün",
+  "reminders.eventStartsAt": "{{time}} saatinde başlıyor",
+  "reminders.eventToday": "Bugün",
   "widgets.privacy": "Widget gizliliği",
   "widgets.privacyDescription":
     "Yalnızca sayılar, Stone dışında görünen bilgiler için güvenli varsayılandır.",
