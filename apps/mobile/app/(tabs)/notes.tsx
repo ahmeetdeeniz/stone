@@ -1,4 +1,3 @@
-import * as Crypto from "expo-crypto";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
 import { Alert, FlatList, StyleSheet, View } from "react-native";
@@ -20,11 +19,18 @@ import { useAuth } from "../../src/providers/auth-provider";
 import { useAppServices } from "../../src/providers/app-provider";
 import { pickAndImportNote } from "../../src/notes/note-files";
 import { useI18n } from "../../src/i18n/provider";
+import {
+  localIsoDate,
+  newNoteDocument,
+  NOTE_TEMPLATES,
+  noteFromTemplate,
+  type NoteTemplate,
+} from "../../src/notes/templates";
 
 export default function NotesScreen() {
   const router = useRouter();
   const { user } = useAuth();
-  const { noteUseCases, deviceId } = useAppServices();
+  const { noteUseCases, notes: noteRepository, deviceId } = useAppServices();
   const { locale, t, tp } = useI18n();
   const [notes, setNotes] = useState<readonly Document[]>([]);
   const [search, setSearch] = useState("");
@@ -51,26 +57,23 @@ export default function NotesScreen() {
     }, [loadNotes]),
   );
 
-  const createNote = async () => {
+  const createNote = async (template: NoteTemplate) => {
     if (!user) return;
     setBusy(true);
     try {
-      const now = new Date().toISOString();
-      const note = await noteUseCases.create({
-        id: Crypto.randomUUID(),
-        ownerId: user.uid,
-        kind: "note",
-        title: "Untitled note",
-        markdown: "# Untitled note\n\n",
-        path: null,
-        projectId: null,
-        isPinned: false,
-        revision: 1,
-        createdAt: now,
-        updatedAt: now,
-        deletedAt: null,
-        updatedByDeviceId: deviceId,
-      });
+      const today = localIsoDate();
+      // A daily note is unique per day: reopen it instead of creating a duplicate.
+      const existing =
+        template === "daily" ? await noteRepository.findByTitle(user.uid, today) : null;
+      const note =
+        existing ??
+        (await noteUseCases.create(
+          newNoteDocument({
+            ownerId: user.uid,
+            deviceId,
+            ...noteFromTemplate(template, { t, today }),
+          }),
+        ));
       router.push({ pathname: "/editor", params: { id: note.id } });
     } catch (caught) {
       Alert.alert(
@@ -80,6 +83,16 @@ export default function NotesScreen() {
     } finally {
       setBusy(false);
     }
+  };
+
+  const chooseTemplate = () => {
+    Alert.alert(t("notes.newFromTemplate"), undefined, [
+      ...NOTE_TEMPLATES.map((template) => ({
+        text: t(`notes.template.${template}`),
+        onPress: () => void createNote(template),
+      })),
+      { text: t("common.cancel"), style: "cancel" as const },
+    ]);
   };
 
   const importNote = async () => {
@@ -144,6 +157,17 @@ export default function NotesScreen() {
           actions={
             <>
               <IconButton
+                icon="search-outline"
+                accessibilityLabel={t("search.title")}
+                onPress={() => router.push("/search")}
+              />
+              <IconButton
+                icon="today-outline"
+                accessibilityLabel={t("notes.dailyNote")}
+                onPress={() => void createNote("daily")}
+                disabled={busy}
+              />
+              <IconButton
                 icon="folder-open-outline"
                 accessibilityLabel={t("notes.openMarkdown")}
                 onPress={() => void importNote()}
@@ -159,7 +183,7 @@ export default function NotesScreen() {
                 label={t("notes.new")}
                 icon="add"
                 size="sm"
-                onPress={() => void createNote()}
+                onPress={chooseTemplate}
                 disabled={busy}
               />
             </>
@@ -192,7 +216,7 @@ export default function NotesScreen() {
                     <StoneButton
                       label={t("notes.new")}
                       icon="add"
-                      onPress={() => void createNote()}
+                      onPress={() => void createNote("blank")}
                       disabled={busy}
                     />
                   )

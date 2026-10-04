@@ -96,3 +96,29 @@ jobs:
       - run: pnpm mcp:build
       - run: pnpm expo:doctor
       - run: pnpm mobile:export
+
+  desktop-rust:
+    # The Tauri crate was otherwise only compiled by the Windows release workflow, so Rust
+    # regressions (and build-script problems such as a non-RGBA icon) reached master unnoticed.
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: apps/desktop/src-tauri
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Tauri Linux system libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libsoup-3.0-dev \
+            libjavascriptcoregtk-4.1-dev libgtk-3-dev librsvg2-dev libssl-dev libdbus-1-dev
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/desktop/src-tauri
+      - run: cargo fmt --check
+      - run: cargo clippy --lib --tests -- -D warnings
+      - run: cargo test --lib

@@ -10,9 +10,15 @@ Mobile can export:
   types, Markdown, `.stoneink`, and PNG data.
 
 Keep exports outside the device and test that they open before destructive actions. The workspace
-container parser validates schema, duplicate/traversal paths, and base64, but the app does not yet
-provide a full-workspace restore UI. Individual Markdown import is available and copies into the
-Stone library without modifying the source file.
+container parser validates schema, duplicate/traversal paths, and base64.
+
+**Settings → Restore from export** re-imports a workspace export into the signed-in account. It only
+adds notes, projects, versions, tasks, drawings, calendar items and focus history that are missing
+locally; existing records are never overwritten, so running it twice is safe. Restored records are
+owned by the current account and start at revision 1, which lets them sync to a new Firebase
+project. Sync once before restoring on a device that already has data, so records that exist only
+remotely are not restored a second time. Individual Markdown import is still available and copies
+into the Stone library without modifying the source file.
 
 GitHub restore is for linked code repositories, not a substitute for Stone note/database backups.
 Firebase is a sync backend, not the only backup.
