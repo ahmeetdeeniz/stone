@@ -1,0 +1,9 @@
+# Device smoke tests. See public-docs/SELF-HOSTING.md ("Device smoke tests").
+flows:
+  - "*.yaml"
+executionOrder:
+  continueOnFailure: false
+  flowsOrder:
+    - 01-launch
+    - 02-sign-in
+    - 03-create-note

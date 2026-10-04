@@ -7,16 +7,22 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   View,
 } from "react-native";
 import * as Linking from "expo-linking";
 import type { Document } from "@stone/domain";
-import { extractDrawingBlocks, type ParsedStoneDrawingBlock } from "@stone/markdown";
+import {
+  extractDrawingBlocks,
+  parseWikiLinkUrl,
+  type ParsedStoneDrawingBlock,
+} from "@stone/markdown";
 import type { EditorBridgeMessage } from "@stone/editor";
 import { ErrorState, LoadingState } from "../src/components/states";
 import { ResponsiveContent } from "../src/components/responsive";
-import { Screen, StoneButton, StoneInput, StoneText } from "../src/components/ui";
+import { Chip, Screen, StoneButton, StoneInput, StoneText } from "../src/components/ui";
+import { localIsoDate, newNoteDocument, noteFromTemplate } from "../src/notes/templates";
 import { useTheme } from "../src/design/theme";
 import { spacing } from "../src/design/tokens";
 import { EditorWebView, type EditorWebViewHandle } from "../src/editor/EditorWebView";
@@ -30,13 +36,14 @@ export default function EditorScreen() {
   const router = useRouter();
   const { colors, mode } = useTheme();
   const { user } = useAuth();
-  const { noteUseCases, deviceId, drawings } = useAppServices();
+  const { noteUseCases, notes: noteRepository, deviceId, drawings } = useAppServices();
   const { t } = useI18n();
   const webViewRef = useRef<EditorWebViewHandle>(null);
   const contentRef = useRef("");
   const selectionRef = useRef({ from: 0, to: 0 });
   const saveRef = useRef<() => Promise<void>>(() => Promise.resolve());
   const [note, setNote] = useState<Document | null>(null);
+  const [backlinks, setBacklinks] = useState<readonly Document[]>([]);
   const [content, setContent] = useState("");
   const [title, setTitle] = useState("");
   const [loading, setLoading] = useState(true);
@@ -132,6 +139,49 @@ export default function EditorScreen() {
     return () => subscription.remove();
   }, []);
 
+  useEffect(() => {
+    if (!note || !user) return;
+    let active = true;
+    void noteRepository
+      .listBacklinks(user.uid, note.title, note.id)
+      .then((found) => {
+        if (active) setBacklinks(found);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [note, noteRepository, user]);
+
+  /** `[[Title]]` opens (or creates) that note; other links only open for safe schemes. */
+  const openLink = async (url: string) => {
+    const target = parseWikiLinkUrl(url);
+    if (target === null) {
+      if (/^(?:https?:|mailto:|tel:)/iu.test(url)) await Linking.openURL(url);
+      return;
+    }
+    if (!user) return;
+    try {
+      await saveRef.current();
+      const existing = await noteRepository.findByTitle(user.uid, target);
+      const linked =
+        existing ??
+        (await noteUseCases.create(
+          newNoteDocument({
+            ownerId: user.uid,
+            deviceId,
+            ...noteFromTemplate("blank", { t, today: localIsoDate(), title: target }),
+          }),
+        ));
+      router.push({ pathname: "/editor", params: { id: linked.id } });
+    } catch (caught) {
+      Alert.alert(
+        t("notes.linkOpenFailed"),
+        caught instanceof Error ? caught.message : t("app.unknownError"),
+      );
+    }
+  };
+
   const handleMessage = (message: EditorBridgeMessage) => {
     if (message.type === "documentChanged") {
       contentRef.current = message.payload.markdown;
@@ -140,7 +190,7 @@ export default function EditorScreen() {
     } else if (message.type === "selectionChanged" || message.type === "stateSnapshot") {
       selectionRef.current = { from: message.payload.from, to: message.payload.to };
     } else if (message.type === "openLink") {
-      void Linking.openURL(message.payload.url);
+      void openLink(message.payload.url);
     } else if (message.type === "editorError") {
       setError(message.payload.message);
     }
@@ -223,6 +273,7 @@ export default function EditorScreen() {
             <StoneButton
               label={t("common.back")}
               variant="quiet"
+              testID="editor-back"
               onPress={() => {
                 void saveCurrent();
                 router.back();
@@ -234,6 +285,7 @@ export default function EditorScreen() {
               onChangeText={setTitle}
               onEndEditing={() => void rename()}
               containerStyle={styles.titleInput}
+              testID="editor-title"
             />
             <View style={styles.toolbarActions}>
               <StoneText variant="caption" tone={status === "error" ? "danger" : "muted"}>
@@ -353,6 +405,32 @@ export default function EditorScreen() {
               ))}
             </View>
           ) : null}
+          {backlinks.length > 0 ? (
+            <View
+              style={[
+                styles.backlinks,
+                { backgroundColor: colors.backgroundSecondary, borderBottomColor: colors.border },
+              ]}
+            >
+              <StoneText variant="caption" style={{ color: colors.textSecondary }}>
+                {t("notes.backlinks", { count: backlinks.length })}
+              </StoneText>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                <View style={styles.backlinkRow}>
+                  {backlinks.map((linked) => (
+                    <Chip
+                      key={linked.id}
+                      label={linked.title}
+                      icon="link-outline"
+                      onPress={() =>
+                        router.push({ pathname: "/editor", params: { id: linked.id } })
+                      }
+                    />
+                  ))}
+                </View>
+              </ScrollView>
+            </View>
+          ) : null}
           <EditorWebView
             ref={webViewRef}
             documentId={note.id}
@@ -460,5 +538,12 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   drawingBlocks: { borderBottomWidth: 1, padding: spacing.sm, gap: spacing.sm },
+  backlinks: {
+    borderBottomWidth: 1,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    gap: spacing.xs,
+  },
+  backlinkRow: { flexDirection: "row", gap: spacing.xs },
   drawingBlock: { borderWidth: 1, borderRadius: 10, padding: spacing.sm, gap: spacing.xs },
 });

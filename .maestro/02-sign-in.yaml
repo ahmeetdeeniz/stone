@@ -1,0 +1,29 @@
+# Signs in with a test account in your own Firebase project:
+#   maestro test -e STONE_E2E_EMAIL=... -e STONE_E2E_PASSWORD=... .maestro
+appId: ${APP_ID}
+name: 02-sign-in
+tags:
+  - smoke
+env:
+  APP_ID: com.imtempra.stone
+---
+- launchApp:
+    clearState: true
+    clearKeychain: true
+- extendedWaitUntil:
+    visible:
+      id: auth-email
+    timeout: 30000
+- tapOn:
+    id: auth-email
+- inputText: ${STONE_E2E_EMAIL}
+- tapOn:
+    id: auth-password
+- inputText: ${STONE_E2E_PASSWORD}
+- hideKeyboard
+- tapOn:
+    id: auth-sign-in
+- extendedWaitUntil:
+    visible:
+      id: notes-new
+    timeout: 30000

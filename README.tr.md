@@ -49,9 +49,10 @@ yollarını, repository adlarını veya içe aktarılan veriyi çevirmez ya da y
 - **Windows 10/11:** Tauri tabanlı not, görev, proje özeti, Today, takvim ve GitHub iş akışları.
 - **MCP:** OAuth, scope, revision, idempotency ve audit kayıtları olan provider-neutral servis.
 
-Windows henüz mobil proje düzenleme/Kanban, çizim, çöp, revision ve conflict UI parity’sine sahip
-değildir. macOS/Linux masaüstü uygulamaları desteklenmez. Native hatırlatıcı, harici takvim hesabı
-ve davet bu sürümde yoktur.
+Windows artık proje oluşturup düzenleyebilir, çöp kutusu, not geçmişi ve çakışma çözme sunar; mobil
+Kanban ve çizim parity’si henüz yoktur. macOS ve Linux sürümleri aynı Tauri uygulamasından derlenir
+ancak henüz gerçek cihazlarda kurulum testi yapılmamıştır. Harici takvim hesabı ve davet bu sürümde
+yoktur.
 
 Android Glance ve iOS WidgetKit için Bugünün Görevleri, Ajanda, Odak ve Hızlı Yakalama widget’ları
 bulunur. iOS ayrıca local ActivityKit tabanlı Kilit Ekranı Live Activity ve Dynamic Island
@@ -72,6 +73,9 @@ pnpm test
 pnpm test:integration
 pnpm verify:i18n
 ```
+
+Kendi Firebase projenizi bağlamak için `pnpm setup:self-host` çalıştırın; `pnpm doctor:self-host`
+kurulumu yeniden denetler.
 
 - [Geliştirme ve self-hosting](public-docs/SELF-HOSTING.md)
 - [Firebase ve güvenlik kuralları](public-docs/FIREBASE.md)

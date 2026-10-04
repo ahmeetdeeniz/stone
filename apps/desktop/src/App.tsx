@@ -26,6 +26,10 @@ import {
   type CalendarRecurrenceEditScope,
 } from "@stone/domain";
 import GithubPanel from "./GithubPanel";
+import { UpdateBanner, UpdateSettingsCard, useAppUpdates } from "./updates";
+import { ConflictsPanel, HistoryPanel, TrashPanel } from "./RecoveryPanels";
+import { NewProjectForm, ProjectEditorForm } from "./ProjectEditing";
+import { isLinkedFilePath } from "./project-editing";
 import FocusPanel from "./FocusPanel";
 import {
   buildProjectSummaries,
@@ -48,6 +52,7 @@ import {
   requireFirebaseConfigured,
   type AuthSession,
   type DesktopDocument,
+  type DesktopProject,
   type DesktopTask,
   type FileFingerprint,
 } from "./desktop-api";
@@ -225,6 +230,15 @@ function StoneShell({ session, onSignedOut }: { session: AuthSession; onSignedOu
   const [message, setMessage] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>("saved");
+  const updates = useAppUpdates();
+  const [projectEntities, setProjectEntities] = useState<DesktopProject[]>([]);
+  const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
+  const [showHistory, setShowHistory] = useState(false);
+  const [recoveryKey, setRecoveryKey] = useState(0);
+  const [pendingConflicts, setPendingConflicts] = useState(0);
+  /** Bumped to re-read the open note after a sync changed it underneath the editor. */
+  const [reloadToken, setReloadToken] = useState(0);
+  const [loadedVersion, setLoadedVersion] = useState(0);
   const editorHost = useRef<HTMLDivElement>(null);
   const editor = useRef<EditorView | null>(null);
   const draft = useRef("");
@@ -242,6 +256,14 @@ function StoneShell({ session, onSignedOut }: { session: AuthSession; onSignedOu
     [documents, tasks],
   );
   const todayItems = useMemo(() => buildTodayItems(projects), [projects]);
+  const editableProjectIds = useMemo(
+    () => new Set(projectEntities.map((project) => project.id)),
+    [projectEntities],
+  );
+  const editingProject = projectEntities.find((project) => project.id === editingProjectId);
+  const editingDocument = editingProject
+    ? documents.find((item) => item.id === editingProject.canonicalDocumentId)
+    : undefined;
   const recentNotes = useMemo(
     () =>
       documents
@@ -281,6 +303,10 @@ function StoneShell({ session, onSignedOut }: { session: AuthSession; onSignedOu
       .listTasks()
       .then(setTasks)
       .catch((caught) => setMessage(toMessage(caught)));
+    void desktopApi
+      .listProjects()
+      .then(setProjectEntities)
+      .catch((caught) => setMessage(toMessage(caught)));
   }, []);
 
   useEffect(() => {
@@ -292,10 +318,11 @@ function StoneShell({ session, onSignedOut }: { session: AuthSession; onSignedOu
       .getDocument(selectedId)
       .then(async (item) => {
         setDocument(item);
+        setLoadedVersion((value) => value + 1);
         draft.current = item?.markdown ?? "";
         setSaveState((current) => transitionSaveState(current, "document_loaded"));
         setExternalChange(false);
-        if (item?.path) {
+        if (isLinkedFilePath(item?.path)) {
           const linked = await desktopApi.loadLinkedFile(item.path);
           setFingerprint(linked.fingerprint);
         } else {
@@ -303,7 +330,7 @@ function StoneShell({ session, onSignedOut }: { session: AuthSession; onSignedOu
         }
       })
       .catch((caught) => setMessage(toMessage(caught)));
-  }, [selectedId]);
+  }, [selectedId, reloadToken]);
 
   useEffect(() => {
     if (!editorHost.current || !document) return;
@@ -356,7 +383,8 @@ function StoneShell({ session, onSignedOut }: { session: AuthSession; onSignedOu
     });
     editor.current = view;
     return () => view.destroy();
-  }, [document?.id, locale, t]);
+    // loadedVersion (not the revision) so saving does not rebuild the editor and move the caret.
+  }, [document?.id, loadedVersion, locale, t]);
 
   useEffect(() => {
     if (!isTauri) return;
@@ -445,7 +473,8 @@ function StoneShell({ session, onSignedOut }: { session: AuthSession; onSignedOu
       if (item) {
         setDocuments((current) => [item, ...current.filter((entry) => entry.id !== item.id)]);
         setSelectedId(item.id);
-        if (item.path) setFingerprint((await desktopApi.loadLinkedFile(item.path)).fingerprint);
+        if (isLinkedFilePath(item.path))
+          setFingerprint((await desktopApi.loadLinkedFile(item.path)).fingerprint);
       }
     } catch (caught) {
       setMessage(toMessage(caught));
@@ -478,16 +507,61 @@ function StoneShell({ session, onSignedOut }: { session: AuthSession; onSignedOu
     setSyncing(true);
     try {
       const result = await desktopApi.syncNow();
+      setPendingConflicts(result.conflicts);
       setMessage(
         result.conflicts > 0
           ? t("desktop.syncConflicts", { count: result.conflicts })
           : t("desktop.syncSummary", { pushed: result.pushed, pulled: result.pulled }),
       );
+      await reloadWorkspace();
     } catch (caught) {
       setMessage(toMessage(caught));
     } finally {
       setSyncing(false);
     }
+  }
+
+  /** Re-reads everything a sync or a conflict resolution can change. */
+  async function reloadWorkspace() {
+    const [nextDocuments, nextTasks, nextProjects] = await Promise.all([
+      desktopApi.listDocuments(),
+      desktopApi.listTasks(),
+      desktopApi.listProjects(),
+    ]);
+    setDocuments(nextDocuments);
+    setTasks(nextTasks);
+    setProjectEntities(nextProjects);
+    setRecoveryKey((value) => value + 1);
+    const open = nextDocuments.find((item) => item.id === selectedId);
+    if (selectedId && !open) {
+      setSelectedId(nextDocuments[0]?.id ?? null);
+    } else if (open && document && open.revision !== document.revision && saveState === "saved") {
+      setReloadToken((value) => value + 1);
+    }
+  }
+
+  async function deleteCurrent() {
+    if (!document || !window.confirm(t("desktop.deleteNoteConfirm"))) return;
+    try {
+      await desktopApi.deleteDocument(document.id);
+      const remaining = documents.filter((item) => item.id !== document.id);
+      setDocuments(remaining);
+      setSelectedId(remaining[0]?.id ?? null);
+      setShowHistory(false);
+      setRecoveryKey((value) => value + 1);
+      setMessage(t("desktop.noteMovedToTrash"));
+    } catch (caught) {
+      setMessage(toMessage(caught));
+    }
+  }
+
+  /** Loads an older version into the editor; it is saved like any other edit. */
+  function restoreVersion(markdown: string) {
+    const view = editor.current;
+    if (!view) return;
+    view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: markdown } });
+    setShowHistory(false);
+    setMessage(t("desktop.versionRestoredDraft"));
   }
 
   function openDocument(documentId: string) {
@@ -573,9 +647,15 @@ function StoneShell({ session, onSignedOut }: { session: AuthSession; onSignedOu
             </button>
           </div>
         </header>
+        <UpdateBanner state={updates.state} onInstall={() => void updates.install()} />
         {message && (
           <div className="toast" role="status">
             {message}
+            {pendingConflicts > 0 && section !== "settings" && (
+              <button className="text-button" onClick={() => setSection("settings")}>
+                {t("desktop.reviewConflicts")}
+              </button>
+            )}
           </div>
         )}
         {section === "notes" && (
@@ -620,7 +700,7 @@ function StoneShell({ session, onSignedOut }: { session: AuthSession; onSignedOu
                       {document.path && <span className="path-label">{document.path}</span>}
                     </div>
                     <div className="toolbar-actions">
-                      {document.path && (
+                      {isLinkedFilePath(document.path) && (
                         <>
                           <button
                             className="icon-button"
@@ -639,6 +719,16 @@ function StoneShell({ session, onSignedOut }: { session: AuthSession; onSignedOu
                         </>
                       )}
                       <button
+                        className="icon-button"
+                        aria-pressed={showHistory}
+                        onClick={() => setShowHistory((value) => !value)}
+                      >
+                        {t("desktop.history")}
+                      </button>
+                      <button className="icon-button" onClick={() => void deleteCurrent()}>
+                        {t("common.delete")}
+                      </button>
+                      <button
                         className="primary-button compact"
                         onClick={() => void saveCurrent()}
                         disabled={busy}
@@ -652,7 +742,17 @@ function StoneShell({ session, onSignedOut }: { session: AuthSession; onSignedOu
                       {t("desktop.externalChange")}
                     </div>
                   )}
-                  <div className="editor-host" ref={editorHost} />
+                  <div className="editor-body">
+                    <div className="editor-host" ref={editorHost} />
+                    {showHistory && (
+                      <HistoryPanel
+                        documentId={document.id}
+                        revision={document.revision}
+                        onRestore={restoreVersion}
+                        onClose={() => setShowHistory(false)}
+                      />
+                    )}
+                  </div>
                 </>
               ) : (
                 <EmptyState
@@ -669,7 +769,41 @@ function StoneShell({ session, onSignedOut }: { session: AuthSession; onSignedOu
               <p className="eyebrow">{t("desktop.projectHubEyebrow")}</p>
               <h2>{t("desktop.projectHubTitle")}</h2>
               <p className="muted">{t("desktop.projectHubDetail")}</p>
-              <ProjectOverview projects={projects} onOpen={openDocument} />
+              <NewProjectForm
+                onCreated={(project, created) => {
+                  setProjectEntities((current) => [project, ...current]);
+                  setDocuments((current) => [
+                    ...created,
+                    ...current.filter((item) => !created.some((entry) => entry.id === item.id)),
+                  ]);
+                  setMessage(t("desktop.projectCreated", { title: project.title }));
+                }}
+              />
+              {editingProject && editingDocument ? (
+                <ProjectEditorForm
+                  key={editingProject.id}
+                  project={editingProject}
+                  document={editingDocument}
+                  onCancel={() => setEditingProjectId(null)}
+                  onSaved={(project, saved) => {
+                    setProjectEntities((current) =>
+                      current.map((item) => (item.id === project.id ? project : item)),
+                    );
+                    setDocuments((current) =>
+                      current.map((item) => (item.id === saved.id ? saved : item)),
+                    );
+                    if (document?.id === saved.id) setDocument(saved);
+                    setEditingProjectId(null);
+                    setMessage(t("desktop.projectSaved"));
+                  }}
+                />
+              ) : null}
+              <ProjectOverview
+                projects={projects}
+                editableIds={editableProjectIds}
+                onOpen={openDocument}
+                onEdit={setEditingProjectId}
+              />
             </div>
             <GithubPanel />
           </section>
@@ -743,6 +877,28 @@ function StoneShell({ session, onSignedOut }: { session: AuthSession; onSignedOu
                 {t("desktop.signOut")}
               </button>
             </div>
+            <UpdateSettingsCard
+              state={updates.state}
+              version={updates.version}
+              onCheck={() => void updates.check()}
+              onInstall={() => void updates.install()}
+            />
+            <ConflictsPanel
+              refreshKey={recoveryKey}
+              onResolved={(copiedDocumentId) => {
+                setPendingConflicts((value) => Math.max(0, value - 1));
+                void reloadWorkspace().then(() => {
+                  if (copiedDocumentId) setMessage(t("desktop.conflictCopySaved"));
+                });
+              }}
+            />
+            <TrashPanel
+              refreshKey={recoveryKey}
+              onRestored={() => {
+                void reloadWorkspace();
+                setMessage(t("desktop.noteRestored"));
+              }}
+            />
             <GithubPanel />
           </section>
         )}
@@ -1102,10 +1258,14 @@ function TaskEditor({
 
 function ProjectOverview({
   projects,
+  editableIds,
   onOpen,
+  onEdit,
 }: {
   projects: readonly DesktopProjectSummary[];
+  editableIds: ReadonlySet<string>;
   onOpen: (documentId: string) => void;
+  onEdit: (projectId: string) => void;
 }) {
   const { locale, t, tp } = useI18n();
   if (projects.length === 0)
@@ -1118,41 +1278,47 @@ function ProjectOverview({
   return (
     <div className="project-summary-grid">
       {projects.map((project) => (
-        <button
-          className="project-summary-card"
-          key={project.id}
-          onClick={() => onOpen(project.documentId)}
-        >
-          <div className="project-card-heading">
-            <strong>{project.title}</strong>
-            <span className="status-badge">{formatProjectStatus(locale, project.status)}</span>
-          </div>
-          <span>
-            {t("projects.tasksProgress", {
-              completed: project.completedTasks,
-              total: project.totalTasks,
-            })}{" "}
-            · {formatProjectPriority(locale, project.priority)}
-          </span>
-          <progress
-            max={Math.max(1, project.totalTasks)}
-            value={project.completedTasks}
-            aria-label={t("desktop.projectProgressA11y", { title: project.title })}
-          />
-          <span>
-            {project.currentVersion ?? t("desktop.currentVersionMissing")} →{" "}
-            {project.nextVersion ?? t("desktop.nextVersionMissing")}
-          </span>
-          <span>{project.nextAction ?? t("desktop.nextActionMissing")}</span>
-          <span>
-            {project.blockers.length > 0
-              ? tp("desktop.openBlockerCount", project.blockers.length)
-              : t("desktop.noOpenBlockers")}
-            {project.versions.length > 0
-              ? ` · ${tp("desktop.versionCount", project.versions.length)}`
-              : ""}
-          </span>
-        </button>
+        <div className="project-summary-item" key={project.id}>
+          <button className="project-summary-card" onClick={() => onOpen(project.documentId)}>
+            <div className="project-card-heading">
+              <strong>{project.title}</strong>
+              <span className="status-badge">{formatProjectStatus(locale, project.status)}</span>
+            </div>
+            <span>
+              {t("projects.tasksProgress", {
+                completed: project.completedTasks,
+                total: project.totalTasks,
+              })}{" "}
+              · {formatProjectPriority(locale, project.priority)}
+            </span>
+            <progress
+              max={Math.max(1, project.totalTasks)}
+              value={project.completedTasks}
+              aria-label={t("desktop.projectProgressA11y", { title: project.title })}
+            />
+            <span>
+              {project.currentVersion ?? t("desktop.currentVersionMissing")} →{" "}
+              {project.nextVersion ?? t("desktop.nextVersionMissing")}
+            </span>
+            <span>{project.nextAction ?? t("desktop.nextActionMissing")}</span>
+            <span>
+              {project.blockers.length > 0
+                ? tp("desktop.openBlockerCount", project.blockers.length)
+                : t("desktop.noOpenBlockers")}
+              {project.versions.length > 0
+                ? ` · ${tp("desktop.versionCount", project.versions.length)}`
+                : ""}
+            </span>
+          </button>
+          <button
+            className="text-button"
+            disabled={!editableIds.has(project.id)}
+            title={editableIds.has(project.id) ? undefined : t("desktop.projectEditNeedsSync")}
+            onClick={() => onEdit(project.id)}
+          >
+            {t("common.edit")}
+          </button>
+        </div>
       ))}
     </div>
   );
