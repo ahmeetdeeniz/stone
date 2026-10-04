@@ -3,6 +3,13 @@
     "name": "Stone",
     "slug": "stone",
     "version": "0.1.0",
+    "runtimeVersion": {
+      "policy": "fingerprint"
+    },
+    "updates": {
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0
+    },
     "orientation": "default",
     "scheme": "stone",
     "userInterfaceStyle": "automatic",
@@ -16,6 +23,7 @@
     "plugins": [
       "expo-router",
       "@react-native-firebase/app",
+      "@react-native-firebase/crashlytics",
       "expo-notifications",
       [
         "expo-build-properties",

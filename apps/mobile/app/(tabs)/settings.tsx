@@ -41,6 +41,15 @@ import { readWidgetPrivacy, writeWidgetPrivacy } from "../../src/widgets/widget-
 import { refreshNativeWidgets } from "../../src/widgets/snapshot";
 import { clearWidgetsForAccountLifecycle } from "../../src/widgets/snapshot";
 import { AuthFailure, authErrorKey } from "../../src/infrastructure/firebase/auth";
+import Constants from "expo-constants";
+import { readCrashReporting, setCrashReporting } from "../../src/diagnostics/crash-reporting";
+import {
+  checkForAppUpdate,
+  currentUpdate,
+  restartIntoUpdate,
+  updatesEnabled,
+} from "../../src/diagnostics/app-updates";
+import { shortUpdateId } from "../../src/diagnostics/preferences";
 
 const syncTone: Readonly<Record<string, StatusTone>> = {
   saved: "success",
@@ -60,15 +69,49 @@ export default function SettingsScreen() {
   const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [syncState, setSyncState] = useState<SyncState | null>(null);
   const [widgetPrivacy, setWidgetPrivacy] = useState<WidgetPrivacy>("counts_only");
+  const [crashReporting, setCrashReportingState] = useState(false);
+  const [checkingUpdates, setCheckingUpdates] = useState(false);
   const [reminders, setReminders] = useState<ReminderSettings>(DEFAULT_REMINDER_SETTINGS);
   const [reminderPermission, setReminderPermission] = useState(true);
   useEffect(() => {
     void readWidgetPrivacy().then(setWidgetPrivacy);
+    void readCrashReporting().then(setCrashReportingState);
     void readReminderSettings().then(setReminders);
     void reminderPermissionGranted()
       .then(setReminderPermission)
       .catch(() => undefined);
   }, []);
+  const updateCrashReporting = async (enabled: boolean) => {
+    setCrashReportingState(enabled);
+    try {
+      await setCrashReporting(enabled);
+    } catch {
+      setCrashReportingState(!enabled);
+    }
+  };
+  const checkUpdates = async () => {
+    setCheckingUpdates(true);
+    try {
+      const outcome = await checkForAppUpdate();
+      if (outcome === "downloaded") {
+        Alert.alert(t("settings.updateReady"), undefined, [
+          { text: t("common.cancel"), style: "cancel" },
+          { text: t("settings.restart"), onPress: () => void restartIntoUpdate() },
+        ]);
+      } else {
+        Alert.alert(t("settings.updateCurrent"));
+      }
+    } catch (caught) {
+      Alert.alert(
+        t("settings.updateFailed"),
+        caught instanceof Error ? caught.message : t("app.unknownError"),
+      );
+    } finally {
+      setCheckingUpdates(false);
+    }
+  };
+  const update = currentUpdate();
+  const appVersion = Constants.expoConfig?.version ?? "";
   useEffect(() => {
     if (!user) return;
     setSettingsLoaded(false);
@@ -443,6 +486,45 @@ export default function SettingsScreen() {
                   />
                 ) : null}
               </>
+            ) : null}
+          </SectionCard>
+
+          <SectionCard
+            title={t("settings.diagnostics")}
+            description={t("settings.crashReportsDescription")}
+            icon="bug-outline"
+          >
+            <ChoiceRow>
+              <Chip
+                label={t("settings.crashReportsOff")}
+                selected={!crashReporting}
+                onPress={() => void updateCrashReporting(false)}
+              />
+              <Chip
+                label={t("settings.crashReportsOn")}
+                selected={crashReporting}
+                onPress={() => void updateCrashReporting(true)}
+              />
+            </ChoiceRow>
+            <Divider />
+            <StoneText variant="bodySmall" tone="secondary">
+              {t("settings.appVersion", {
+                version: appVersion,
+                build: update.embedded
+                  ? t("settings.builtInUpdate")
+                  : (shortUpdateId(update.updateId) ?? t("settings.builtInUpdate")),
+              })}
+              {update.channel ? ` · ${update.channel}` : ""}
+            </StoneText>
+            {updatesEnabled ? (
+              <StoneButton
+                label={checkingUpdates ? t("settings.checkingUpdates") : t("settings.checkUpdates")}
+                variant="secondary"
+                size="sm"
+                icon="cloud-download-outline"
+                onPress={() => void checkUpdates()}
+                disabled={checkingUpdates}
+              />
             ) : null}
           </SectionCard>
 

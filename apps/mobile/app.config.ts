@@ -34,9 +34,16 @@ export default ({ config }: ConfigContext): ExpoConfig => {
         `group.${iosBundleIdentifier}`,
       ]
     : [];
+  // OTA updates are served from the EAS project this app belongs to, so a fork with its own
+  // `extra.eas.projectId` updates from its own project, and one without it simply has none.
+  const easProjectId = (config.extra?.eas as { projectId?: string } | undefined)?.projectId;
   return withRequiredAppGroups(
     {
       ...config,
+      updates: {
+        ...config.updates,
+        ...(easProjectId ? { url: `https://u.expo.dev/${easProjectId}` } : { enabled: false }),
+      },
       plugins: [
         ...(config.plugins ?? []),
         "expo-background-task",

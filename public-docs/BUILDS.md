@@ -100,6 +100,23 @@ Android 13+ notification permission is requested from Stone Settings and is opti
 prebuild needs the Android SDK and a supported JDK; widget receiver/resize/action behavior must be
 checked on a physical launcher before release.
 
+## Over-the-air updates (EAS Update)
+
+JavaScript-only fixes can reach installed Android and iOS builds without a store release. Each
+EAS build profile has a channel (`development`, `preview`, `production`) and the runtime version
+uses Expo's `fingerprint` policy, so an update only reaches builds with identical native code;
+anything that changes native code needs a new build.
+
+```sh
+pnpm update:preview "Fix note list sorting"
+pnpm update:production "Fix note list sorting"
+```
+
+The update URL comes from `extra.eas.projectId` in `apps/mobile/app.json`; a fork with its own EAS
+project updates from that project, and a build without one has OTA updates disabled. Installed apps
+check on launch and apply a downloaded update on the next start; **Settings → Diagnostics &
+updates** shows the running update and can check immediately.
+
 ## iOS
 
 iOS native work requires macOS/Xcode:

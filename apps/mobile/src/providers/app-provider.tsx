@@ -13,6 +13,7 @@ import type { AuthUser } from "../infrastructure/firebase/auth";
 import { getAppServices, type AppServices } from "../services/composition-root";
 import { AuthProvider, useAuth } from "./auth-provider";
 import { registerBackgroundSync } from "../services/background-sync";
+import { applyCrashReporting, readCrashReporting } from "../diagnostics/crash-reporting";
 import { WidgetLifecycle } from "../widgets/widget-lifecycle";
 import { ReminderLifecycle } from "../reminders/reminder-lifecycle";
 import { NativeDeepLinkRouter } from "../widgets/native-deep-links";
@@ -24,6 +25,10 @@ export function AppProvider({ children }: PropsWithChildren) {
   const [services, setServices] = useState<AppServices | null>(null);
   const [error, setError] = useState<{ message: string | null } | null>(null);
   const [attempt, setAttempt] = useState(0);
+  useEffect(() => {
+    // Re-assert the device's crash-reporting choice early, before anything can crash.
+    void readCrashReporting().then(applyCrashReporting);
+  }, []);
   useEffect(() => {
     let active = true;
     void getAppServices()
