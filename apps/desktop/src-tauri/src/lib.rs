@@ -1173,17 +1173,15 @@ fn public_session(session: &AuthSession) -> PublicAuthSession {
         expires_at: session.expires_at,
     }
 }
-fn firebase_error(response: reqwest::Response) -> impl std::future::Future<Output = String> {
-    async move {
-        let status = response.status();
-        let body = response
-            .json::<FirebaseErrorEnvelope>()
-            .await
-            .ok()
-            .map(|envelope| envelope.error.message)
-            .unwrap_or_else(|| status.to_string());
-        format!("Firebase: {body}")
-    }
+async fn firebase_error(response: reqwest::Response) -> String {
+    let status = response.status();
+    let body = response
+        .json::<FirebaseErrorEnvelope>()
+        .await
+        .ok()
+        .map(|envelope| envelope.error.message)
+        .unwrap_or_else(|| status.to_string());
+    format!("Firebase: {body}")
 }
 async fn firebase_post(
     client: &Client,

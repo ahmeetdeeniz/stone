@@ -844,6 +844,26 @@ export const tr = {
   "focus.linkHint":
     "Görev, proje, not ve takvim bloğu bağlantıları oradan başlatıldığında korunur.",
   "focus.noStreak": "Geçmiş hedef anlık görüntüleri güvenilir kılana kadar seriler gizlidir.",
+  "reminders.title": "Hatırlatıcılar",
+  "reminders.description":
+    "Son tarihi olan görevler ve yaklaşan takvim etkinlikleri için yerel bildirimler. Yalnızca bu cihazda planlanır.",
+  "reminders.on": "Açık",
+  "reminders.off": "Kapalı",
+  "reminders.leadTime": "Hatırlatma zamanı",
+  "reminders.atTime": "Tam zamanında",
+  "reminders.minutesBefore": "{{minutes}} dk önce",
+  "reminders.allDayHint":
+    "Saati olmayan görevler ve tüm gün etkinlikleri {{time}} saatinde hatırlatılır.",
+  "reminders.allow": "Bildirimlere izin ver",
+  "reminders.permissionDenied":
+    "Stone için bildirimler kapalı. Hatırlatıcı almak için sistem ayarlarından açın.",
+  "reminders.channel": "Hatırlatıcılar",
+  "reminders.complete": "Tamamla",
+  "reminders.snooze": "{{minutes}} dk ertele",
+  "reminders.taskDueAt": "Son saat {{time}}",
+  "reminders.taskDueToday": "Bugün son gün",
+  "reminders.eventStartsAt": "{{time}} saatinde başlıyor",
+  "reminders.eventToday": "Bugün",
   "widgets.privacy": "Widget gizliliği",
   "widgets.privacyDescription":
     "Yalnızca sayılar, Stone dışında görünen bilgiler için güvenli varsayılandır.",
