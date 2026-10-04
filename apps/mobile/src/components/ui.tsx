@@ -118,6 +118,7 @@ export function StoneButton({
   disabled = false,
   accessibilityLabel,
   style,
+  testID,
 }: {
   label: string;
   onPress: () => void;
@@ -127,6 +128,8 @@ export function StoneButton({
   disabled?: boolean;
   accessibilityLabel?: string;
   style?: StyleProp<ViewStyle>;
+  /** Stable handle for device smoke tests (.maestro/). */
+  testID?: string;
 }) {
   const { colors, tones, elevation } = useTheme();
   const press = usePressScale(0.97);
@@ -158,6 +161,7 @@ export function StoneButton({
   return (
     <Animated.View style={[press.style, style]}>
       <Pressable
+        testID={testID}
         accessibilityRole="button"
         accessibilityLabel={accessibilityLabel ?? label}
         accessibilityState={{ disabled }}

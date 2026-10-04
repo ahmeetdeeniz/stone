@@ -74,6 +74,9 @@ pnpm test:integration
 pnpm verify:i18n
 ```
 
+Kendi Firebase projenizi bağlamak için `pnpm setup:self-host` çalıştırın; `pnpm doctor:self-host`
+kurulumu yeniden denetler.
+
 - [Geliştirme ve self-hosting](public-docs/SELF-HOSTING.md)
 - [Firebase ve güvenlik kuralları](public-docs/FIREBASE.md)
 - [Windows, Android ve özel iOS build’leri](public-docs/BUILDS.md)

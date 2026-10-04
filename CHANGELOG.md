@@ -24,6 +24,9 @@ tag, so no release date or semantic version is claimed.
 - Desktop builds for macOS (universal DMG) and Linux (.deb and AppImage) alongside Windows, with
   optional Developer ID signing/notarization and signed in-app auto-updates (Settings → Updates)
   published through draft GitHub releases.
+- `pnpm setup:self-host` walks a self-hoster through connecting their own Firebase project
+  (desktop env, `.firebaserc`, app identifiers, native config checks, next steps) and
+  `pnpm doctor:self-host` re-checks it; Maestro smoke flows cover launch, sign-in and note creation.
 - Added local-first Android Glance and iOS WidgetKit Today, Agenda, Focus, and Quick Capture
   widgets, an optional Android focus notification, and iOS Live Activity/Dynamic Island sources.
 - Added bounded versioned snapshot/action bridges, validated deep links, revision-safe actions,

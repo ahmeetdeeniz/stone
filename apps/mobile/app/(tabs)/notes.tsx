@@ -185,6 +185,7 @@ export default function NotesScreen() {
                 size="sm"
                 onPress={chooseTemplate}
                 disabled={busy}
+                testID="notes-new"
               />
             </>
           }

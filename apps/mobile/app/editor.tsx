@@ -273,6 +273,7 @@ export default function EditorScreen() {
             <StoneButton
               label={t("common.back")}
               variant="quiet"
+              testID="editor-back"
               onPress={() => {
                 void saveCurrent();
                 router.back();
@@ -284,6 +285,7 @@ export default function EditorScreen() {
               onChangeText={setTitle}
               onEndEditing={() => void rename()}
               containerStyle={styles.titleInput}
+              testID="editor-title"
             />
             <View style={styles.toolbarActions}>
               <StoneText variant="caption" tone={status === "error" ? "danger" : "muted"}>
