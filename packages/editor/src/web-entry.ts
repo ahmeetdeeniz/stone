@@ -64,9 +64,10 @@ function initialize(markdownSource: string, readOnly: boolean, locale: Locale): 
           return true;
         },
         click(event) {
-          const target = event.target;
-          if (!(target instanceof HTMLElement) || !target.matches("a[data-stone-url]"))
-            return false;
+          // The tap can land on a nested span inside the anchor.
+          const target =
+            event.target instanceof Element ? event.target.closest("a[data-stone-url]") : null;
+          if (!target) return false;
           const url = target.getAttribute("data-stone-url");
           if (url) post({ protocolVersion: 1, type: "openLink", payload: { url } });
           return true;
@@ -124,6 +125,7 @@ function initialize(markdownSource: string, readOnly: boolean, locale: Locale): 
           backgroundColor: "var(--stone-surface)",
         },
         ".stone-live-link": { color: "var(--stone-accent)", textDecoration: "underline" },
+        ".stone-live-wikilink": { textDecorationStyle: "dotted" },
         ".stone-live-code": { fontFamily: "monospace", backgroundColor: "var(--stone-surface)" },
         ".stone-live-blockquote": {
           color: "color-mix(in srgb, var(--stone-text) 75%, transparent)",

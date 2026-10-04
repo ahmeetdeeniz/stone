@@ -13,6 +13,8 @@ tag, so no release date or semantic version is claimed.
   history), adding only what is missing and starting every record at revision 1 so it syncs.
 - Added natural-language quick add (English/Turkish): relative days, weekdays, dates, times,
   `#tags`, `!priority` and `@project` are parsed with a live preview.
+- Added `[[wiki links]]` with backlinks, note templates and a daily note, and a global search
+  screen across notes, tasks, projects and calendar items.
 - Added local-first Android Glance and iOS WidgetKit Today, Agenda, Focus, and Quick Capture
   widgets, an optional Android focus notification, and iOS Live Activity/Dynamic Island sources.
 - Added bounded versioned snapshot/action bridges, validated deep links, revision-safe actions,
@@ -26,6 +28,8 @@ tag, so no release date or semantic version is claimed.
   timer is running, and calendar/focus restore no longer produces records the sync rules reject.
 - Today uses the device's calendar day instead of UTC, which showed yesterday for several hours
   after midnight east of UTC.
+- Tapping a Markdown link in the editor did nothing (the rendered label was not an anchor); links
+  now open, and only `http(s)`, `mailto` and `tel` URLs are handed to the system.
 - Mobile startup no longer races two database initialisations (which could leave the app on an
   error screen), shows the real error with a retry, builds workspace packages before
   start/export/EAS, relies on native Firebase config, and targets iOS 16.1 for the widget module.

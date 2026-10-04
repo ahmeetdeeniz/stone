@@ -59,6 +59,9 @@ presented as product evidence.
 - CodeMirror 6 Live Preview editing, search, formatting, tables, code, callouts, task lists, and
   source-preserving frontmatter
 - Local note creation, rename, pin, full-text search, import/export, trash, drafts, and revisions
+- `[[Note title]]` / `[[Note title|label]]` wiki links that open or create the target note, a
+  linked-from bar for backlinks, note templates (blank, daily, meeting), a one-tap daily note, and one
+  search across notes, tasks, projects and calendar
 - Turkish/Unicode content and valid `.md` / `.markdown` round trips
 
 ### Projects and Today
