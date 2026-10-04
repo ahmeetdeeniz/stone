@@ -21,9 +21,13 @@ export class SQLiteFocusRepository implements FocusRepository {
 
   public async create(source: FocusSession): Promise<FocusSession> {
     const session = validateFocusSession(source);
-    const active = await this.getActive(session.ownerId);
-    if (active.some((candidate) => candidate.id !== session.id))
-      throw new Error("An active focus session already exists.");
+    // Only one timer may run at a time; finished sessions (manual entries, restored history) can
+    // always be added.
+    if (session.status === "running" || session.status === "paused") {
+      const active = await this.getActive(session.ownerId);
+      if (active.some((candidate) => candidate.id !== session.id))
+        throw new Error("An active focus session already exists.");
+    }
     await this.database.withTransactionAsync(async () => {
       await writeSession(this.database, session, "INSERT");
       await queueSession(this.database, session, 0);

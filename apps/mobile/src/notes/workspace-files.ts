@@ -21,7 +21,8 @@ export async function shareWorkspaceExport(files: readonly ExportedProjectFile[]
   });
 }
 
-export async function pickWorkspaceCalendarFile(): Promise<string | null> {
+/** Lets the user pick a `.stone-workspace.json` export and returns its validated files. */
+export async function pickWorkspaceBundle(): Promise<readonly ExportedProjectFile[] | null> {
   const result = await DocumentPicker.getDocumentAsync({
     type: ["application/json", "application/octet-stream"],
     copyToCacheDirectory: true,
@@ -35,9 +36,5 @@ export async function pickWorkspaceCalendarFile(): Promise<string | null> {
   const file = new File(asset.uri);
   const bytes = await file.bytes();
   if (bytes.byteLength > MAX_WORKSPACE_BYTES) throw new Error("Workspace file is too large.");
-  const files = parseWorkspaceBundle(await file.text());
-  const calendar = files.find((entry) => entry.path === "calendar.json");
-  if (!calendar || calendar.encoding !== "utf8")
-    throw new Error("Workspace does not contain a readable calendar.json file.");
-  return calendar.content;
+  return parseWorkspaceBundle(await file.text());
 }

@@ -19,12 +19,16 @@ interface ExportDocumentRow {
   markdown: string;
   path: string | null;
   project_id: string | null;
+  is_pinned: number;
   revision: number;
+  created_at: string;
   updated_at: string;
 }
 
 interface ExportDrawingRow {
   id: string;
+  document_id: string | null;
+  title: string;
   source_path: string;
   preview_path: string;
 }
@@ -38,7 +42,7 @@ export async function exportWorkspace(
   ownerId: string,
 ): Promise<readonly ExportedProjectFile[]> {
   const rows = await database.getAllAsync<ExportDocumentRow>(
-    "SELECT id, kind, title, markdown, path, project_id, revision, updated_at FROM documents WHERE owner_id = ? AND deleted_at IS NULL ORDER BY updated_at, id",
+    "SELECT id, kind, title, markdown, path, project_id, is_pinned, revision, created_at, updated_at FROM documents WHERE owner_id = ? AND deleted_at IS NULL ORDER BY updated_at, id",
     ownerId,
   );
   const documents = rows.map((row) => ({
@@ -52,14 +56,17 @@ export async function exportWorkspace(
     documents: rows.map((row) => ({
       id: row.id,
       kind: row.kind,
+      title: row.title,
       projectId: row.project_id,
+      isPinned: row.is_pinned === 1,
       revision: row.revision,
+      createdAt: row.created_at,
       updatedAt: row.updated_at,
       path: row.path ?? standalonePath(row),
     })),
   };
   const drawings = await database.getAllAsync<ExportDrawingRow>(
-    "SELECT id, source_path, preview_path FROM drawings WHERE owner_id = ? AND deleted_at IS NULL ORDER BY id",
+    "SELECT id, document_id, title, source_path, preview_path FROM drawings WHERE owner_id = ? AND deleted_at IS NULL ORDER BY id",
     ownerId,
   );
   const assets: ExportedProjectFile[] = [];
@@ -141,6 +148,8 @@ export async function exportWorkspace(
           ...manifest,
           drawings: drawings.map((drawing) => ({
             id: drawing.id,
+            documentId: drawing.document_id,
+            title: drawing.title,
             source: `assets/drawings/${drawing.id}.stoneink`,
             preview: `assets/drawings/${drawing.id}.png`,
           })),
