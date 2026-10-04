@@ -11,6 +11,8 @@ tag, so no release date or semantic version is claimed.
 - Added full workspace restore on mobile: an export is re-imported into the signed-in account
   (notes, projects rebuilt from their frontmatter, versions, tasks, drawings, calendar and focus
   history), adding only what is missing and starting every record at revision 1 so it syncs.
+- Added natural-language quick add (English/Turkish): relative days, weekdays, dates, times,
+  `#tags`, `!priority` and `@project` are parsed with a live preview.
 - Added local-first Android Glance and iOS WidgetKit Today, Agenda, Focus, and Quick Capture
   widgets, an optional Android focus notification, and iOS Live Activity/Dynamic Island sources.
 - Added bounded versioned snapshot/action bridges, validated deep links, revision-safe actions,
@@ -22,6 +24,8 @@ tag, so no release date or semantic version is claimed.
   deep links/notification taps wait for the root navigator instead of navigating too early.
 - Adding a finished focus session (manual entry or restored history) no longer fails while a
   timer is running, and calendar/focus restore no longer produces records the sync rules reject.
+- Today uses the device's calendar day instead of UTC, which showed yesterday for several hours
+  after midnight east of UTC.
 - Mobile startup no longer races two database initialisations (which could leave the app on an
   error screen), shows the real error with a retry, builds workspace packages before
   start/export/EAS, relies on native Firebase config, and targets iOS 16.1 for the widget module.

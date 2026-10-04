@@ -393,7 +393,7 @@ export const tr = {
   "planning.subtitle.one": "{{count}} görev · Çevrimdışı değişiklikler cihazda korunur",
   "planning.subtitle.other": "{{count}} görev · Çevrimdışı değişiklikler cihazda korunur",
   "tasks.quickAdd": "Hızlı görev ekle",
-  "tasks.quickAddPlaceholder": "Yapılacak işi yaz",
+  "tasks.quickAddPlaceholder": "Örn: yarın 15:00 rapor gönder #iş !yüksek",
   "tasks.add": "Görev ekle",
   "tasks.search": "Görevlerde ara",
   "tasks.searchPlaceholder": "Başlık, açıklama veya etiket",

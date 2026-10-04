@@ -73,6 +73,9 @@ presented as product evidence.
   soft-delete, priority, due date/time, tags, estimates, project links, search and planning filters
 - Ordered mobile subtasks plus deterministic daily, weekday, weekly and monthly recurrence;
   completed occurrences are preserved and the next occurrence is a separate idempotent record
+- Natural-language quick add in English and Turkish (`yarın 15:00 rapor #iş !yüksek`,
+  `call mom friday 6pm @family`) with a live preview of the parsed date, time, priority, tags and
+  project
 - Portable Markdown task lists are indexed after note saves; fenced code is excluded, and a linked
   completion updates only the source checkbox
 - Today combines due, overdue and project work; Upcoming, Overdue, Completed and project-filtered
