@@ -14,7 +14,9 @@ import { getAppServices, type AppServices } from "../services/composition-root";
 import { AuthProvider, useAuth } from "./auth-provider";
 import { registerBackgroundSync } from "../services/background-sync";
 import { WidgetLifecycle } from "../widgets/widget-lifecycle";
+import { ReminderLifecycle } from "../reminders/reminder-lifecycle";
 import { NativeDeepLinkRouter } from "../widgets/native-deep-links";
+import { ShareInboxHandler } from "../share/share-inbox-handler";
 import { useI18n } from "../i18n/provider";
 
 export function AppProvider({ children }: PropsWithChildren) {
@@ -57,7 +59,9 @@ export function AppProvider({ children }: PropsWithChildren) {
           <AuthProvider onUserChanged={bindDeviceOwner} onSyncRequested={syncOwner}>
             <ThemePreferenceLoader />
             <WidgetLifecycle />
+            <ReminderLifecycle />
             <NativeDeepLinkRouter />
+            <ShareInboxHandler />
             {children}
           </AuthProvider>
         </AppServicesContext.Provider>

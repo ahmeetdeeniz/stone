@@ -10,3 +10,5 @@ export * from "./calendar-recurrence.js";
 export * from "./calendar-agenda.js";
 export * from "./ics.js";
 export * from "./focus.js";
+export * from "./reminders.js";
+export * from "./quick-add.js";

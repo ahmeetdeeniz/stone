@@ -51,6 +51,32 @@ export function importCalendarIcs(
   return blocks.map((block, index) => parseEvent(block[1] ?? "", context, index));
 }
 
+/**
+ * Like {@link importCalendarIcs} but skips events it cannot represent (unsupported date forms or
+ * rules) instead of rejecting the whole feed — what a subscribed calendar needs.
+ */
+export function importCalendarIcsLenient(
+  source: string,
+  context: { ownerId: string; deviceId: string; now: string; timezone: string },
+): { items: readonly CalendarItem[]; skipped: number } {
+  if (new TextEncoder().encode(source).length > ICS_MAX_BYTES)
+    throw new Error("Calendar file is too large.");
+  if (!/BEGIN:VCALENDAR/iu.test(source)) throw new Error("This is not an iCalendar feed.");
+  const unfolded = source.replace(/\r?\n[ \t]/gu, "");
+  const blocks = [...unfolded.matchAll(/BEGIN:VEVENT\r?\n([\s\S]*?)\r?\nEND:VEVENT/gu)];
+  if (blocks.length > ICS_MAX_EVENTS) throw new Error("Calendar file contains too many events.");
+  const items: CalendarItem[] = [];
+  let skipped = 0;
+  blocks.forEach((block, index) => {
+    try {
+      items.push(parseEvent(block[1] ?? "", context, index));
+    } catch {
+      skipped += 1;
+    }
+  });
+  return { items, skipped };
+}
+
 function parseEvent(
   body: string,
   context: { ownerId: string; deviceId: string; now: string; timezone: string },

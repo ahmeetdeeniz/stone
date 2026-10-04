@@ -56,9 +56,13 @@ presented as product evidence.
 
 ### Markdown workspace
 
+- Share text and links from any app into Stone: they land in an Inbox note as unchecked tasks
 - CodeMirror 6 Live Preview editing, search, formatting, tables, code, callouts, task lists, and
   source-preserving frontmatter
 - Local note creation, rename, pin, full-text search, import/export, trash, drafts, and revisions
+- `[[Note title]]` / `[[Note title|label]]` wiki links that open or create the target note, a
+  linked-from bar for backlinks, note templates (blank, daily, meeting), a one-tap daily note, and one
+  search across notes, tasks, projects and calendar
 - Turkish/Unicode content and valid `.md` / `.markdown` round trips
 
 ### Projects and Today
@@ -73,8 +77,13 @@ presented as product evidence.
   soft-delete, priority, due date/time, tags, estimates, project links, search and planning filters
 - Ordered mobile subtasks plus deterministic daily, weekday, weekly and monthly recurrence;
   completed occurrences are preserved and the next occurrence is a separate idempotent record
+- Natural-language quick add in English and Turkish (`yarın 15:00 rapor #iş !yüksek`,
+  `call mom friday 6pm @family`) with a live preview of the parsed date, time, priority, tags and
+  project
 - Portable Markdown task lists are indexed after note saves; fenced code is excluded, and a linked
   completion updates only the source checkbox
+- A weekly review: what was completed and what slipped in the last seven days, what is due or
+  scheduled in the next seven, and focus time per day
 - Today combines due, overdue and project work; Upcoming, Overdue, Completed and project-filtered
   views use indexed local data
 
@@ -83,7 +92,8 @@ presented as product evidence.
 - Pressure-aware pen/highlighter strokes and vector shapes in `.stoneink`, with PNG previews
 - Firebase Auth, Firestore, and Storage sync using owner-scoped rules
 - Durable local-first mobile writes, revision history, soft delete, and explicit conflict handling
-- Versioned full-workspace export container; full-workspace restore UI is not implemented
+- Versioned full-workspace export container and a mobile restore that adds missing notes,
+  projects, versions, tasks, drawings, calendar and focus history without overwriting anything
 
 ### Calendar and Agenda
 
@@ -100,7 +110,10 @@ presented as product evidence.
 - Explicit occurrence/future/series recurrence editing; workspace-calendar restore and a
   standards-conscious `.ics` subset for basic VEVENT, all-day, supported recurrence and
   cancellation dates
-- No native reminders, external calendar accounts, or invitations
+- Read-only iCalendar subscriptions (`webcal://` / `https://` feeds from iCloud, Google, Outlook,
+  holidays) shown beside your events, kept on the device and never copied into the synced calendar
+- Local reminders for due tasks and upcoming events (configurable lead time, Complete/Snooze
+  actions); no external calendar accounts or invitations
 
 ### Focus and productivity
 
@@ -217,16 +230,17 @@ private notes in public issues.
 
 - Final visual/accessibility inspection, real Firebase/GitHub restart flows, signed Android
   physical-device use, private TestFlight/iPhone use, and tablet stylus validation remain open.
-- Mobile full-workspace restore UI, public iOS binaries, macOS/Linux desktop, and a maintainer-hosted
+- Public iOS binaries, macOS/Linux desktop, and a maintainer-hosted
   backend are not available.
 - MCP hosting and provider publication are not automatic.
-- Due times and calendar records do not schedule operating-system notifications.
-- Full-workspace restore beyond the calendar segment, Agenda virtualization, and physical-device
+- Reminders are local notifications planned on each device; they are not pushed from a server and
+  do not fire on a device where Stone has never been opened.
+- Agenda virtualization and physical-device
   acceptance for focus, native widgets, and Live Activities remain pending.
 
 ## Roadmap
 
-Possible post-preview directions include reminder notifications, Android/iOS
+Possible post-preview directions include Android/iOS
 improved tablet layouts, Agenda virtualization, and richer revision restore. They are not
 implemented commitments.
 
