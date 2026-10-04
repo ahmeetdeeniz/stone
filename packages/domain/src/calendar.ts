@@ -109,16 +109,29 @@ export function instantToZonedWallTime(instant: string, timezone: string): strin
   return wallParts(Date.parse(instant), timezone);
 }
 
+// Building an Intl.DateTimeFormat is expensive (notably on Hermes) and zonedWallTimeToInstant
+// probes up to 113 offsets per call, so reuse one formatter per timezone.
+const wallFormatters = new Map<string, Intl.DateTimeFormat>();
+
+function wallFormatter(timezone: string): Intl.DateTimeFormat {
+  let formatter = wallFormatters.get(timezone);
+  if (!formatter) {
+    formatter = new Intl.DateTimeFormat("en-CA", {
+      timeZone: timezone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    });
+    wallFormatters.set(timezone, formatter);
+  }
+  return formatter;
+}
+
 function wallParts(timestamp: number, timezone: string): string {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: timezone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-  }).formatToParts(new Date(timestamp));
+  const parts = wallFormatter(timezone).formatToParts(new Date(timestamp));
   const get = (type: Intl.DateTimeFormatPartTypes): string =>
     parts.find((part) => part.type === type)?.value ?? "";
   return `${get("year")}-${get("month")}-${get("day")}T${get("hour")}:${get("minute")}`;

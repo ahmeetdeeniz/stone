@@ -23,6 +23,18 @@ import { restoreWorkspace } from "../../src/notes/workspace-restore";
 import { createWorkspaceRestoreTarget } from "../../src/notes/workspace-restore-target";
 import type { SyncState } from "../../src/infrastructure/storage/sync";
 import { useI18n } from "../../src/i18n/provider";
+import {
+  readReminderSettings,
+  reminderPermissionGranted,
+  requestReminderPermission,
+  syncReminders,
+  writeReminderSettings,
+} from "../../src/reminders/reminders";
+import {
+  DEFAULT_REMINDER_SETTINGS,
+  REMINDER_LEAD_CHOICES,
+  type ReminderSettings,
+} from "@stone/domain";
 import type { WidgetPrivacy } from "@stone/widgets";
 import { readWidgetPrivacy, writeWidgetPrivacy } from "../../src/widgets/widget-lifecycle";
 import { refreshNativeWidgets } from "../../src/widgets/snapshot";
@@ -47,8 +59,14 @@ export default function SettingsScreen() {
   const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [syncState, setSyncState] = useState<SyncState | null>(null);
   const [widgetPrivacy, setWidgetPrivacy] = useState<WidgetPrivacy>("counts_only");
+  const [reminders, setReminders] = useState<ReminderSettings>(DEFAULT_REMINDER_SETTINGS);
+  const [reminderPermission, setReminderPermission] = useState(true);
   useEffect(() => {
     void readWidgetPrivacy().then(setWidgetPrivacy);
+    void readReminderSettings().then(setReminders);
+    void reminderPermissionGranted()
+      .then(setReminderPermission)
+      .catch(() => undefined);
   }, []);
   useEffect(() => {
     if (!user) return;
@@ -105,6 +123,16 @@ export default function SettingsScreen() {
     setWidgetPrivacy(value);
     await writeWidgetPrivacy(value);
     if (user) await refreshNativeWidgets(services, user.uid, locale, value);
+  };
+  const updateReminders = async (next: ReminderSettings) => {
+    setReminders(next);
+    if (next.enabled) {
+      const granted = await requestReminderPermission();
+      setReminderPermission(granted);
+      if (!granted) Alert.alert(t("reminders.permissionDenied"));
+    }
+    await writeReminderSettings(next);
+    if (user) await syncReminders(services, user.uid, t, locale).catch(() => undefined);
   };
   const requestFocusNotification = async () => {
     if (Platform.OS !== "android" || Platform.Version < 33) return;
@@ -363,6 +391,56 @@ export default function SettingsScreen() {
                 icon="notifications-outline"
                 onPress={() => void requestFocusNotification()}
               />
+            ) : null}
+          </SectionCard>
+
+          <SectionCard
+            title={t("reminders.title")}
+            description={t("reminders.description")}
+            icon="alarm-outline"
+          >
+            <ChoiceRow>
+              <Chip
+                label={t("reminders.on")}
+                selected={reminders.enabled}
+                onPress={() => void updateReminders({ ...reminders, enabled: true })}
+              />
+              <Chip
+                label={t("reminders.off")}
+                selected={!reminders.enabled}
+                onPress={() => void updateReminders({ ...reminders, enabled: false })}
+              />
+            </ChoiceRow>
+            {reminders.enabled ? (
+              <>
+                <Overline>{t("reminders.leadTime")}</Overline>
+                <ChoiceRow>
+                  {REMINDER_LEAD_CHOICES.map((minutes) => (
+                    <Chip
+                      key={minutes}
+                      label={
+                        minutes === 0
+                          ? t("reminders.atTime")
+                          : t("reminders.minutesBefore", { minutes })
+                      }
+                      selected={reminders.leadMinutes === minutes}
+                      onPress={() => void updateReminders({ ...reminders, leadMinutes: minutes })}
+                    />
+                  ))}
+                </ChoiceRow>
+                <StoneText variant="bodySmall" tone="secondary">
+                  {t("reminders.allDayHint", { time: reminders.allDayTime })}
+                </StoneText>
+                {!reminderPermission ? (
+                  <StoneButton
+                    label={t("reminders.allow")}
+                    variant="secondary"
+                    size="sm"
+                    icon="notifications-outline"
+                    onPress={() => void updateReminders({ ...reminders, enabled: true })}
+                  />
+                ) : null}
+              </>
             ) : null}
           </SectionCard>
 

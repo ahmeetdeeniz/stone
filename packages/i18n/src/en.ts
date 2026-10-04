@@ -845,6 +845,25 @@ export const en = {
   "focus.linkHint":
     "Task, project, note and calendar-block links are preserved when started there.",
   "focus.noStreak": "Streaks are hidden until historical goal snapshots can make them trustworthy.",
+  "reminders.title": "Reminders",
+  "reminders.description":
+    "Local notifications for tasks with a due date and upcoming calendar events. Scheduled on this device only.",
+  "reminders.on": "On",
+  "reminders.off": "Off",
+  "reminders.leadTime": "Remind me",
+  "reminders.atTime": "At the time",
+  "reminders.minutesBefore": "{{minutes}} min before",
+  "reminders.allDayHint": "Tasks without a time and all-day events remind at {{time}}.",
+  "reminders.allow": "Allow notifications",
+  "reminders.permissionDenied":
+    "Notifications are turned off for Stone. Enable them in system settings to get reminders.",
+  "reminders.channel": "Reminders",
+  "reminders.complete": "Complete",
+  "reminders.snooze": "Snooze {{minutes}} min",
+  "reminders.taskDueAt": "Due at {{time}}",
+  "reminders.taskDueToday": "Due today",
+  "reminders.eventStartsAt": "Starts at {{time}}",
+  "reminders.eventToday": "Today",
   "widgets.privacy": "Widget privacy",
   "widgets.privacyDescription":
     "Counts only is the safe default for information visible outside Stone.",
