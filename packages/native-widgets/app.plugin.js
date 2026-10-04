@@ -32,7 +32,11 @@ function withStoneWidgets(config, options = {}) {
     return result;
   });
   config = withEntitlementsPlist(config, (result) => {
-    result.modResults["com.apple.security.application-groups"] = [ids.appGroupIdentifier];
+    // Merge rather than replace: other plugins (e.g. the share extension) need their own group.
+    const existing = result.modResults["com.apple.security.application-groups"];
+    result.modResults["com.apple.security.application-groups"] = [
+      ...new Set([...(Array.isArray(existing) ? existing : []), ids.appGroupIdentifier]),
+    ];
     return result;
   });
   config = withDangerousMod(config, [
@@ -70,7 +74,12 @@ function withStoneWidgets(config, options = {}) {
           ...config.extra?.eas?.build?.experimental,
           ios: {
             ...config.extra?.eas?.build?.experimental?.ios,
+            // Keep extensions registered by other plugins (e.g. the share extension) so EAS
+            // provisions every target, and replace only our own entry.
             appExtensions: [
+              ...(config.extra?.eas?.build?.experimental?.ios?.appExtensions ?? []).filter(
+                (extension) => extension?.targetName !== targetName,
+              ),
               {
                 targetName,
                 bundleIdentifier: ids.extensionBundleIdentifier,

@@ -107,8 +107,32 @@ export const desktopApi = {
   saveTask: (task: DesktopTask) => call<DesktopTask>("save_task", { task }),
   deleteTask: (id: string) => call<DesktopTask>("delete_task", { id }),
   getDocument: (id: string) => call<DesktopDocument | null>("get_document", { id }),
-  saveDocument: (document: { id: string; title: string; markdown: string; path?: string | null }) =>
-    call<DesktopDocument>("save_document", { document }),
+  saveDocument: (document: {
+    id: string;
+    title: string;
+    markdown: string;
+    path?: string | null;
+    /** Applied only when the document is created. */
+    kind?: string;
+    projectId?: string;
+  }) => call<DesktopDocument>("save_document", { document }),
+  deleteDocument: (id: string) => call<void>("delete_document", { id }),
+  restoreDocument: (id: string) => call<DesktopDocument>("restore_document", { id }),
+  listTrash: () => call<TrashedDocument[]>("list_trash"),
+  listDocumentRevisions: (documentId: string) =>
+    call<DocumentRevisionSummary[]>("list_document_revisions", { documentId }),
+  getDocumentRevision: (id: string) => call<string>("get_document_revision", { id }),
+  listConflicts: () => call<DesktopConflict[]>("list_conflicts"),
+  resolveConflict: (id: string, resolution: ConflictResolution, mergedMarkdown?: string) =>
+    call<{ copiedDocumentId: string | null }>("resolve_conflict", {
+      id,
+      resolution,
+      mergedMarkdown: mergedMarkdown ?? null,
+      apiKey: config.firebaseApiKey,
+      projectId: config.firebaseProjectId,
+    }),
+  listProjects: () => call<DesktopProject[]>("list_projects"),
+  saveProject: (project: DesktopProject) => call<DesktopProject>("save_project", { project }),
   openMarkdownFile: (path: string) => call<DesktopDocument>("open_markdown_file", { path }),
   pickMarkdownFile: () => call<DesktopDocument | null>("pick_markdown_file"),
   pickFolder: () => call<string | null>("pick_folder"),
@@ -177,6 +201,58 @@ export const desktopApi = {
     call<void>("open_external_path", { target, path }),
   openGithubUrl: (url: string) => call<void>("open_github_url", { url }),
 };
+
+export interface TrashedDocument {
+  id: string;
+  title: string;
+  deletedAt: string;
+}
+
+export interface DocumentRevisionSummary {
+  id: string;
+  revision: number;
+  createdAt: string;
+  preview: string;
+}
+
+export type ConflictResolution = "local" | "remote" | "merged";
+
+export interface DesktopConflict {
+  id: string;
+  entityType: "document" | "task" | "calendar" | "focus" | "focus_goal" | "project";
+  entityId: string;
+  title: string;
+  createdAt: string;
+  local: Record<string, unknown>;
+  /** Null when the server copy was deleted. */
+  remote: Record<string, unknown> | null;
+  remoteDeleted: boolean;
+  baseMarkdown: string | null;
+}
+
+/** The synced project entity (mobile's source of truth for project metadata). */
+export interface DesktopProject {
+  id: string;
+  ownerId: string;
+  canonicalDocumentId: string;
+  title: string;
+  slug: string;
+  status: string;
+  priority: string;
+  tags: string[];
+  targetDate: string | null;
+  currentVersion: string | null;
+  nextVersion: string | null;
+  nextAction: string | null;
+  repositoryUrl: string | null;
+  platforms: string[];
+  health: string;
+  revision: number;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt: string | null;
+  updatedByDeviceId: string;
+}
 
 export interface AuthSession {
   uid: string;

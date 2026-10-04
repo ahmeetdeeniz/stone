@@ -27,7 +27,7 @@ export type MarkdownBlockType =
   | "horizontalRule";
 
 export interface MarkdownInlineToken {
-  type: "strong" | "emphasis" | "strike" | "inlineCode" | "link";
+  type: "strong" | "emphasis" | "strike" | "inlineCode" | "link" | "wikiLink";
   from: number;
   to: number;
   markerFrom: number;
@@ -645,13 +645,19 @@ function findInlineTokens(source: string, from: number, to: number): MarkdownInl
     ["strike", /~~([^~\n]+)~~/gu],
     ["inlineCode", /`([^`\n]+)`/gu],
     ["emphasis", /(?<!\w)(?:_([^_\n]+)_|\*([^*\n]+)\*)/gu],
-    ["link", /\[([^\]\n]+)\]\(([^)\n]+)\)/gu],
+    ["link", /(?<!\[)\[([^[\]\n]+)\]\(([^)\n]+)\)/gu],
+    ["wikiLink", /\[\[([^[\]|\n]+)(?:\|([^[\]\n]+))?\]\]/gu],
   ];
   for (const [type, pattern] of patterns) {
     for (const match of text.matchAll(pattern)) {
       const index = match.index ?? 0;
       const full = match[0];
-      const linkFields = type === "link" ? { label: match[1]!, url: match[2]! } : {};
+      const linkFields =
+        type === "link"
+          ? { label: match[1]!, url: match[2]! }
+          : type === "wikiLink"
+            ? { label: (match[2] ?? match[1]!).trim(), url: wikiLinkUrl(match[1]!) }
+            : {};
       tokens.push({
         type,
         from: from + index,
@@ -663,6 +669,47 @@ function findInlineTokens(source: string, from: number, to: number): MarkdownInl
     }
   }
   return tokens.sort((left, right) => left.from - right.from || left.to - right.to);
+}
+
+export interface WikiLink {
+  /** Note title as written inside `[[...]]`. */
+  target: string;
+  alias: string | null;
+}
+
+const WIKI_LINK_URL_PREFIX = "stone-note:";
+
+/** The in-app URL a `[[Title]]` link opens; see {@link parseWikiLinkUrl}. */
+export function wikiLinkUrl(target: string): string {
+  return `${WIKI_LINK_URL_PREFIX}${encodeURIComponent(target.trim())}`;
+}
+
+export function parseWikiLinkUrl(url: string): string | null {
+  if (!url.startsWith(WIKI_LINK_URL_PREFIX)) return null;
+  try {
+    const target = decodeURIComponent(url.slice(WIKI_LINK_URL_PREFIX.length)).trim();
+    return target || null;
+  } catch {
+    return null;
+  }
+}
+
+/** Every `[[Target]]` / `[[Target|Alias]]` outside code, in document order. */
+export function extractWikiLinks(markdown: string): readonly WikiLink[] {
+  const withoutCode = markdown
+    .replace(/^(```|~~~)[^\n]*\n[\s\S]*?^\1[ \t]*$/gmu, "")
+    .replace(/`[^`\n]*`/gu, "");
+  const links: WikiLink[] = [];
+  for (const match of withoutCode.matchAll(/\[\[([^[\]|\n]+)(?:\|([^[\]\n]+))?\]\]/gu)) {
+    const target = match[1]!.trim();
+    if (target) links.push({ target, alias: match[2]?.trim() || null });
+  }
+  return links;
+}
+
+/** Case- and whitespace-insensitive key used to match a link target to a note title. */
+export function normalizeNoteTitle(title: string): string {
+  return title.normalize("NFC").replace(/\s+/gu, " ").trim().toLocaleLowerCase("tr");
 }
 
 function isFrontmatterRecord(value: unknown): value is Record<string, FrontmatterValue> {

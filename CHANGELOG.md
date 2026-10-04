@@ -5,6 +5,25 @@ tag, so no release date or semantic version is claimed.
 
 ## Unreleased
 
+- Added local reminders on mobile for tasks with a due date and upcoming calendar events, with a
+  configurable lead time, an all-day reminder time, and Complete/Snooze notification actions.
+- Desktop Rust now builds, lints (`clippy -D warnings`) and tests on Linux CI.
+- Added full workspace restore on mobile: an export is re-imported into the signed-in account
+  (notes, projects rebuilt from their frontmatter, versions, tasks, drawings, calendar and focus
+  history), adding only what is missing and starting every record at revision 1 so it syncs.
+- Added natural-language quick add (English/Turkish): relative days, weekdays, dates, times,
+  `#tags`, `!priority` and `@project` are parsed with a live preview.
+- Added `[[wiki links]]` with backlinks, note templates and a daily note, and a global search
+  screen across notes, tasks, projects and calendar items.
+- Added a weekly review screen and read-only iCalendar feed subscriptions on mobile.
+- Added sharing into Stone from other apps (iOS share extension, Android share target): text and
+  links are filed into an Inbox note as tasks.
+- Windows can now create and edit projects (the synced project entity and its Project.md, like
+  mobile), move notes to Trash and restore them, browse and restore earlier note versions, and
+  resolve sync conflicts (keep mine, keep theirs, or a three-way Markdown merge) without a phone.
+- Desktop builds for macOS (universal DMG) and Linux (.deb and AppImage) alongside Windows, with
+  optional Developer ID signing/notarization and signed in-app auto-updates (Settings → Updates)
+  published through draft GitHub releases.
 - `pnpm setup:self-host` walks a self-hoster through connecting their own Firebase project
   (desktop env, `.firebaserc`, app identifiers, native config checks, next steps) and
   `pnpm doctor:self-host` re-checks it; Maestro smoke flows cover launch, sign-in and note creation.
@@ -15,6 +34,20 @@ tag, so no release date or semantic version is claimed.
 
 ### Fixed
 
+- Timezone conversions reuse one formatter per zone (about 25x faster on large task lists), and
+  deep links/notification taps wait for the root navigator instead of navigating too early.
+- Adding a finished focus session (manual entry or restored history) no longer fails while a
+  timer is running, and calendar/focus restore no longer produces records the sync rules reject.
+- Today uses the device's calendar day instead of UTC, which showed yesterday for several hours
+  after midnight east of UTC.
+- Tapping a Markdown link in the editor did nothing (the rendered label was not an anchor); links
+  now open, and only `http(s)`, `mailto` and `tel` URLs are handed to the system.
+- The widget config plugin no longer replaces the host app's App Group list or other plugins'
+  EAS app-extension declarations.
+- Editing a mobile project, version or pinned note on Windows no longer strips its `kind`,
+  `projectId`, `isPinned` and other fields it does not edit, and remote changes no longer overwrite
+  a note that has an open conflict. Synced notes with workspace paths are no longer treated as
+  missing linked files.
 - Mobile startup no longer races two database initialisations (which could leave the app on an
   error screen), shows the real error with a retry, builds workspace packages before
   start/export/EAS, relies on native Firebase config, and targets iOS 16.1 for the widget module.
