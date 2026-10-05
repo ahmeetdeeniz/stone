@@ -1025,6 +1025,8 @@ export const en = {
   "notebook.openA11y": "Open notebook {{title}}",
   "notes.notebooks": "Notebooks",
   "drawing.widthA11y": "Line width {{width}}",
+  "notes.splitEmpty": "Nothing open",
+  "notes.splitEmptyDetail": "Pick a note or notebook on the left to open it here.",
   "widgets.privacy": "Widget privacy",
   "widgets.privacyDescription":
     "Counts only is the safe default for information visible outside Stone.",

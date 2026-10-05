@@ -35,6 +35,9 @@ tag, so no release date or semantic version is claimed.
 - Fixed the S Pen being ignored in pen-only mode (the stylus pointer type was compared against
   the mouse value) and pen pressure always reading as full, and fixed strokes landing in the
   wrong place after zooming or panning.
+- On tablets in landscape (1000 dp and wider) the Notes tab is a split view: the list stays on
+  the left and the open note or notebook fills the right. Switching items saves pending edits
+  first, and rotating to portrait opens the current item full screen.
 - Added note attachments on mobile and desktop: images (PNG, JPEG, GIF, WebP, HEIC) and PDFs up
   to 20 MB are stored under their SHA-256, linked from the note with portable Markdown, uploaded
   to the owner's Firebase Storage on sync and downloaded when a note is opened elsewhere. They are

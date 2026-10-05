@@ -1032,6 +1032,8 @@ export const tr = {
   "notebook.openA11y": "{{title}} defterini aç",
   "notes.notebooks": "Defterler",
   "drawing.widthA11y": "Çizgi kalınlığı {{width}}",
+  "notes.splitEmpty": "Açık bir şey yok",
+  "notes.splitEmptyDetail": "Burada açmak için soldan bir not ya da defter seç.",
   "widgets.privacy": "Widget gizliliği",
   "widgets.privacyDescription":
     "Yalnızca sayılar, Stone dışında görünen bilgiler için güvenli varsayılandır.",
