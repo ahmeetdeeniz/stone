@@ -1,7 +1,7 @@
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useMemo, useState, type ReactNode } from "react";
-import { Alert, SectionList, StyleSheet, View } from "react-native";
-import type { Document } from "@stone/domain";
+import { Alert, Image, Pressable, ScrollView, SectionList, StyleSheet, View } from "react-native";
+import type { Document, Drawing } from "@stone/domain";
 import { ResponsiveContent } from "../../src/components/responsive";
 import { EmptyState, ErrorState, LoadingState } from "../../src/components/states";
 import {
@@ -13,6 +13,7 @@ import {
   ScreenHeader,
   SearchField,
   StoneButton,
+  StoneText,
   type IconName,
 } from "../../src/components/ui";
 import { hairline, radii, spacing } from "../../src/design/tokens";
@@ -32,9 +33,10 @@ import {
 export default function NotesScreen() {
   const router = useRouter();
   const { user } = useAuth();
-  const { noteUseCases, notes: noteRepository, deviceId } = useAppServices();
+  const { noteUseCases, notes: noteRepository, deviceId, drawings } = useAppServices();
   const { locale, t, tp } = useI18n();
   const [notes, setNotes] = useState<readonly Document[]>([]);
+  const [notebooks, setNotebooks] = useState<readonly Drawing[]>([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -45,13 +47,23 @@ export default function NotesScreen() {
     setLoading(true);
     try {
       setError(null);
-      setNotes(await noteUseCases.list(user.uid, search ? { search } : {}));
+      const [nextNotes, nextNotebooks] = await Promise.all([
+        noteUseCases.list(user.uid, search ? { search } : {}),
+        drawings.list(user.uid),
+      ]);
+      setNotes(nextNotes);
+      const query = search.trim().toLocaleLowerCase();
+      setNotebooks(
+        query
+          ? nextNotebooks.filter((item) => item.title.toLocaleLowerCase().includes(query))
+          : nextNotebooks,
+      );
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : t("notes.loadFailed"));
     } finally {
       setLoading(false);
     }
-  }, [noteUseCases, search, user]);
+  }, [drawings, noteUseCases, search, user]);
 
   useFocusEffect(
     useCallback(() => {
@@ -114,6 +126,27 @@ export default function NotesScreen() {
         caught instanceof Error ? caught.message : t("app.unknownError"),
       );
     }
+  };
+
+  const deleteNotebook = (notebook: Drawing) => {
+    Alert.alert(t("notebook.deleteConfirm"), notebook.title, [
+      { text: t("common.cancel"), style: "cancel" },
+      {
+        text: t("common.delete"),
+        style: "destructive",
+        onPress: () => {
+          void drawings
+            .softDelete(user!.uid, notebook.id, deviceId)
+            .then(loadNotes)
+            .catch((caught: unknown) => {
+              Alert.alert(
+                t("notes.deleteFailed"),
+                caught instanceof Error ? caught.message : t("app.unknownError"),
+              );
+            });
+        },
+      },
+    ]);
   };
 
   const moveToTrash = (note: Document) => {
@@ -193,23 +226,39 @@ export default function NotesScreen() {
             keyExtractor={(item) => item.id}
             showsVerticalScrollIndicator={false}
             stickySectionHeadersEnabled={false}
-            contentContainerStyle={notes.length === 0 ? styles.emptyList : styles.list}
+            contentContainerStyle={
+              notes.length === 0 && notebooks.length === 0 ? styles.emptyList : styles.list
+            }
+            ListHeaderComponent={
+              notebooks.length > 0 ? (
+                <NotebookShelf
+                  notebooks={notebooks}
+                  title={t("notes.notebooks")}
+                  onOpen={(item) =>
+                    router.push({ pathname: "/drawing/[id]", params: { id: item.id } })
+                  }
+                  onLongPress={deleteNotebook}
+                />
+              ) : null
+            }
             ListEmptyComponent={
-              <EmptyState
-                icon={search ? "search-outline" : "document-text-outline"}
-                title={search ? t("notes.searchEmpty") : t("notes.emptyTitle")}
-                description={search ? t("notes.searchEmptyDetail") : t("notes.emptyDetail")}
-                action={
-                  search ? null : (
-                    <StoneButton
-                      label={t("notes.new")}
-                      icon="add"
-                      onPress={() => void createNote("blank")}
-                      disabled={busy}
-                    />
-                  )
-                }
-              />
+              notebooks.length > 0 ? null : (
+                <EmptyState
+                  icon={search ? "search-outline" : "document-text-outline"}
+                  title={search ? t("notes.searchEmpty") : t("notes.emptyTitle")}
+                  description={search ? t("notes.searchEmptyDetail") : t("notes.emptyDetail")}
+                  action={
+                    search ? null : (
+                      <StoneButton
+                        label={t("notes.new")}
+                        icon="add"
+                        onPress={() => void createNote("blank")}
+                        disabled={busy}
+                      />
+                    )
+                  }
+                />
+              )
             }
             renderSectionHeader={({ section }) =>
               section.title ? (
@@ -247,7 +296,7 @@ export default function NotesScreen() {
           })),
           {
             label: t("notes.newDrawing"),
-            icon: "brush-outline" as const,
+            icon: "book-outline" as const,
             onPress: () => router.push({ pathname: "/drawing/[id]", params: { id: "new" } }),
           },
           {
@@ -280,6 +329,59 @@ export default function NotesScreen() {
         }
       />
     </Screen>
+  );
+}
+
+/** Notebook covers (first-page previews) in a horizontal shelf above the note list. */
+function NotebookShelf({
+  notebooks,
+  title,
+  onOpen,
+  onLongPress,
+}: {
+  notebooks: readonly Drawing[];
+  title: string;
+  onOpen: (notebook: Drawing) => void;
+  onLongPress: (notebook: Drawing) => void;
+}) {
+  const { colors } = useTheme();
+  const { t } = useI18n();
+  return (
+    <View>
+      <View style={styles.sectionHeader}>
+        <Overline>{title}</Overline>
+      </View>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.shelf}
+      >
+        {notebooks.map((item) => (
+          <Pressable
+            key={item.id}
+            accessibilityRole="button"
+            accessibilityLabel={t("notebook.openA11y", { title: item.title })}
+            onPress={() => onOpen(item)}
+            onLongPress={() => onLongPress(item)}
+            delayLongPress={350}
+            style={({ pressed }) => [styles.cover, { opacity: pressed ? 0.7 : 1 }]}
+          >
+            <View style={[styles.coverPage, { borderColor: colors.border }]}>
+              {item.previewPath ? (
+                <Image
+                  source={{ uri: item.previewPath }}
+                  style={styles.coverImage}
+                  resizeMode="cover"
+                />
+              ) : null}
+            </View>
+            <StoneText variant="label" numberOfLines={1}>
+              {item.title}
+            </StoneText>
+          </Pressable>
+        ))}
+      </ScrollView>
+    </View>
   );
 }
 
@@ -346,6 +448,17 @@ const styles = StyleSheet.create({
   emptyList: { flexGrow: 1 },
   sectionHeader: { paddingTop: spacing.lg, paddingBottom: spacing.sm },
   sectionGap: { height: spacing.md },
+  shelf: { gap: spacing.md, paddingBottom: spacing.xs },
+  cover: { width: 112, gap: spacing.xs },
+  coverPage: {
+    width: 112,
+    height: 158,
+    borderWidth: hairline,
+    borderRadius: radii.sm,
+    overflow: "hidden",
+    backgroundColor: "#FFFFFF",
+  },
+  coverImage: { width: "100%", height: "100%" },
   groupRow: { borderLeftWidth: hairline, borderRightWidth: hairline, overflow: "hidden" },
   groupFirst: {
     borderTopWidth: hairline,

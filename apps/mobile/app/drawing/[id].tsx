@@ -2,62 +2,114 @@ import * as Crypto from "expo-crypto";
 import { Directory, File, Paths } from "expo-file-system";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AppState, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import {
+  Alert,
+  AppState,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  View,
+  useWindowDimensions,
+} from "react-native";
+import {
+  INK_PAPERS,
+  InkHistory,
+  addPage,
   addShape,
   addStroke,
-  createEmptyInk,
+  createNotebook,
   deleteSelection,
   duplicateSelection,
   eraseAt,
-  InkHistory,
-  parseInk,
-  serializeInk,
+  pageDocument,
+  parseNotebook,
+  refreshSelection,
+  removePage,
+  replacePage,
+  serializeNotebook,
+  setPaper,
   transformSelection,
   type InkDocument,
+  type InkLayout,
+  type InkNotebook,
+  type InkPaper,
   type InkPoint,
-  type InkSelection,
   type InkShape,
 } from "@stone/ink";
+import type { Drawing } from "@stone/domain";
 import { ErrorState, LoadingState } from "../../src/components/states";
-import { Screen, StoneButton, StoneInput, StoneText } from "../../src/components/ui";
+import {
+  ActionSheet,
+  Chip,
+  Overline,
+  Screen,
+  SegmentedControl,
+  StoneButton,
+  StoneInput,
+  StoneText,
+  Surface,
+} from "../../src/components/ui";
 import { useTheme } from "../../src/design/theme";
-import { colors as tokens, hairline, radii, spacing } from "../../src/design/tokens";
-import { InkCanvas, type InkCanvasHandle, type InkCanvasTool } from "../../src/drawings/InkCanvas";
+import { radii, spacing } from "../../src/design/tokens";
+import {
+  NotebookCanvas,
+  type NotebookCanvasHandle,
+  type NotebookTool,
+  type PageSelection,
+} from "../../src/drawings/NotebookCanvas";
+import {
+  HIGHLIGHTER_COLORS,
+  INK_COLORS,
+  NotebookToolbar,
+  PEN_WIDTHS,
+  ToolButton,
+} from "../../src/drawings/NotebookToolbar";
+import { renderPagePng } from "../../src/drawings/page-picture";
 import { useAuth } from "../../src/providers/auth-provider";
 import { useAppServices } from "../../src/providers/app-provider";
-import type { Drawing } from "@stone/domain";
 import { useI18n } from "../../src/i18n/provider";
 
-const colors = [
-  tokens.brand.navy950,
-  tokens.brand.purple600,
-  tokens.status.danger,
-  tokens.status.success,
-  tokens.status.warning,
-  tokens.status.info,
-];
-const widths = [2, 4, 8, 14];
+const SAVE_DELAY_MS = 1500;
+const WIDE_LAYOUT = 1000;
 
-export default function DrawingScreen() {
-  const { id } = useLocalSearchParams<{ id?: string }>();
+export default function NotebookScreen() {
+  const params = useLocalSearchParams<{ id?: string; layout?: string; paper?: string }>();
+  const id = params.id;
   const router = useRouter();
-  const { colors: themeColors } = useTheme();
+  const { colors } = useTheme();
+  const { width: windowWidth } = useWindowDimensions();
   const { user } = useAuth();
   const { drawings, deviceId } = useAppServices();
   const { t } = useI18n();
-  const canvasRef = useRef<InkCanvasHandle>(null);
-  const historyRef = useRef<InkHistory | null>(null);
+  const canvasRef = useRef<NotebookCanvasHandle>(null);
+  const historyRef = useRef<InkHistory<InkNotebook> | null>(null);
+  const notebookRef = useRef<InkNotebook | null>(null);
   const [drawing, setDrawing] = useState<Drawing | null>(null);
-  const [ink, setInk] = useState<InkDocument | null>(null);
-  const [tool, setTool] = useState<InkCanvasTool>("pen");
-  const [color, setColor] = useState(colors[1]!);
-  const [width, setWidth] = useState(widths[1]!);
+  const [notebook, setNotebookState] = useState<InkNotebook | null>(null);
+  const [setup, setSetup] = useState<{ layout: InkLayout; paper: InkPaper } | null>(null);
+  const [tool, setTool] = useState<NotebookTool>("pen");
+  const [penColor, setPenColor] = useState(INK_COLORS[0]!);
+  const [highlightColor, setHighlightColor] = useState(HIGHLIGHTER_COLORS[0]!);
+  const [width, setWidth] = useState(PEN_WIDTHS[1]!);
   const [stylusOnly, setStylusOnly] = useState(true);
-  const [selection, setSelection] = useState<InkSelection | null>(null);
-  const saveRef = useRef<() => Promise<void>>(() => Promise.resolve());
-  const [title, setTitle] = useState(() => t("drawing.newTitle"));
+  const [selection, setSelection] = useState<PageSelection | null>(null);
+  const [pageIndex, setPageIndex] = useState(0);
+  const [title, setTitle] = useState(() => t("notebook.newTitle"));
+  /** Until the title is edited, a new notebook follows the UI language for its default name. */
+  const titleEdited = useRef(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [paperOpen, setPaperOpen] = useState(false);
+  const [status, setStatus] = useState<"saved" | "unsaved" | "saving" | "error">("saved");
   const [error, setError] = useState<string | null>(null);
+  const dirty = useRef(false);
+  /** Page to scroll to once the canvas has re-rendered with a newly added page. */
+  const pendingPage = useRef<number | null>(null);
+  const color = tool === "highlighter" ? highlightColor : penColor;
+
+  const setNotebook = (next: InkNotebook) => {
+    notebookRef.current = next;
+    setNotebookState(next);
+  };
 
   useEffect(() => {
     if (!user || !id) return;
@@ -67,18 +119,11 @@ export default function DrawingScreen() {
         if (id === "new") {
           const now = new Date().toISOString();
           const nextId = Crypto.randomUUID();
-          const nextInk = createEmptyInk({
-            id: nextId,
-            title: t("drawing.newTitle"),
-            width: 900,
-            height: 650,
-            now,
-          });
-          const metadata: Drawing = {
+          setDrawing({
             id: nextId,
             ownerId: user.uid,
             documentId: null,
-            title: t("drawing.newTitle"),
+            title: t("notebook.newTitle"),
             sourcePath: "",
             previewPath: "",
             sourceSha256: "",
@@ -90,24 +135,23 @@ export default function DrawingScreen() {
             updatedAt: now,
             deletedAt: null,
             updatedByDeviceId: deviceId,
-          };
-          if (active) {
-            setDrawing(metadata);
-            setInk(nextInk);
-            historyRef.current = new InkHistory(nextInk);
-          }
+          });
+          setSetup({
+            layout: params.layout === "infinite" ? "infinite" : "pages",
+            paper: INK_PAPERS.includes(params.paper as InkPaper)
+              ? (params.paper as InkPaper)
+              : "lined",
+          });
           return;
         }
         const loaded = await drawings.getById(user.uid, id);
         if (!loaded) throw new Error(t("drawing.notFound"));
-        const source = await new File(loaded.sourcePath).text();
-        const nextInk = parseInk(source);
-        if (active) {
-          setDrawing(loaded);
-          setTitle(loaded.title);
-          setInk(nextInk);
-          historyRef.current = new InkHistory(nextInk);
-        }
+        const next = parseNotebook(await new File(loaded.sourcePath).text());
+        if (!active) return;
+        setDrawing(loaded);
+        setTitle(loaded.title);
+        historyRef.current = new InkHistory(next);
+        setNotebook(next);
       } catch (caught) {
         if (active) setError(caught instanceof Error ? caught.message : t("drawing.loadFailed"));
       }
@@ -118,15 +162,39 @@ export default function DrawingScreen() {
     };
   }, [deviceId, drawings, id, user]);
 
-  const commit = (next: InkDocument) => {
-    historyRef.current?.commit(next);
-    setInk(next);
+  const start = () => {
+    if (!drawing || !setup) return;
+    const next = createNotebook({
+      id: drawing.id,
+      title,
+      pageId: Crypto.randomUUID(),
+      layout: setup.layout,
+      paper: setup.paper,
+    });
+    historyRef.current = new InkHistory(next);
+    setNotebook(next);
+    setSetup(null);
+    dirty.current = true;
+    setStatus("unsaved");
   };
 
-  const stroke = (points: readonly InkPoint[]) => {
-    if (!ink || !drawing || (tool !== "pen" && tool !== "highlighter")) return;
-    commit(
-      addStroke(ink, {
+  const commit = (next: InkNotebook) => {
+    historyRef.current?.commit(next);
+    setNotebook(next);
+    dirty.current = true;
+    setStatus("unsaved");
+  };
+
+  const editPage = (index: number, edit: (page: InkDocument) => InkDocument) => {
+    const current = notebookRef.current;
+    if (!current) return;
+    commit(replacePage(current, index, edit(pageDocument(current, index))));
+  };
+
+  const onStroke = (index: number, points: readonly InkPoint[]) => {
+    if (tool !== "pen" && tool !== "highlighter") return;
+    editPage(index, (page) =>
+      addStroke(page, {
         id: Crypto.randomUUID(),
         tool,
         color,
@@ -138,48 +206,110 @@ export default function DrawingScreen() {
     );
   };
 
-  const shape = (value: InkShape) => {
-    if (!ink || !drawing) return;
-    commit(addShape(ink, value));
+  /** True once the current eraser gesture removed something. */
+  const erased = useRef(false);
+  const onErase = (index: number, point: InkPoint, done: boolean) => {
+    const current = notebookRef.current;
+    if (!current) return;
+    if (!done) {
+      const page = pageDocument(current, index);
+      const next = eraseAt(page, point, width * 3);
+      // Nothing under the eraser: keep the same objects so the page is not re-recorded.
+      if (next.strokes.length === page.strokes.length && next.shapes.length === page.shapes.length)
+        return;
+      erased.current = true;
+      setNotebook(replacePage(current, index, next));
+      return;
+    }
+    // The whole gesture lands in undo history as one step, and only if it erased anything.
+    if (erased.current) commit(current);
+    erased.current = false;
   };
 
-  const erase = (point: InkPoint) => {
-    if (!ink || !drawing) return;
-    commit(eraseAt(ink, point, width * 2));
+  const onShape = (index: number, shape: InkShape) => {
+    editPage(index, (page) => addShape(page, { ...shape, id: Crypto.randomUUID() }));
   };
 
-  const transform = (translateX: number, translateY: number, scaleX = 1, scaleY = 1) => {
-    if (!ink || !selection) return;
-    commit(transformSelection(ink, selection, { translateX, translateY, scaleX, scaleY }));
+  const undo = () => {
+    const next = historyRef.current?.undo();
+    if (!next) return;
+    setNotebook(next);
+    setSelection(null);
+    dirty.current = true;
+    setStatus("unsaved");
+  };
+
+  const editSelection = (edit: (page: InkDocument, current: PageSelection) => InkDocument) => {
+    if (!selection) return;
+    editPage(selection.pageIndex, (page) => edit(page, selection));
+  };
+
+  const scaleSelection = (factor: number) => {
+    const current = notebookRef.current;
+    if (!selection || !current) return;
+    const { left, top } = selection.selection.bounds;
+    // Scale around the selection's top-left corner so it stays where it was.
+    const page = transformSelection(
+      pageDocument(current, selection.pageIndex),
+      selection.selection,
+      {
+        translateX: left - left * factor,
+        translateY: top - top * factor,
+        scaleX: factor,
+        scaleY: factor,
+      },
+    );
+    commit(replacePage(current, selection.pageIndex, page));
+    setSelection({ ...selection, selection: refreshSelection(page, selection.selection) });
   };
 
   const save = useCallback(async () => {
-    if (!drawing || !ink || !user) return;
+    const current = notebookRef.current;
+    if (!drawing || !current || !user || !dirty.current) return;
+    dirty.current = false;
+    setStatus("saving");
     try {
       const directory = new Directory(Paths.document, "drawings");
       directory.create({ idempotent: true });
       const preview = new File(directory, `${drawing.id}.png`);
-      const bytes = canvasRef.current?.capturePreview();
+      const firstPage = current.pages[0]!;
+      const bytes = renderPagePng(firstPage, current.paper, current.pageWidth);
       if (!bytes) throw new Error(t("drawing.previewFailed"));
       preview.write(bytes);
       const next = await drawings.save(
         { ...drawing, title, revision: drawing.revision + (drawing.sourcePath ? 1 : 0) },
-        serializeInk({ ...ink, title }),
+        serializeNotebook({ ...current, title }),
         preview.uri,
         deviceId,
       );
       setDrawing(next);
+      setStatus(dirty.current ? "unsaved" : "saved");
     } catch (caught) {
+      dirty.current = true;
+      setStatus("error");
       setError(caught instanceof Error ? caught.message : t("drawing.saveFailed"));
     }
-  }, [deviceId, drawing, drawings, ink, title, user]);
+  }, [deviceId, drawing, drawings, title, user]);
+  const saveRef = useRef(save);
   saveRef.current = save;
 
   useEffect(() => {
-    if (!drawing || !ink) return;
-    const timer = setTimeout(() => void saveRef.current(), 600);
+    if (!notebook || status !== "unsaved") return;
+    const timer = setTimeout(() => void saveRef.current(), SAVE_DELAY_MS);
     return () => clearTimeout(timer);
-  }, [drawing?.id, ink, title]);
+  }, [notebook, status]);
+
+  useEffect(() => {
+    if (id === "new" && !titleEdited.current) setTitle(t("notebook.newTitle"));
+  }, [id, t]);
+
+  useEffect(() => {
+    if (pendingPage.current === null) return;
+    const target = pendingPage.current;
+    pendingPage.current = null;
+    setPageIndex(target);
+    canvasRef.current?.scrollToPage(target);
+  }, [notebook]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (state) => {
@@ -188,7 +318,7 @@ export default function DrawingScreen() {
     return () => subscription.remove();
   }, []);
 
-  if (error && !ink)
+  if (error && !notebook && !setup)
     return (
       <Screen>
         <ErrorState
@@ -199,156 +329,224 @@ export default function DrawingScreen() {
         />
       </Screen>
     );
-  if (!ink || !drawing)
+
+  if (setup)
+    return (
+      <Screen>
+        <NotebookSetup
+          title={title}
+          onTitle={(value) => {
+            titleEdited.current = true;
+            setTitle(value);
+          }}
+          value={setup}
+          onChange={setSetup}
+          onStart={start}
+          onCancel={() => router.back()}
+        />
+      </Screen>
+    );
+
+  if (!notebook || !drawing)
     return (
       <Screen>
         <LoadingState label={t("drawing.preparing")} />
       </Screen>
     );
 
+  const pageCount = notebook.pages.length;
+  const wide = windowWidth >= WIDE_LAYOUT;
+  const goToPage = (index: number) => {
+    const target = Math.max(0, Math.min(pageCount - 1, index));
+    setPageIndex(target);
+    canvasRef.current?.scrollToPage(target);
+  };
+
   return (
     <Screen padded={false}>
       <View
         style={[
           styles.header,
-          { backgroundColor: themeColors.surface, borderBottomColor: themeColors.border },
+          { backgroundColor: colors.surface, borderBottomColor: colors.border },
         ]}
       >
-        <StoneButton
+        <ToolButton
+          icon="chevron-left"
           label={t("common.back")}
-          variant="quiet"
           onPress={() => {
             void save();
             router.back();
           }}
         />
         <StoneInput
-          label={t("drawing.titleField")}
+          label={t("notebook.titleField")}
           value={title}
-          onChangeText={setTitle}
+          onChangeText={(value) => {
+            titleEdited.current = true;
+            setTitle(value);
+            dirty.current = true;
+            setStatus("unsaved");
+          }}
           containerStyle={styles.title}
         />
-        <StoneButton label={t("common.save")} onPress={() => void save()} />
-      </View>
-      <ScrollView
-        horizontal
-        contentContainerStyle={styles.toolbar}
-        showsHorizontalScrollIndicator={false}
-      >
-        {(
-          [
-            "pen",
-            "highlighter",
-            "eraser",
-            "line",
-            "arrow",
-            "rectangle",
-            "ellipse",
-            "select",
-            "lasso",
-            "pan",
-          ] as const
-        ).map((item) => (
-          <StoneButton
-            key={item}
-            label={toolLabel(item, t)}
-            variant={tool === item ? "primary" : "secondary"}
-            onPress={() => setTool(item)}
-          />
-        ))}
-        <StoneButton
-          label={stylusOnly ? t("drawing.stylusOn") : t("drawing.stylusOff")}
-          variant="secondary"
-          onPress={() => setStylusOnly((value) => !value)}
-        />
-        <StoneButton
+        {windowWidth >= 600 || status === "error" ? (
+          <StoneText variant="caption" tone={status === "error" ? "danger" : "muted"}>
+            {t(`editor.status.${status}`)}
+          </StoneText>
+        ) : null}
+        <ToolButton
+          icon="undo"
           label={t("editor.toolbar.undo")}
-          variant="quiet"
-          onPress={() => {
-            const next = historyRef.current?.undo();
-            if (next) setInk(next);
-          }}
+          disabled={!historyRef.current?.canUndo()}
+          onPress={undo}
         />
-        <StoneButton
+        <ToolButton
+          icon="redo"
           label={t("editor.toolbar.redo")}
-          variant="quiet"
+          disabled={!historyRef.current?.canRedo()}
           onPress={() => {
             const next = historyRef.current?.redo();
-            if (next) setInk(next);
-          }}
-        />
-        <StoneButton
-          label={t("drawing.moveLeft")}
-          variant="quiet"
-          onPress={() => transform(-16, 0)}
-          disabled={!selection}
-        />
-        <StoneButton
-          label={t("drawing.zoomIn")}
-          variant="quiet"
-          onPress={() => transform(0, 0, 1.1, 1.1)}
-          disabled={!selection}
-        />
-        <StoneButton
-          label={t("drawing.duplicate")}
-          variant="quiet"
-          onPress={() => {
-            if (ink && selection) commit(duplicateSelection(ink, selection, Crypto.randomUUID));
-          }}
-          disabled={!selection}
-        />
-        <StoneButton
-          label={t("drawing.deleteSelection")}
-          variant="quiet"
-          onPress={() => {
-            if (ink && selection) {
-              commit(deleteSelection(ink, selection));
-              setSelection(null);
+            if (next) {
+              setNotebook(next);
+              dirty.current = true;
+              setStatus("unsaved");
             }
           }}
-          disabled={!selection}
         />
-      </ScrollView>
-      <ScrollView
-        horizontal
-        contentContainerStyle={styles.palette}
-        showsHorizontalScrollIndicator={false}
+        <ToolButton
+          icon="dots-horizontal"
+          label={t("common.more")}
+          onPress={() => setMenuOpen(true)}
+        />
+      </View>
+      <View
+        style={[
+          styles.tools,
+          { backgroundColor: colors.surface, borderBottomColor: colors.border },
+        ]}
       >
-        {colors.map((item) => (
-          <Pressable
-            key={item}
-            accessibilityRole="button"
-            accessibilityLabel={t("drawing.colorA11y", { color: item })}
-            onPress={() => setColor(item)}
+        <NotebookToolbar
+          tool={tool}
+          color={color}
+          width={width}
+          onTool={(next) => {
+            setTool(next);
+            if (next !== "lasso") setSelection(null);
+          }}
+          onColor={(next) => (tool === "highlighter" ? setHighlightColor(next) : setPenColor(next))}
+          onWidth={setWidth}
+        />
+        {notebook.layout === "pages" ? (
+          <View style={styles.pager}>
+            <ToolButton
+              icon="chevron-left"
+              label={t("notebook.previousPage")}
+              disabled={pageIndex === 0}
+              onPress={() => goToPage(pageIndex - 1)}
+            />
+            <StoneText variant="label" style={styles.pageLabel}>
+              {t("notebook.pageOf", { page: pageIndex + 1, total: pageCount })}
+            </StoneText>
+            <ToolButton
+              icon="chevron-right"
+              label={t("notebook.nextPage")}
+              disabled={pageIndex >= pageCount - 1}
+              onPress={() => goToPage(pageIndex + 1)}
+            />
+            <ToolButton
+              icon="plus"
+              label={t("notebook.addPage")}
+              onPress={() => {
+                pendingPage.current = pageIndex + 1;
+                commit(addPage(notebook, Crypto.randomUUID(), pageIndex));
+              }}
+            />
+          </View>
+        ) : null}
+      </View>
+      {selection ? (
+        <View style={[styles.selectionBar, { backgroundColor: colors.backgroundSecondary }]}>
+          <StoneText variant="caption" tone="secondary">
+            {t("notebook.selected", {
+              count: selection.selection.strokeIds.length + selection.selection.shapeIds.length,
+            })}
+          </StoneText>
+          <ToolButton
+            icon="magnify-minus-outline"
+            label={t("notebook.shrink")}
+            onPress={() => scaleSelection(0.9)}
+          />
+          <ToolButton
+            icon="magnify-plus-outline"
+            label={t("notebook.grow")}
+            onPress={() => scaleSelection(1.1)}
+          />
+          <ToolButton
+            icon="content-copy"
+            label={t("drawing.duplicate")}
+            onPress={() =>
+              editSelection((page, current) =>
+                duplicateSelection(page, current.selection, Crypto.randomUUID),
+              )
+            }
+          />
+          <ToolButton
+            icon="delete-outline"
+            label={t("drawing.deleteSelection")}
+            onPress={() => {
+              editSelection((page, current) => deleteSelection(page, current.selection));
+              setSelection(null);
+            }}
+          />
+        </View>
+      ) : null}
+      <View style={styles.body}>
+        {wide && notebook.layout === "pages" && pageCount > 1 ? (
+          <ScrollView
             style={[
-              styles.swatch,
-              { backgroundColor: item, borderColor: themeColors.border },
-              color === item && [styles.selectedSwatch, { borderColor: themeColors.primary }],
+              styles.rail,
+              { borderRightColor: colors.border, backgroundColor: colors.surface },
             ]}
-          />
-        ))}
-        {widths.map((item) => (
-          <StoneButton
-            key={item}
-            label={`${item}px`}
-            variant={width === item ? "primary" : "secondary"}
-            onPress={() => setWidth(item)}
-          />
-        ))}
-      </ScrollView>
-      <View style={[styles.canvasWrap, { borderColor: themeColors.border }]}>
-        <InkCanvas
+            contentContainerStyle={styles.railContent}
+          >
+            {notebook.pages.map((page, index) => (
+              <Pressable
+                key={page.id}
+                accessibilityRole="button"
+                accessibilityLabel={t("notebook.goToPage", { page: index + 1 })}
+                onPress={() => goToPage(index)}
+                style={[
+                  styles.railPage,
+                  {
+                    borderColor: index === pageIndex ? colors.primary : colors.border,
+                    backgroundColor: "#FFFFFF",
+                  },
+                ]}
+              >
+                <StoneText variant="caption" style={{ color: "#57534E" }}>
+                  {index + 1}
+                </StoneText>
+                <StoneText variant="caption" style={{ color: "#857F7A" }}>
+                  {page.strokes.length + page.shapes.length > 0 ? "•" : ""}
+                </StoneText>
+              </Pressable>
+            ))}
+          </ScrollView>
+        ) : null}
+        <NotebookCanvas
           ref={canvasRef}
-          document={ink}
+          notebook={notebook}
           tool={tool}
           color={color}
           width={width}
           stylusOnly={stylusOnly}
           selection={selection}
-          onStroke={stroke}
-          onErase={erase}
-          onShape={shape}
+          onStroke={onStroke}
+          onErase={onErase}
+          onShape={onShape}
           onSelect={setSelection}
+          onPageChange={setPageIndex}
+          onUndo={undo}
         />
       </View>
       {error ? (
@@ -358,52 +556,155 @@ export default function DrawingScreen() {
           </StoneText>
         </Pressable>
       ) : null}
+      <ActionSheet
+        visible={menuOpen}
+        onClose={() => setMenuOpen(false)}
+        options={[
+          {
+            label: stylusOnly ? t("notebook.stylusOnlyOn") : t("notebook.stylusOnlyOff"),
+            icon: "pencil-outline",
+            onPress: () => setStylusOnly((value) => !value),
+          },
+          {
+            label: t("notebook.changePaper"),
+            icon: "document-outline",
+            onPress: () => setPaperOpen(true),
+          },
+          ...(notebook.layout === "pages"
+            ? [
+                {
+                  label: t("notebook.deletePage", { page: pageIndex + 1 }),
+                  icon: "trash-outline" as const,
+                  destructive: true,
+                  onPress: () =>
+                    Alert.alert(t("notebook.deletePageConfirm"), undefined, [
+                      { text: t("common.cancel"), style: "cancel" },
+                      {
+                        text: t("common.delete"),
+                        style: "destructive",
+                        onPress: () => {
+                          commit(removePage(notebook, pageIndex));
+                          setSelection(null);
+                          setPageIndex(Math.max(0, Math.min(pageIndex, pageCount - 2)));
+                        },
+                      },
+                    ]),
+                },
+              ]
+            : []),
+        ]}
+      />
+      <ActionSheet
+        visible={paperOpen}
+        title={t("notebook.paper")}
+        onClose={() => setPaperOpen(false)}
+        options={INK_PAPERS.map((paper) => ({
+          label: t(`notebook.paper.${paper}`),
+          icon: paper === notebook.paper ? ("checkmark" as const) : ("ellipse-outline" as const),
+          onPress: () => commit(setPaper(notebook, paper)),
+        }))}
+      />
     </Screen>
   );
 }
 
-function toolLabel(tool: InkCanvasTool, t: ReturnType<typeof useI18n>["t"]): string {
+function NotebookSetup({
+  title,
+  onTitle,
+  value,
+  onChange,
+  onStart,
+  onCancel,
+}: {
+  title: string;
+  onTitle: (title: string) => void;
+  value: { layout: InkLayout; paper: InkPaper };
+  onChange: (value: { layout: InkLayout; paper: InkPaper }) => void;
+  onStart: () => void;
+  onCancel: () => void;
+}) {
+  const { t } = useI18n();
   return (
-    {
-      pen: t("drawing.tool.pen"),
-      highlighter: t("drawing.tool.highlighter"),
-      eraser: t("drawing.tool.eraser"),
-      line: t("drawing.tool.line"),
-      arrow: t("drawing.tool.arrow"),
-      rectangle: t("drawing.tool.rectangle"),
-      ellipse: t("drawing.tool.ellipse"),
-      select: t("drawing.tool.select"),
-      lasso: t("drawing.tool.lasso"),
-      pan: t("drawing.tool.pan"),
-    } as Record<InkCanvasTool, string>
-  )[tool];
+    <ScrollView contentContainerStyle={styles.setup}>
+      <Surface style={styles.setupCard}>
+        <StoneText variant="title2">{t("notebook.setupTitle")}</StoneText>
+        <StoneInput label={t("notebook.titleField")} value={title} onChangeText={onTitle} />
+        <Overline>{t("notebook.layout")}</Overline>
+        <SegmentedControl
+          accessibilityLabel={t("notebook.layout")}
+          value={value.layout}
+          onChange={(layout) => onChange({ ...value, layout })}
+          options={[
+            { value: "pages", label: t("notebook.layout.pages") },
+            { value: "infinite", label: t("notebook.layout.infinite") },
+          ]}
+        />
+        <StoneText variant="caption" tone="muted">
+          {value.layout === "pages"
+            ? t("notebook.layout.pagesDetail")
+            : t("notebook.layout.infiniteDetail")}
+        </StoneText>
+        <Overline>{t("notebook.paper")}</Overline>
+        <View style={styles.paperRow}>
+          {INK_PAPERS.map((paper) => (
+            <Chip
+              key={paper}
+              label={t(`notebook.paper.${paper}`)}
+              selected={value.paper === paper}
+              onPress={() => onChange({ ...value, paper })}
+            />
+          ))}
+        </View>
+        <View style={styles.setupActions}>
+          <StoneButton label={t("common.cancel")} variant="quiet" onPress={onCancel} />
+          <StoneButton label={t("notebook.start")} onPress={onStart} testID="notebook-start" />
+        </View>
+      </Surface>
+    </ScrollView>
+  );
 }
 
 const styles = StyleSheet.create({
   header: {
-    minHeight: 76,
+    minHeight: 64,
     borderBottomWidth: 1,
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing.sm,
+    gap: spacing.xs,
     paddingHorizontal: spacing.sm,
   },
   title: { flex: 1 },
-  toolbar: { gap: spacing.xs, padding: spacing.sm },
-  palette: {
-    gap: spacing.sm,
+  tools: {
+    borderBottomWidth: 1,
+    flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: spacing.sm,
-    paddingBottom: spacing.sm,
+    flexWrap: "wrap",
+    justifyContent: "space-between",
   },
-  swatch: { width: 36, height: 36, borderRadius: radii.pill, borderWidth: hairline },
-  selectedSwatch: { borderWidth: 3 },
-  canvasWrap: {
-    flex: 1,
-    margin: spacing.sm,
-    borderWidth: hairline,
-    borderRadius: radii.md,
-    minHeight: 420,
+  pager: { flexDirection: "row", alignItems: "center", paddingHorizontal: spacing.sm },
+  pageLabel: { minWidth: 56, textAlign: "center" },
+  selectionBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 2,
+  },
+  body: { flex: 1, flexDirection: "row" },
+  rail: { width: 88, flexGrow: 0, borderRightWidth: 1 },
+  railContent: { padding: spacing.sm, gap: spacing.sm, alignItems: "center" },
+  railPage: {
+    width: 56,
+    height: 78,
+    borderWidth: 2,
+    borderRadius: radii.xs,
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 4,
   },
   error: { padding: spacing.sm },
+  setup: { flexGrow: 1, justifyContent: "center", padding: spacing.lg },
+  setupCard: { alignSelf: "center", width: "100%", maxWidth: 560, gap: spacing.md },
+  paperRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
+  setupActions: { flexDirection: "row", justifyContent: "flex-end", gap: spacing.sm },
 });

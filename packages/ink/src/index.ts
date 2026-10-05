@@ -224,6 +224,17 @@ export function selectLasso(document: InkDocument, polygon: readonly InkPoint[])
   return { strokeIds, shapeIds, bounds: selectionBounds(document, strokeIds, shapeIds) };
 }
 
+/** Recomputes a selection's bounds after its objects moved or were scaled. */
+export function refreshSelection(document: InkDocument, selection: InkSelection): InkSelection {
+  const strokeIds = selection.strokeIds.filter((id) =>
+    document.strokes.some((stroke) => stroke.id === id),
+  );
+  const shapeIds = selection.shapeIds.filter((id) =>
+    document.shapes.some((shape) => shape.id === id),
+  );
+  return { strokeIds, shapeIds, bounds: selectionBounds(document, strokeIds, shapeIds) };
+}
+
 export function transformSelection(
   document: InkDocument,
   selection: InkSelection,
@@ -338,17 +349,18 @@ export function renderInkToSvg(document: InkDocument): string {
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${ink.width} ${ink.height}" width="${ink.width}" height="${ink.height}"><rect width="100%" height="100%" fill="${escapeXml(ink.background)}"/>${strokeSvg}${shapeSvg}</svg>`;
 }
 
-export class InkHistory {
-  private readonly undoStack: InkDocument[] = [];
-  private readonly redoStack: InkDocument[] = [];
+/** Undo/redo over immutable snapshots: a single canvas by default, or a whole notebook. */
+export class InkHistory<T = InkDocument> {
+  private readonly undoStack: T[] = [];
+  private readonly redoStack: T[] = [];
   public constructor(
-    private current: InkDocument,
+    private current: T,
     private readonly maxEntries = 100,
   ) {}
-  public get value(): InkDocument {
+  public get value(): T {
     return this.current;
   }
-  public commit(next: InkDocument): InkDocument {
+  public commit(next: T): T {
     if (next === this.current) return this.current;
     this.undoStack.push(this.current);
     if (this.undoStack.length > this.maxEntries) this.undoStack.shift();
@@ -356,14 +368,14 @@ export class InkHistory {
     this.redoStack.length = 0;
     return this.current;
   }
-  public undo(): InkDocument {
+  public undo(): T {
     const previous = this.undoStack.pop();
     if (!previous) return this.current;
     this.redoStack.push(this.current);
     this.current = previous;
     return this.current;
   }
-  public redo(): InkDocument {
+  public redo(): T {
     const next = this.redoStack.pop();
     if (!next) return this.current;
     this.undoStack.push(this.current);
@@ -584,3 +596,4 @@ function escapeXml(value: string): string {
       character,
   );
 }
+export * from "./notebook.js";

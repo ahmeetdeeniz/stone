@@ -1,7 +1,7 @@
 import * as Crypto from "expo-crypto";
 import { Directory, File, Paths } from "expo-file-system";
 import type { Drawing, DrawingRepository, DrawingRevision } from "@stone/domain";
-import { parseInk, serializeInk } from "@stone/ink";
+import { parseNotebook, serializeNotebook } from "@stone/ink";
 import type { StoneDatabase } from "./database";
 import { enqueueOutbox } from "./sync";
 
@@ -62,7 +62,8 @@ export class SQLiteDrawingRepository implements DrawingRepository {
     previewPath: string,
     deviceId: string,
   ): Promise<Drawing> {
-    parseInk(source);
+    // Schema 1 drawings are upgraded to a one-page notebook the first time they are saved.
+    const notebook = parseNotebook(source);
     const now = new Date().toISOString();
     const sourceFile = new File(
       new Directory(Paths.document, "drawings"),
@@ -70,7 +71,7 @@ export class SQLiteDrawingRepository implements DrawingRepository {
     );
     const sourceDirectory = new Directory(Paths.document, "drawings");
     sourceDirectory.create({ idempotent: true });
-    sourceFile.write(serializeInk(parseInk(source)));
+    sourceFile.write(serializeNotebook(notebook));
     const previewFile = new File(previewPath);
     const previewBytes = previewFile.exists ? await previewFile.bytes() : new Uint8Array();
     const sourceBytes = new TextEncoder().encode(sourceFile.textSync());
