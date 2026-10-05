@@ -16,55 +16,40 @@ import { formatTaskPriority } from "@stone/i18n";
 import { ResponsiveContent } from "../../src/components/responsive";
 import { EmptyState, ErrorState, LoadingState } from "../../src/components/states";
 import {
-  Badge,
-  Card,
-  Chip,
   IconButton,
+  ListGroup,
+  ListRow,
   Overline,
   Screen,
   ScreenHeader,
-  SearchField,
+  SegmentedControl,
   StoneText,
-  Surface,
+  numeric,
 } from "../../src/components/ui";
 import { hairline, radii, spacing, typography, touchTarget } from "../../src/design/tokens";
-import type { StatusTone } from "../../src/design/tokens";
 import { useTheme } from "../../src/design/theme";
 import { useAuth } from "../../src/providers/auth-provider";
 import { useAppServices } from "../../src/providers/app-provider";
 import { useI18n } from "../../src/i18n/provider";
 
-type ViewFilter = "all" | "today" | "upcoming" | "overdue" | "completed";
-
-const agendaIcons: Readonly<
-  Record<
-    AgendaItem["kind"],
-    "calendar-outline" | "timer-outline" | "flag-outline" | "rocket-outline"
-  >
-> = {
-  event: "calendar-outline",
-  task_block: "timer-outline",
-  task_due: "flag-outline",
-  project_milestone: "rocket-outline",
-};
+type ViewFilter = "today" | "upcoming" | "all" | "completed";
 
 export default function TodayScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const { taskUseCases, projectUseCases, calendar, deviceId } = useAppServices();
-  const { t, tp } = useI18n();
-  const filterLabels: Readonly<Record<ViewFilter, string>> = {
-    all: t("common.all"),
-    today: t("tasks.today"),
-    upcoming: t("tasks.upcoming"),
-    overdue: t("tasks.overdue"),
-    completed: t("tasks.completed"),
-  };
+  const { locale, t } = useI18n();
+  const filterOptions: readonly { value: ViewFilter; label: string }[] = [
+    { value: "today", label: t("tasks.today") },
+    { value: "upcoming", label: t("tasks.upcoming") },
+    { value: "all", label: t("common.all") },
+    { value: "completed", label: t("tasks.completedShort") },
+  ];
   const [tasks, setTasks] = useState<readonly Task[]>([]);
+  const [overdue, setOverdue] = useState<readonly Task[]>([]);
   const [signals, setSignals] = useState<readonly TodayItem[]>([]);
   const [agendaItems, setAgendaItems] = useState<readonly AgendaItem[]>([]);
   const [capture, setCapture] = useState("");
-  const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<ViewFilter>("today");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -82,16 +67,21 @@ export default function TodayScreen() {
       setError(null);
       const options: TaskListOptions =
         filter === "completed"
-          ? { state: "completed", search }
+          ? { state: "completed" }
           : filter === "all"
-            ? { state: "open", search }
-            : { state: "open", due: filter, today, search };
-      const [nextTasks, nextSignals, nextCalendar] = await Promise.all([
+            ? { state: "open" }
+            : { state: "open", due: filter, today };
+      const [nextTasks, nextOverdue, nextSignals, nextCalendar] = await Promise.all([
         taskUseCases.list(user.uid, options),
+        // Overdue work belongs on today's list instead of behind its own filter.
+        filter === "today"
+          ? taskUseCases.list(user.uid, { state: "open", due: "overdue", today })
+          : Promise.resolve([] as readonly Task[]),
         projectUseCases.today(user.uid, new Date().toISOString()),
         calendar.list(user.uid, { startDate: today, endDate: today }),
       ]);
       setTasks(nextTasks);
+      setOverdue(nextOverdue);
       setSignals(nextSignals.filter((item) => item.kind !== "task"));
       setAgendaItems(buildAgendaItems(nextCalendar, [], [], today, today));
     } catch (caught) {
@@ -99,7 +89,7 @@ export default function TodayScreen() {
     } finally {
       setLoading(false);
     }
-  }, [calendar, filter, projectUseCases, search, taskUseCases, today, user]);
+  }, [calendar, filter, projectUseCases, taskUseCases, today, user]);
 
   useFocusEffect(useCallback(() => void load(), [load]));
 
@@ -157,7 +147,27 @@ export default function TodayScreen() {
     }
   };
 
-  const subtitle = useMemo(() => tp("planning.subtitle", tasks.length), [tasks.length, tp]);
+  const dateLabel = useMemo(
+    () =>
+      new Intl.DateTimeFormat(locale, { weekday: "long", day: "numeric", month: "long" }).format(
+        new Date(),
+      ),
+    [locale],
+  );
+  const openTask = (task: Task) => router.push({ pathname: "/task/[id]", params: { id: task.id } });
+  const taskList = (items: readonly Task[]) => (
+    <ListGroup>
+      {items.map((task) => (
+        <TaskRow
+          key={task.id}
+          task={task}
+          today={today}
+          onToggle={() => void toggle(task)}
+          onOpen={() => openTask(task)}
+        />
+      ))}
+    </ListGroup>
+  );
 
   return (
     <Screen padded={false}>
@@ -168,14 +178,26 @@ export default function TodayScreen() {
       >
         <ResponsiveContent>
           <ScreenHeader
-            title={t("planning.title")}
-            subtitle={subtitle}
+            title={t("tabs.today")}
+            subtitle={dateLabel}
             actions={
-              <IconButton
-                icon="stats-chart-outline"
-                accessibilityLabel={t("review.title")}
-                onPress={() => router.push("/review")}
-              />
+              <>
+                <IconButton
+                  icon="search"
+                  accessibilityLabel={t("search.title")}
+                  onPress={() => router.push("/search")}
+                />
+                <IconButton
+                  icon="stats-chart-outline"
+                  accessibilityLabel={t("review.title")}
+                  onPress={() => router.push("/review")}
+                />
+                <IconButton
+                  icon="settings-outline"
+                  accessibilityLabel={t("tabs.settings")}
+                  onPress={() => router.push("/settings")}
+                />
+              </>
             }
           />
 
@@ -189,100 +211,81 @@ export default function TodayScreen() {
           />
           {parsedCapture ? <QuickAddPreview parsed={parsedCapture} today={today} /> : null}
 
-          <SearchField
-            value={search}
-            onChangeText={setSearch}
-            placeholder={t("tasks.searchPlaceholder")}
-            accessibilityLabel={t("tasks.search")}
-            onClear={() => setSearch("")}
-          />
-
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.filters}
-          >
-            {(Object.keys(filterLabels) as ViewFilter[]).map((value) => (
-              <Chip
-                key={value}
-                label={filterLabels[value]}
-                selected={filter === value}
-                onPress={() => setFilter(value)}
-                accessibilityLabel={t("tasks.showFilter", { filter: filterLabels[value] })}
-              />
-            ))}
-          </ScrollView>
-
-          {filter === "today" && agendaItems.length > 0 ? (
-            <View style={styles.section}>
-              <Overline>{t("tasks.timelineToday")}</Overline>
-              <Surface padded={false} style={styles.timeline}>
-                {agendaItems.map((item, index) => (
-                  <View key={item.id}>
-                    {index > 0 ? <TimelineDivider /> : null}
-                    <AgendaRow item={item} />
-                  </View>
-                ))}
-              </Surface>
-            </View>
-          ) : null}
-
-          <View style={styles.section}>
-            {loading ? (
-              <LoadingState label={t("tasks.loading")} />
-            ) : error ? (
-              <ErrorState message={error} onRetry={() => void load()} />
-            ) : tasks.length === 0 ? (
-              <EmptyState
-                icon="checkmark-done-outline"
-                title={t("tasks.emptyFilter")}
-                description={t("tasks.emptyFilterDetail")}
-              />
-            ) : (
-              <Surface padded={false} style={styles.timeline}>
-                {tasks.map((task, index) => (
-                  <View key={task.id}>
-                    {index > 0 ? <TimelineDivider /> : null}
-                    <TaskRow
-                      task={task}
-                      onToggle={() => void toggle(task)}
-                      onOpen={() =>
-                        router.push({ pathname: "/task/[id]", params: { id: task.id } })
-                      }
-                    />
-                  </View>
-                ))}
-              </Surface>
-            )}
+          <View style={styles.filters}>
+            <SegmentedControl
+              options={filterOptions}
+              value={filter}
+              onChange={setFilter}
+              accessibilityLabel={t("tasks.filtersA11y")}
+            />
           </View>
 
-          {filter === "today" && signals.length > 0 ? (
-            <View style={styles.section}>
-              <Overline>{t("tasks.projectSignals")}</Overline>
-              {signals.map((item) => (
-                <Card
-                  key={item.id}
-                  accessibilityLabel={t("tasks.openProjectA11y", { title: item.projectTitle })}
-                  onPress={() =>
-                    router.push({ pathname: "/project/[id]", params: { id: item.projectId } })
-                  }
-                >
-                  <View style={styles.signalHead}>
-                    <StoneText variant="caption" tone="accent" numberOfLines={1}>
-                      {item.projectTitle}
-                    </StoneText>
-                    {item.blocked ? <Badge label={t("tasks.blocker")} tone="danger" /> : null}
-                  </View>
-                  <StoneText variant="body" numberOfLines={2}>
-                    {item.text}
-                  </StoneText>
-                  <StoneText variant="caption" tone="muted" style={styles.signalMeta}>
-                    {item.dueDate ?? t("tasks.noDate")}
-                  </StoneText>
-                </Card>
-              ))}
-            </View>
-          ) : null}
+          {loading && tasks.length === 0 ? (
+            <LoadingState label={t("tasks.loading")} />
+          ) : error ? (
+            <ErrorState message={error} onRetry={() => void load()} />
+          ) : (
+            <>
+              {filter === "today" && agendaItems.length > 0 ? (
+                <View style={styles.section}>
+                  <Overline>{t("tabs.calendar")}</Overline>
+                  <ListGroup>
+                    {agendaItems.map((item) => (
+                      <AgendaRow key={item.id} item={item} />
+                    ))}
+                  </ListGroup>
+                </View>
+              ) : null}
+
+              {overdue.length > 0 ? (
+                <View style={styles.section}>
+                  <Overline tone="danger">{t("tasks.overdue")}</Overline>
+                  {taskList(overdue)}
+                </View>
+              ) : null}
+
+              <View style={styles.section}>
+                {filter === "today" && (overdue.length > 0 || agendaItems.length > 0) ? (
+                  <Overline>{t("tasks.title")}</Overline>
+                ) : null}
+                {tasks.length === 0 ? (
+                  <EmptyState
+                    icon="checkmark-done-outline"
+                    title={t("tasks.emptyFilter")}
+                    description={t("tasks.emptyFilterDetail")}
+                  />
+                ) : (
+                  taskList(tasks)
+                )}
+              </View>
+
+              {filter === "today" && signals.length > 0 ? (
+                <View style={styles.section}>
+                  <Overline>{t("tasks.projectSignals")}</Overline>
+                  <ListGroup>
+                    {signals.map((item) => (
+                      <ListRow
+                        key={item.id}
+                        title={item.text}
+                        subtitle={item.projectTitle}
+                        meta={item.blocked ? t("tasks.blocker") : null}
+                        chevron
+                        accessibilityLabel={t("tasks.openProjectA11y", {
+                          title: item.projectTitle,
+                        })}
+                        onPress={() =>
+                          router.push({
+                            pathname: "/project/[id]",
+                            params: { id: item.projectId },
+                          })
+                        }
+                      />
+                    ))}
+                  </ListGroup>
+                </View>
+              ) : null}
+            </>
+          )}
         </ResponsiveContent>
       </ScrollView>
     </Screen>
@@ -400,25 +403,21 @@ function QuickCapture({
   );
 }
 
-function TimelineDivider() {
-  const { colors } = useTheme();
-  return <View style={[styles.rowDivider, { backgroundColor: colors.border }]} />;
-}
-
 function AgendaRow({ item }: { item: AgendaItem }) {
   const { colors } = useTheme();
   const { t } = useI18n();
   return (
     <View style={styles.agendaRow}>
-      <View style={[styles.agendaIcon, { backgroundColor: colors.primarySoft }]}>
-        <Ionicons name={agendaIcons[item.kind]} size={16} color={colors.primaryText} />
-      </View>
-      <View style={styles.rowBody}>
+      <StoneText variant="label" tone="secondary" style={[styles.agendaTime, numeric]}>
+        {item.sortTime ?? t("calendar.allDay")}
+      </StoneText>
+      <View style={[styles.agendaBar, { backgroundColor: colors.primary }]} />
+      <View style={styles.agendaBody}>
         <StoneText variant="body" numberOfLines={1}>
           {item.title}
         </StoneText>
         <StoneText variant="caption" tone="muted">
-          {agendaLabel(item.kind, t)} · {item.sortTime ?? t("calendar.allDay")}
+          {agendaLabel(item.kind, t)}
         </StoneText>
       </View>
       {item.completed ? (
@@ -437,25 +436,27 @@ function agendaLabel(kind: AgendaItem["kind"], t: ReturnType<typeof useI18n>["t"
   }[kind];
 }
 
-const priorityTone: Readonly<Record<Task["priority"], StatusTone>> = {
-  none: "neutral",
-  low: "neutral",
-  medium: "info",
-  high: "danger",
-};
-
 function TaskRow({
   task,
+  today,
   onToggle,
   onOpen,
 }: {
   task: Task;
+  today: string;
   onToggle: () => void;
   onOpen: () => void;
 }) {
   const completed = task.state === "completed";
-  const { colors } = useTheme();
+  const { colors, tones } = useTheme();
   const { locale, t } = useI18n();
+  const due =
+    task.dueDate && task.dueDate !== today
+      ? new Intl.DateTimeFormat(locale, { day: "numeric", month: "short" }).format(
+          new Date(`${task.dueDate}T12:00:00`),
+        )
+      : null;
+  const meta = [due, task.dueTime].filter(Boolean).join(" ");
   return (
     <View style={styles.taskRow}>
       <Pressable
@@ -473,19 +474,23 @@ function TaskRow({
           style={[
             styles.checkbox,
             {
-              borderColor: completed ? colors.primary : colors.borderStrong,
+              borderColor: completed
+                ? colors.primary
+                : task.priority === "high"
+                  ? tones.danger.fg
+                  : colors.borderStrong,
               backgroundColor: completed ? colors.primary : "transparent",
             },
           ]}
         >
-          {completed ? <Ionicons name="checkmark" size={15} color={colors.onPrimary} /> : null}
+          {completed ? <Ionicons name="checkmark" size={14} color={colors.onPrimary} /> : null}
         </View>
       </Pressable>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={t("tasks.editA11y", { title: task.title })}
         onPress={onOpen}
-        style={styles.rowBody}
+        style={({ pressed }) => [styles.rowBody, pressed && { opacity: 0.6 }]}
       >
         <StoneText
           variant="body"
@@ -495,28 +500,32 @@ function TaskRow({
         >
           {task.title}
         </StoneText>
-        <View style={styles.taskMeta}>
-          {task.priority !== "none" ? (
-            <Badge
-              label={formatTaskPriority(locale, task.priority)}
-              tone={priorityTone[task.priority]}
-            />
-          ) : null}
-          <StoneText variant="caption" tone="muted">
-            {task.dueDate ?? t("tasks.noDate")}
-            {task.dueTime ? ` ${task.dueTime}` : ""}
-          </StoneText>
-          {task.sourceDocumentId ? (
-            <Ionicons name="link-outline" size={13} color={colors.textMuted} />
-          ) : null}
-        </View>
+        {task.priority !== "none" || meta || task.tags.length > 0 || task.sourceDocumentId ? (
+          <View style={styles.taskMeta}>
+            {task.priority !== "none" ? (
+              <StoneText
+                variant="caption"
+                style={{ color: task.priority === "high" ? tones.danger.fg : colors.textMuted }}
+              >
+                {formatTaskPriority(locale, task.priority)}
+              </StoneText>
+            ) : null}
+            {meta ? (
+              <StoneText variant="caption" tone="muted" style={numeric}>
+                {meta}
+              </StoneText>
+            ) : null}
+            {task.tags.slice(0, 3).map((tag) => (
+              <StoneText key={tag} variant="caption" tone="muted">
+                #{tag}
+              </StoneText>
+            ))}
+            {task.sourceDocumentId ? (
+              <Ionicons name="link-outline" size={12} color={colors.textMuted} />
+            ) : null}
+          </View>
+        ) : null}
       </Pressable>
-      <IconButton
-        icon="chevron-forward"
-        tone="muted"
-        accessibilityLabel={t("tasks.editA11y", { title: task.title })}
-        onPress={onOpen}
-      />
     </View>
   );
 }
@@ -528,13 +537,13 @@ function message(error: unknown, fallback: string): string {
 const styles = StyleSheet.create({
   page: { paddingHorizontal: spacing.lg, paddingTop: spacing.lg, paddingBottom: spacing.giant },
   section: { gap: spacing.sm, marginTop: spacing.xl },
-  filters: { gap: spacing.sm, paddingVertical: spacing.lg, paddingRight: spacing.lg },
+  filters: { marginTop: spacing.xs },
 
   capture: {
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.sm,
-    minHeight: 54,
+    minHeight: 52,
     borderWidth: hairline,
     borderRadius: radii.lg,
     paddingLeft: spacing.lg,
@@ -559,34 +568,28 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
 
-  timeline: { overflow: "hidden" },
-  rowDivider: { height: hairline, marginLeft: spacing.giant + spacing.sm },
-
   agendaRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.md,
+    minHeight: 56,
     paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
+    paddingVertical: spacing.sm,
   },
-  agendaIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: radii.sm,
-    alignItems: "center",
-    justifyContent: "center",
-  },
+  agendaTime: { width: 60 },
+  agendaBar: { width: 3, height: 32, borderRadius: radii.pill },
+  agendaBody: { flex: 1, gap: 2 },
 
   taskRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing.md,
-    paddingLeft: spacing.lg,
-    paddingRight: spacing.xs,
-    paddingVertical: spacing.sm,
+    gap: spacing.sm,
+    paddingLeft: spacing.md,
+    paddingRight: spacing.lg,
+    minHeight: 52,
   },
   checkboxHit: {
-    width: 32,
+    width: 36,
     height: touchTarget,
     alignItems: "center",
     justifyContent: "center",
@@ -594,21 +597,12 @@ const styles = StyleSheet.create({
   checkbox: {
     width: 22,
     height: 22,
-    borderRadius: radii.xs,
+    borderRadius: radii.pill,
     borderWidth: 1.5,
     alignItems: "center",
     justifyContent: "center",
   },
-  rowBody: { flex: 1, gap: spacing.xxs, paddingVertical: spacing.xs },
+  rowBody: { flex: 1, gap: 2, paddingVertical: spacing.md },
   completedTitle: { textDecorationLine: "line-through" },
-  taskMeta: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: spacing.xs },
-
-  signalHead: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: spacing.sm,
-    marginBottom: spacing.xs,
-  },
-  signalMeta: { marginTop: spacing.xs },
+  taskMeta: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: spacing.sm },
 });

@@ -1,20 +1,22 @@
 import { useFocusEffect, useRouter } from "expo-router";
-import { useCallback, useMemo, useState } from "react";
-import { Alert, FlatList, StyleSheet, View } from "react-native";
+import { useCallback, useMemo, useState, type ReactNode } from "react";
+import { Alert, SectionList, StyleSheet, View } from "react-native";
 import type { Document } from "@stone/domain";
-import { formatInstant } from "@stone/i18n";
 import { ResponsiveContent } from "../../src/components/responsive";
 import { EmptyState, ErrorState, LoadingState } from "../../src/components/states";
 import {
-  Card,
+  ActionSheet,
   IconButton,
+  ListRow,
+  Overline,
   Screen,
   ScreenHeader,
   SearchField,
   StoneButton,
-  StoneText,
+  type IconName,
 } from "../../src/components/ui";
-import { spacing } from "../../src/design/tokens";
+import { hairline, radii, spacing } from "../../src/design/tokens";
+import { useTheme } from "../../src/design/theme";
 import { useAuth } from "../../src/providers/auth-provider";
 import { useAppServices } from "../../src/providers/app-provider";
 import { pickAndImportNote } from "../../src/notes/note-files";
@@ -85,16 +87,6 @@ export default function NotesScreen() {
     }
   };
 
-  const chooseTemplate = () => {
-    Alert.alert(t("notes.newFromTemplate"), undefined, [
-      ...NOTE_TEMPLATES.map((template) => ({
-        text: t(`notes.template.${template}`),
-        onPress: () => void createNote(template),
-      })),
-      { text: t("common.cancel"), style: "cancel" as const },
-    ]);
-  };
-
   const importNote = async () => {
     if (!user) return;
     setBusy(true);
@@ -145,45 +137,39 @@ export default function NotesScreen() {
     ]);
   };
 
+  const [createSheet, setCreateSheet] = useState(false);
+  const [actionsFor, setActionsFor] = useState<Document | null>(null);
   const subtitle = useMemo(() => tp("notes.count", notes.length), [notes.length, tp]);
+  const sections = useMemo(() => {
+    const pinned = notes.filter((note) => note.isPinned);
+    const others = notes.filter((note) => !note.isPinned);
+    return [
+      ...(pinned.length > 0 ? [{ key: "pinned", title: t("notes.pinned"), data: pinned }] : []),
+      ...(others.length > 0
+        ? [{ key: "all", title: pinned.length > 0 ? t("tabs.notes") : null, data: others }]
+        : []),
+    ];
+  }, [notes, t]);
 
   return (
     <Screen>
       <ResponsiveContent>
         <ScreenHeader
-          eyebrow="Stone"
           title={t("tabs.notes")}
           subtitle={loading ? undefined : subtitle}
           actions={
             <>
               <IconButton
-                icon="search-outline"
+                icon="search"
                 accessibilityLabel={t("search.title")}
                 onPress={() => router.push("/search")}
               />
               <IconButton
-                icon="today-outline"
-                accessibilityLabel={t("notes.dailyNote")}
-                onPress={() => void createNote("daily")}
-                disabled={busy}
-              />
-              <IconButton
-                icon="folder-open-outline"
-                accessibilityLabel={t("notes.openMarkdown")}
-                onPress={() => void importNote()}
-                disabled={busy}
-              />
-              <IconButton
-                icon="brush-outline"
-                accessibilityLabel={t("notes.newDrawing")}
-                onPress={() => router.push({ pathname: "/drawing/[id]", params: { id: "new" } })}
-                disabled={busy}
-              />
-              <StoneButton
-                label={t("notes.new")}
                 icon="add"
-                size="sm"
-                onPress={chooseTemplate}
+                tone="accent"
+                active
+                accessibilityLabel={t("notes.new")}
+                onPress={() => setCreateSheet(true)}
                 disabled={busy}
                 testID="notes-new"
               />
@@ -197,15 +183,16 @@ export default function NotesScreen() {
           accessibilityLabel={t("notes.search")}
           onClear={() => setSearch("")}
         />
-        {loading ? (
+        {loading && notes.length === 0 ? (
           <LoadingState label={t("notes.loading")} />
         ) : error ? (
           <ErrorState message={error} onRetry={() => void loadNotes()} />
         ) : (
-          <FlatList
-            data={notes}
+          <SectionList
+            sections={sections}
             keyExtractor={(item) => item.id}
             showsVerticalScrollIndicator={false}
+            stickySectionHeadersEnabled={false}
             contentContainerStyle={notes.length === 0 ? styles.emptyList : styles.list}
             ListEmptyComponent={
               <EmptyState
@@ -224,69 +211,151 @@ export default function NotesScreen() {
                 }
               />
             }
-            renderItem={({ item }) => (
-              <Card
-                accessibilityLabel={t("notes.openA11y", { title: item.title })}
-                onPress={() => router.push({ pathname: "/editor", params: { id: item.id } })}
-              >
-                <View style={styles.cardHead}>
-                  <StoneText variant="title3" numberOfLines={1} style={styles.cardTitle}>
-                    {item.title}
-                  </StoneText>
-                  <View style={styles.cardActions}>
-                    <IconButton
-                      icon={item.isPinned ? "star" : "star-outline"}
-                      active={item.isPinned}
-                      accessibilityLabel={item.isPinned ? t("notes.unpin") : t("notes.pin")}
-                      onPress={() => void togglePin(item)}
-                    />
-                    <IconButton
-                      icon="trash-outline"
-                      tone="muted"
-                      accessibilityLabel={t("notes.moveToTrash")}
-                      onPress={() => moveToTrash(item)}
-                    />
-                  </View>
+            renderSectionHeader={({ section }) =>
+              section.title ? (
+                <View style={styles.sectionHeader}>
+                  <Overline>{section.title}</Overline>
                 </View>
-                <StoneText variant="bodySmall" tone="secondary" numberOfLines={2}>
-                  {preview(item.markdown, t("notes.emptyMarkdown"))}
-                </StoneText>
-                <StoneText variant="caption" tone="muted" style={styles.date}>
-                  {formatInstant(
-                    locale,
-                    item.updatedAt,
-                    Intl.DateTimeFormat().resolvedOptions().timeZone,
-                  )}
-                </StoneText>
-              </Card>
+              ) : (
+                <View style={styles.sectionGap} />
+              )
+            }
+            renderItem={({ item, index, section }) => (
+              <GroupedRow index={index} count={section.data.length}>
+                <ListRow
+                  title={item.title || t("notes.untitled")}
+                  subtitle={preview(item, t("notes.emptyMarkdown"))}
+                  meta={shortDate(locale, item.updatedAt)}
+                  accessibilityLabel={t("notes.openA11y", { title: item.title })}
+                  onPress={() => router.push({ pathname: "/editor", params: { id: item.id } })}
+                  onLongPress={() => setActionsFor(item)}
+                />
+              </GroupedRow>
             )}
           />
         )}
       </ResponsiveContent>
+      <ActionSheet
+        visible={createSheet}
+        title={t("notes.new")}
+        onClose={() => setCreateSheet(false)}
+        options={[
+          ...NOTE_TEMPLATES.map((template) => ({
+            label: t(`notes.template.${template}`),
+            icon: templateIcons[template],
+            onPress: () => void createNote(template),
+          })),
+          {
+            label: t("notes.newDrawing"),
+            icon: "brush-outline" as const,
+            onPress: () => router.push({ pathname: "/drawing/[id]", params: { id: "new" } }),
+          },
+          {
+            label: t("notes.openMarkdown"),
+            icon: "folder-open-outline" as const,
+            onPress: () => void importNote(),
+          },
+        ]}
+      />
+      <ActionSheet
+        visible={actionsFor !== null}
+        title={actionsFor?.title}
+        onClose={() => setActionsFor(null)}
+        options={
+          actionsFor
+            ? [
+                {
+                  label: actionsFor.isPinned ? t("notes.unpin") : t("notes.pin"),
+                  icon: actionsFor.isPinned ? "pin" : "pin-outline",
+                  onPress: () => void togglePin(actionsFor),
+                },
+                {
+                  label: t("notes.moveToTrash"),
+                  icon: "trash-outline",
+                  destructive: true,
+                  onPress: () => moveToTrash(actionsFor),
+                },
+              ]
+            : []
+        }
+      />
     </Screen>
   );
 }
 
-function preview(markdown: string, emptyLabel: string): string {
+const templateIcons: Readonly<Record<NoteTemplate, IconName>> = {
+  blank: "document-outline",
+  daily: "today-outline",
+  meeting: "people-outline",
+};
+
+/** Wraps a list row so consecutive rows read as one rounded group with inset separators. */
+function GroupedRow({
+  index,
+  count,
+  children,
+}: {
+  index: number;
+  count: number;
+  children: ReactNode;
+}) {
+  const { colors } = useTheme();
+  const first = index === 0;
+  const last = index === count - 1;
   return (
-    markdown
-      .replace(/^---[\s\S]*?---\s*/u, "")
-      .replace(/[*_`>#-]/gu, "")
-      .trim() || emptyLabel
+    <View
+      style={[
+        styles.groupRow,
+        { backgroundColor: colors.surface, borderColor: colors.border },
+        first && styles.groupFirst,
+        last && styles.groupLast,
+      ]}
+    >
+      {!first ? <View style={[styles.groupSeparator, { backgroundColor: colors.border }]} /> : null}
+      {children}
+    </View>
   );
 }
 
+/** Body text without front matter, Markdown punctuation, or a heading repeating the title. */
+function preview(note: Document, emptyLabel: string): string {
+  const body = note.markdown
+    .replace(/^---[\s\S]*?---\s*/u, "")
+    .split("\n")
+    .filter((line, index) => !(index === 0 && /^#\s/u.test(line)))
+    .map((line) => line.replace(/^\s*(?:[-*+]|\d+\.)\s+(?:\[[ xX]\]\s+)?/u, ""))
+    .join(" ")
+    .replace(/[*_`>#]|^-\s|\[[ xX]\]/gu, "")
+    .replace(/\s+/gu, " ")
+    .trim();
+  return body || emptyLabel;
+}
+
+function shortDate(locale: string, instant: string): string {
+  const date = new Date(instant);
+  const now = new Date();
+  const sameDay = date.toDateString() === now.toDateString();
+  return new Intl.DateTimeFormat(
+    locale,
+    sameDay ? { hour: "2-digit", minute: "2-digit" } : { day: "numeric", month: "short" },
+  ).format(date);
+}
+
 const styles = StyleSheet.create({
-  list: { gap: spacing.md, paddingTop: spacing.lg, paddingBottom: spacing.giant },
+  list: { paddingTop: spacing.sm, paddingBottom: spacing.giant },
   emptyList: { flexGrow: 1 },
-  cardHead: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: spacing.sm,
-    marginBottom: spacing.xs,
+  sectionHeader: { paddingTop: spacing.lg, paddingBottom: spacing.sm },
+  sectionGap: { height: spacing.md },
+  groupRow: { borderLeftWidth: hairline, borderRightWidth: hairline, overflow: "hidden" },
+  groupFirst: {
+    borderTopWidth: hairline,
+    borderTopLeftRadius: radii.lg,
+    borderTopRightRadius: radii.lg,
   },
-  cardTitle: { flex: 1 },
-  cardActions: { flexDirection: "row", alignItems: "center", marginRight: -spacing.sm },
-  date: { marginTop: spacing.sm },
+  groupLast: {
+    borderBottomWidth: hairline,
+    borderBottomLeftRadius: radii.lg,
+    borderBottomRightRadius: radii.lg,
+  },
+  groupSeparator: { height: hairline, marginLeft: spacing.lg },
 });

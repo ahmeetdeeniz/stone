@@ -8,5 +8,5 @@ export default function Index() {
   const { t } = useI18n();
   if (status === "loading") return <LoadingState label={t("app.sessionChecking")} />;
   if (status === "error") return <ErrorState message={error ?? t("app.firebaseCheck")} />;
-  return user ? <Redirect href="/(tabs)/notes" /> : <Redirect href="/(auth)/sign-in" />;
+  return user ? <Redirect href="/(tabs)/today" /> : <Redirect href="/(auth)/sign-in" />;
 }

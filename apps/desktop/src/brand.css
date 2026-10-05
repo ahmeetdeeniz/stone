@@ -1,54 +1,57 @@
-/* Stone 2026 brand refresh — warm surfaces built around the canonical #2e0702 oxblood. */
+/*
+ * Stone desktop palette — the same neutral "stone" greys and single brick accent as the mobile
+ * app (apps/mobile/src/design/tokens.ts). Colour is reserved for the accent and for status.
+ */
 :root,
 :root[data-theme="light"] {
-  --bg: #fbf7f5;
-  --bg-secondary: #f4ece8;
-  --surface: #fffdfc;
-  --surface-raised: #fffaf7;
-  --surface-strong: #f2e6e1;
-  --surface-sunken: #f0e2dc;
-  --text: #271b18;
-  --text-secondary: #745f59;
-  --muted: #9a8179;
-  --line: #e8d8d2;
-  --line-strong: #d9c2ba;
-  --accent: #2e0702;
-  --accent-hover: #4a0c05;
-  --accent-strong: #2e0702;
-  --accent-soft: #f3e3de;
-  --accent-soft-line: #d9b9af;
+  --bg: #fafaf9;
+  --bg-secondary: #f5f5f4;
+  --surface: #ffffff;
+  --surface-raised: #ffffff;
+  --surface-strong: #f5f5f4;
+  --surface-sunken: #f2f1ef;
+  --text: #1c1917;
+  --text-secondary: #57534e;
+  --muted: #857f7a;
+  --line: #e7e5e4;
+  --line-strong: #d6d3d1;
+  --accent: #a13d27;
+  --accent-hover: #86321f;
+  --accent-strong: #8f3420;
+  --accent-soft: #fbefec;
+  --accent-soft-line: #f1d2ca;
   --on-accent: #ffffff;
-  --active-line: #2e07020d;
-  --selection: #2e07023d;
-  --caret: #2e0702;
-  --focus-ring: #6d1a0f;
-  --shadow-sm: 0 1px 2px #2e07020a, 0 2px 8px #2e070212;
-  --shadow-md: 0 6px 18px #2e07021a;
+  --active-line: #1c19170a;
+  --selection: #a13d2733;
+  --caret: #a13d27;
+  --focus-ring: #a13d27;
+  --shadow-sm: 0 1px 2px #1c19170a, 0 1px 6px #1c19170a;
+  --shadow-md: 0 8px 24px #1c191714;
 }
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --bg: #160b09;
-  --bg-secondary: #1f100d;
-  --surface: #291510;
-  --surface-raised: #351a14;
-  --surface-strong: #351a14;
-  --surface-sunken: #120706;
-  --text: #fff7f4;
-  --text-secondary: #d8c0ba;
-  --muted: #a98981;
-  --line: #4a2821;
-  --line-strong: #62352b;
-  --accent: #2e0702;
-  --accent-hover: #5a1008;
-  --accent-strong: #f0b3a6;
-  --accent-soft: #3b1712;
-  --accent-soft-line: #643026;
-  --on-accent: #ffffff;
-  --active-line: #f0b3a614;
-  --selection: #a53c2b66;
-  --caret: #f0b3a6;
-  --focus-ring: #e58e7d;
+  --bg: #0c0a09;
+  --bg-secondary: #141210;
+  --surface: #1a1715;
+  --surface-raised: #23201d;
+  --surface-strong: #23201d;
+  --surface-sunken: #141210;
+  --text: #f5f5f4;
+  --text-secondary: #c9c4c0;
+  --muted: #948e89;
+  --line: #2c2825;
+  --line-strong: #403a36;
+  --accent: #f08d74;
+  --accent-hover: #e07a61;
+  --accent-strong: #f5a895;
+  --accent-soft: #33201b;
+  --accent-soft-line: #4d2e26;
+  --on-accent: #1c1917;
+  --active-line: #ffffff08;
+  --selection: #f08d7440;
+  --caret: #f5a895;
+  --focus-ring: #f08d74;
   --shadow-sm: 0 1px 2px #00000045, 0 2px 10px #00000033;
   --shadow-md: 0 8px 24px #00000059;
 }
@@ -56,27 +59,27 @@
 @media (prefers-color-scheme: dark) {
   :root[data-theme="system"] {
     color-scheme: dark;
-    --bg: #160b09;
-    --bg-secondary: #1f100d;
-    --surface: #291510;
-    --surface-raised: #351a14;
-    --surface-strong: #351a14;
-    --surface-sunken: #120706;
-    --text: #fff7f4;
-    --text-secondary: #d8c0ba;
-    --muted: #a98981;
-    --line: #4a2821;
-    --line-strong: #62352b;
-    --accent: #2e0702;
-    --accent-hover: #5a1008;
-    --accent-strong: #f0b3a6;
-    --accent-soft: #3b1712;
-    --accent-soft-line: #643026;
-    --on-accent: #ffffff;
-    --active-line: #f0b3a614;
-    --selection: #a53c2b66;
-    --caret: #f0b3a6;
-    --focus-ring: #e58e7d;
+    --bg: #0c0a09;
+    --bg-secondary: #141210;
+    --surface: #1a1715;
+    --surface-raised: #23201d;
+    --surface-strong: #23201d;
+    --surface-sunken: #141210;
+    --text: #f5f5f4;
+    --text-secondary: #c9c4c0;
+    --muted: #948e89;
+    --line: #2c2825;
+    --line-strong: #403a36;
+    --accent: #f08d74;
+    --accent-hover: #e07a61;
+    --accent-strong: #f5a895;
+    --accent-soft: #33201b;
+    --accent-soft-line: #4d2e26;
+    --on-accent: #1c1917;
+    --active-line: #ffffff08;
+    --selection: #f08d7440;
+    --caret: #f5a895;
+    --focus-ring: #f08d74;
     --shadow-sm: 0 1px 2px #00000045, 0 2px 10px #00000033;
     --shadow-md: 0 8px 24px #00000059;
   }
@@ -100,5 +103,5 @@
 
 .full-wordmark,
 .eyebrow {
-  color: var(--accent-strong);
+  color: var(--muted);
 }

@@ -10,27 +10,50 @@ export const colors = {
     purple300: "#F0B3A6",
     purple100: "#F3E3DE",
   },
+  /**
+   * Neutral "stone" greys carry the interface; colour is reserved for the one accent and for
+   * status. Surfaces are white-on-near-white so lists read as paper, not as tinted cards.
+   */
   light: {
-    background: "#FBF7F5",
-    backgroundSecondary: "#F4ECE8",
-    surface: "#FFFDFC",
-    surfaceRaised: "#FFFAF7",
-    text: "#271B18",
-    textSecondary: "#745F59",
-    textMuted: "#9A8179",
-    border: "#E8D8D2",
-    borderStrong: "#D9C2BA",
+    background: "#FAFAF9",
+    backgroundSecondary: "#F5F5F4",
+    surface: "#FFFFFF",
+    surfaceRaised: "#FFFFFF",
+    text: "#1C1917",
+    textSecondary: "#57534E",
+    textMuted: "#857F7A",
+    border: "#E7E5E4",
+    borderStrong: "#D6D3D1",
   },
   dark: {
-    background: "#160B09",
-    backgroundSecondary: "#1F100D",
-    surface: "#291510",
-    surfaceRaised: "#351A14",
-    text: "#FFF7F4",
-    textSecondary: "#D8C0BA",
-    textMuted: "#A98981",
-    border: "#4A2821",
-    borderStrong: "#62352B",
+    background: "#0C0A09",
+    backgroundSecondary: "#141210",
+    surface: "#1A1715",
+    surfaceRaised: "#23201D",
+    text: "#F5F5F4",
+    textSecondary: "#C9C4C0",
+    textMuted: "#948E89",
+    border: "#2C2825",
+    borderStrong: "#403A36",
+  },
+  /** The single accent: a brick red from the Stone mark, tuned for contrast in each mode. */
+  accent: {
+    light: {
+      base: "#A13D27",
+      pressed: "#86321F",
+      soft: "#FBEFEC",
+      softBorder: "#F1D2CA",
+      text: "#8F3420",
+      on: "#FFFFFF",
+    },
+    dark: {
+      base: "#F08D74",
+      pressed: "#E07A61",
+      soft: "#33201B",
+      softBorder: "#4D2E26",
+      text: "#F5A895",
+      on: "#1C1917",
+    },
   },
   status: {
     success: "#2F9E68",
@@ -41,29 +64,20 @@ export const colors = {
   },
 } as const;
 
-/**
- * Roles derived from the Stone oxblood palette. Screens consume semantic roles
- * so the brand can stay coherent in both light and dark appearance modes.
- */
+/** Supporting roles derived from the neutral palette. */
 export const derived = {
   light: {
-    surfaceSunken: "#F0E2DC",
-    surfacePressed: "#F5EAE6",
-    accentSoft: "#F3E3DE",
-    accentSoftBorder: "#D9B9AF",
-    accentText: "#2E0702",
-    overlay: "rgba(46, 7, 2, 0.42)",
-    scrim: "rgba(46, 7, 2, 0.06)",
-    shadow: "#2E0702",
+    surfaceSunken: "#F2F1EF",
+    surfacePressed: "#F2F1EF",
+    overlay: "rgba(28, 25, 23, 0.42)",
+    scrim: "rgba(28, 25, 23, 0.04)",
+    shadow: "#1C1917",
   },
   dark: {
-    surfaceSunken: "#120706",
-    surfacePressed: "#3A1C16",
-    accentSoft: "#3B1712",
-    accentSoftBorder: "#643026",
-    accentText: "#F0B3A6",
-    overlay: "rgba(8, 3, 2, 0.64)",
-    scrim: "rgba(255, 247, 244, 0.05)",
+    surfaceSunken: "#141210",
+    surfacePressed: "#26221F",
+    overlay: "rgba(0, 0, 0, 0.64)",
+    scrim: "rgba(255, 255, 255, 0.04)",
     shadow: "#000000",
   },
 } as const;
@@ -86,16 +100,16 @@ export const statusTones: Record<"light" | "dark", Record<StatusTone, ToneColors
     warning: { fg: "#96650B", bg: "#FBF0DC", border: "#EBD6A8" },
     danger: { fg: "#B0424F", bg: "#FBE9EB", border: "#EFC7CD" },
     info: { fg: "#356B9F", bg: "#E6F0FA", border: "#C4DAEE" },
-    neutral: { fg: "#725E58", bg: "#F1E9E6", border: "#DECFC9" },
-    accent: { fg: "#2E0702", bg: "#F3E3DE", border: "#D9B9AF" },
+    neutral: { fg: "#57534E", bg: "#F2F1EF", border: "#E2DFDC" },
+    accent: { fg: "#8F3420", bg: "#FBEFEC", border: "#F1D2CA" },
   },
   dark: {
     success: { fg: "#7FD6A6", bg: "#16301F", border: "#27543A" },
     warning: { fg: "#E5BE72", bg: "#332815", border: "#584426" },
     danger: { fg: "#F0A2AB", bg: "#341B21", border: "#5A2F38" },
     info: { fg: "#9CC5EC", bg: "#182838", border: "#2C4560" },
-    neutral: { fg: "#C6AEA7", bg: "#2C1915", border: "#4D2A23" },
-    accent: { fg: "#F0B3A6", bg: "#3B1712", border: "#643026" },
+    neutral: { fg: "#C9C4C0", bg: "#23201D", border: "#3A3531" },
+    accent: { fg: "#F5A895", bg: "#33201B", border: "#4D2E26" },
   },
 };
 
@@ -127,16 +141,16 @@ export const elevation: Record<"light" | "dark", Record<ElevationLevel, ViewStyl
     none: {},
     sm: {
       shadowColor: derived.light.shadow,
-      shadowOpacity: 0.05,
-      shadowRadius: 8,
-      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.035,
+      shadowRadius: 6,
+      shadowOffset: { width: 0, height: 1 },
       elevation: 1,
     },
     md: {
       shadowColor: derived.light.shadow,
-      shadowOpacity: 0.07,
-      shadowRadius: 18,
-      shadowOffset: { width: 0, height: 6 },
+      shadowOpacity: 0.06,
+      shadowRadius: 16,
+      shadowOffset: { width: 0, height: 4 },
       elevation: 3,
     },
   },

@@ -54,6 +54,7 @@ export function ThemeProvider({
   const mode = preference === "system" ? (systemScheme === "dark" ? "dark" : "light") : preference;
   const palette = mode === "dark" ? colors.dark : colors.light;
   const extras = mode === "dark" ? derived.dark : derived.light;
+  const accent = mode === "dark" ? colors.accent.dark : colors.accent.light;
   const value = useMemo<ThemeContextValue>(
     () => ({
       preference,
@@ -64,19 +65,19 @@ export function ThemeProvider({
         ...palette,
         surfaceSunken: extras.surfaceSunken,
         surfacePressed: extras.surfacePressed,
-        primary: colors.brand.purple600,
-        primaryPressed: mode === "dark" ? colors.brand.purple500 : "#4A0C05",
-        primarySoft: extras.accentSoft,
-        primarySoftBorder: extras.accentSoftBorder,
-        primaryText: extras.accentText,
-        onPrimary: "#FFFFFF",
+        primary: accent.base,
+        primaryPressed: accent.pressed,
+        primarySoft: accent.soft,
+        primarySoftBorder: accent.softBorder,
+        primaryText: accent.text,
+        onPrimary: accent.on,
         overlay: extras.overlay,
         scrim: extras.scrim,
       },
       tones: mode === "dark" ? statusTones.dark : statusTones.light,
       elevation: mode === "dark" ? elevation.dark : elevation.light,
     }),
-    [extras, mode, palette, preference],
+    [accent, extras, mode, palette, preference],
   );
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
