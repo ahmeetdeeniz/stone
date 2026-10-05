@@ -90,7 +90,7 @@ function createEditorHtml(theme: "light" | "dark", accessibilityLabel: string): 
     background: palette.background,
     text: palette.text,
     surface: palette.surface,
-    accent: theme === "dark" ? tokens.brand.purple300 : tokens.brand.purple600,
+    accent: tokens.accent[theme].base,
     muted: palette.textSecondary,
     border: palette.border,
   };

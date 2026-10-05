@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useRouter } from "expo-router";
 import { Alert, PermissionsAndroid, Platform, ScrollView, StyleSheet, View } from "react-native";
-import { ResponsiveContent } from "../../src/components/responsive";
+import { ResponsiveContent } from "../src/components/responsive";
 import {
   Badge,
   Chip,
@@ -12,44 +12,44 @@ import {
   SectionCard,
   StoneButton,
   StoneText,
-} from "../../src/components/ui";
-import { spacing } from "../../src/design/tokens";
-import type { StatusTone } from "../../src/design/tokens";
-import { useTheme } from "../../src/design/theme";
-import { useAuth } from "../../src/providers/auth-provider";
-import { useAppServices } from "../../src/providers/app-provider";
-import { pickWorkspaceBundle, shareWorkspaceExport } from "../../src/notes/workspace-files";
-import { restoreWorkspace } from "../../src/notes/workspace-restore";
-import { createWorkspaceRestoreTarget } from "../../src/notes/workspace-restore-target";
-import type { SyncState } from "../../src/infrastructure/storage/sync";
-import { useI18n } from "../../src/i18n/provider";
-import { calendarSubscriptions } from "../../src/calendar/subscription-service";
+} from "../src/components/ui";
+import { spacing } from "../src/design/tokens";
+import type { StatusTone } from "../src/design/tokens";
+import { useTheme } from "../src/design/theme";
+import { useAuth } from "../src/providers/auth-provider";
+import { useAppServices } from "../src/providers/app-provider";
+import { pickWorkspaceBundle, shareWorkspaceExport } from "../src/notes/workspace-files";
+import { restoreWorkspace } from "../src/notes/workspace-restore";
+import { createWorkspaceRestoreTarget } from "../src/notes/workspace-restore-target";
+import type { SyncState } from "../src/infrastructure/storage/sync";
+import { useI18n } from "../src/i18n/provider";
+import { calendarSubscriptions } from "../src/calendar/subscription-service";
 import {
   readReminderSettings,
   reminderPermissionGranted,
   requestReminderPermission,
   syncReminders,
   writeReminderSettings,
-} from "../../src/reminders/reminders";
+} from "../src/reminders/reminders";
 import {
   DEFAULT_REMINDER_SETTINGS,
   REMINDER_LEAD_CHOICES,
   type ReminderSettings,
 } from "@stone/domain";
 import type { WidgetPrivacy } from "@stone/widgets";
-import { readWidgetPrivacy, writeWidgetPrivacy } from "../../src/widgets/widget-lifecycle";
-import { refreshNativeWidgets } from "../../src/widgets/snapshot";
-import { clearWidgetsForAccountLifecycle } from "../../src/widgets/snapshot";
-import { AuthFailure, authErrorKey } from "../../src/infrastructure/firebase/auth";
+import { readWidgetPrivacy, writeWidgetPrivacy } from "../src/widgets/widget-lifecycle";
+import { refreshNativeWidgets } from "../src/widgets/snapshot";
+import { clearWidgetsForAccountLifecycle } from "../src/widgets/snapshot";
+import { AuthFailure, authErrorKey } from "../src/infrastructure/firebase/auth";
 import Constants from "expo-constants";
-import { readCrashReporting, setCrashReporting } from "../../src/diagnostics/crash-reporting";
+import { readCrashReporting, setCrashReporting } from "../src/diagnostics/crash-reporting";
 import {
   checkForAppUpdate,
   currentUpdate,
   restartIntoUpdate,
   updatesEnabled,
-} from "../../src/diagnostics/app-updates";
-import { shortUpdateId } from "../../src/diagnostics/preferences";
+} from "../src/diagnostics/app-updates";
+import { shortUpdateId } from "../src/diagnostics/preferences";
 
 const syncTone: Readonly<Record<string, StatusTone>> = {
   saved: "success",
@@ -325,6 +325,7 @@ export default function SettingsScreen() {
           <ScreenHeader
             title={t("tabs.settings")}
             subtitle={user?.email ?? t("settings.noSession")}
+            onBack={() => router.back()}
           />
 
           <SectionCard title={t("settings.sync")} icon="cloud-upload-outline">

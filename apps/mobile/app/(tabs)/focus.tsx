@@ -23,16 +23,19 @@ import { formatDateOnly, formatDuration, formatInstant, type Locale } from "@sto
 import { ResponsiveContent } from "../../src/components/responsive";
 import { ErrorState, LoadingState } from "../../src/components/states";
 import {
+  ActionSheet,
   Badge,
   Chip,
   Divider,
-  IconButton,
+  ListGroup,
+  ListRow,
   Metric,
   Overline,
   ProgressBar,
   Screen,
   ScreenHeader,
   SectionCard,
+  SegmentedControl,
   StoneButton,
   StoneInput,
   StoneText,
@@ -73,6 +76,11 @@ export default function FocusScreen() {
   const [manualEnd, setManualEnd] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [correctionMinutes, setCorrectionMinutes] = useState("");
+  const { colors } = useTheme();
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [goalEditing, setGoalEditing] = useState(false);
+  const [manualOpen, setManualOpen] = useState(false);
+  const [sessionActions, setSessionActions] = useState<FocusSession | null>(null);
   const [now, setNow] = useState(() => new Date().toISOString());
 
   const load = useCallback(async () => {
@@ -283,7 +291,7 @@ export default function FocusScreen() {
       <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
         <ResponsiveContent>
           <View style={styles.page}>
-            <ScreenHeader title={t("focus.title")} subtitle={t("focus.subtitle")} />
+            <ScreenHeader title={t("focus.title")} />
 
             {active ? (
               <TimerCard
@@ -311,61 +319,69 @@ export default function FocusScreen() {
               />
             ) : (
               <Surface style={styles.starter}>
-                <StoneText variant="title3">{t("focus.noActive")}</StoneText>
-                <View style={styles.choices}>
-                  {modes.map((value) => (
-                    <Chip
-                      key={value}
-                      label={modeLabel(value, t)}
-                      selected={mode === value}
-                      onPress={() => {
-                        setMode(value);
-                        if (value === "pomodoro") setMinutes("25");
-                      }}
-                    />
-                  ))}
-                </View>
-                {mode !== "stopwatch" ? (
-                  <>
-                    <Overline>{t("focus.presets")}</Overline>
-                    <View style={styles.choices}>
-                      {presets.map((value) => (
-                        <Chip
-                          key={value}
-                          label={formatDuration(locale, value)}
-                          selected={minutes === String(value)}
-                          onPress={() => setMinutes(String(value))}
-                        />
-                      ))}
-                    </View>
-                    <StoneInput
-                      label={t("focus.customMinutes")}
-                      keyboardType="number-pad"
-                      value={minutes}
-                      onChangeText={setMinutes}
-                      icon="hourglass-outline"
-                    />
-                  </>
-                ) : null}
-                <View style={styles.row}>
-                  <StoneInput
-                    label={t("focus.category")}
-                    value={category}
-                    onChangeText={setCategory}
-                    containerStyle={styles.field}
-                    icon="pricetag-outline"
-                  />
-                  <StoneInput
-                    label={t("focus.sessionNote")}
-                    value={note}
-                    onChangeText={setNote}
-                    containerStyle={styles.field}
-                  />
-                </View>
-                <StoneText variant="caption" tone="muted">
-                  {t("focus.linkHint")}
+                <SegmentedControl
+                  options={modes.map((value) => ({ value, label: modeLabel(value, t) }))}
+                  value={mode}
+                  onChange={(value) => {
+                    setMode(value);
+                    if (value === "pomodoro") setMinutes("25");
+                  }}
+                  accessibilityLabel={t("focus.title")}
+                />
+                <StoneText style={[styles.starterTime, { color: colors.text }]}>
+                  {mode === "stopwatch" ? "00:00" : `${(minutes || "0").padStart(2, "0")}:00`}
                 </StoneText>
+                {mode !== "stopwatch" ? (
+                  <View style={styles.presetRow}>
+                    {presets.map((value) => (
+                      <Chip
+                        key={value}
+                        label={formatDuration(locale, value)}
+                        selected={minutes === String(value)}
+                        onPress={() => setMinutes(String(value))}
+                      />
+                    ))}
+                  </View>
+                ) : null}
                 <StoneButton label={t("focus.start")} icon="play" onPress={() => void start()} />
+                <StoneButton
+                  label={t("focus.details")}
+                  variant="quiet"
+                  size="sm"
+                  icon={detailsOpen ? "chevron-up" : "chevron-down"}
+                  onPress={() => setDetailsOpen((open) => !open)}
+                />
+                {detailsOpen ? (
+                  <View style={styles.details}>
+                    {mode !== "stopwatch" ? (
+                      <StoneInput
+                        label={t("focus.customMinutes")}
+                        keyboardType="number-pad"
+                        value={minutes}
+                        onChangeText={setMinutes}
+                        icon="hourglass-outline"
+                      />
+                    ) : null}
+                    <View style={styles.row}>
+                      <StoneInput
+                        label={t("focus.category")}
+                        value={category}
+                        onChangeText={setCategory}
+                        containerStyle={styles.field}
+                        icon="pricetag-outline"
+                      />
+                      <StoneInput
+                        label={t("focus.sessionNote")}
+                        value={note}
+                        onChangeText={setNote}
+                        containerStyle={styles.field}
+                      />
+                    </View>
+                    <StoneText variant="caption" tone="muted">
+                      {t("focus.linkHint")}
+                    </StoneText>
+                  </View>
+                ) : null}
               </Surface>
             )}
 
@@ -383,31 +399,40 @@ export default function FocusScreen() {
                   target={progress.weeklyTargetSeconds}
                   locale={locale}
                 />
-                <Divider />
-                <View style={styles.row}>
-                  <StoneInput
-                    label={t("focus.dailyGoal")}
-                    keyboardType="number-pad"
-                    value={dailyGoal}
-                    onChangeText={setDailyGoal}
-                    containerStyle={styles.field}
+                {goalEditing ? (
+                  <>
+                    <Divider />
+                    <View style={styles.row}>
+                      <StoneInput
+                        label={t("focus.dailyGoal")}
+                        keyboardType="number-pad"
+                        value={dailyGoal}
+                        onChangeText={setDailyGoal}
+                        containerStyle={styles.field}
+                      />
+                      <StoneInput
+                        label={t("focus.weeklyGoal")}
+                        keyboardType="number-pad"
+                        value={weeklyGoal}
+                        onChangeText={setWeeklyGoal}
+                        containerStyle={styles.field}
+                      />
+                    </View>
+                    <StoneButton
+                      label={t("focus.saveGoals")}
+                      variant="secondary"
+                      onPress={() => void saveGoal().then(() => setGoalEditing(false))}
+                    />
+                  </>
+                ) : (
+                  <StoneButton
+                    label={t("common.edit")}
+                    variant="quiet"
+                    size="sm"
+                    icon="create-outline"
+                    onPress={() => setGoalEditing(true)}
                   />
-                  <StoneInput
-                    label={t("focus.weeklyGoal")}
-                    keyboardType="number-pad"
-                    value={weeklyGoal}
-                    onChangeText={setWeeklyGoal}
-                    containerStyle={styles.field}
-                  />
-                </View>
-                <StoneButton
-                  label={t("focus.saveGoals")}
-                  variant="secondary"
-                  onPress={() => void saveGoal()}
-                />
-                <StoneText variant="caption" tone="muted">
-                  {t("focus.noStreak")}
-                </StoneText>
+                )}
               </SectionCard>
             ) : null}
 
@@ -455,110 +480,102 @@ export default function FocusScreen() {
               )}
             </SectionCard>
 
-            <SectionCard title={t("focus.manual")} icon="create-outline">
-              <View style={styles.row}>
-                <StoneInput
-                  label={t("focus.manualStart")}
-                  value={manualStart}
-                  onChangeText={setManualStart}
-                  autoCapitalize="none"
-                  containerStyle={styles.field}
+            {manualOpen ? (
+              <SectionCard title={t("focus.manual")} icon="create-outline">
+                <View style={styles.row}>
+                  <StoneInput
+                    label={t("focus.manualStart")}
+                    value={manualStart}
+                    onChangeText={setManualStart}
+                    autoCapitalize="none"
+                    containerStyle={styles.field}
+                  />
+                  <StoneInput
+                    label={t("focus.manualEnd")}
+                    value={manualEnd}
+                    onChangeText={setManualEnd}
+                    autoCapitalize="none"
+                    containerStyle={styles.field}
+                  />
+                </View>
+                <StoneButton
+                  label={t("focus.addManual")}
+                  variant="secondary"
+                  icon="add"
+                  onPress={() => void addManual().then(() => setManualOpen(false))}
+                  disabled={!manualStart || !manualEnd}
                 />
-                <StoneInput
-                  label={t("focus.manualEnd")}
-                  value={manualEnd}
-                  onChangeText={setManualEnd}
-                  autoCapitalize="none"
-                  containerStyle={styles.field}
-                />
-              </View>
-              <StoneButton
-                label={t("focus.addManual")}
-                variant="secondary"
-                icon="add"
-                onPress={() => void addManual()}
-                disabled={!manualStart || !manualEnd}
-              />
-            </SectionCard>
+              </SectionCard>
+            ) : null}
 
             <View style={styles.history}>
-              <Overline>{t("focus.recent")}</Overline>
+              <View style={styles.historyHead}>
+                <Overline>{t("focus.recent")}</Overline>
+                <StoneButton
+                  label={t("focus.addManual")}
+                  variant="quiet"
+                  size="sm"
+                  icon="add"
+                  onPress={() => setManualOpen((open) => !open)}
+                />
+              </View>
               {recent.length === 0 ? (
                 <StoneText variant="bodySmall" tone="secondary">
                   {t("focus.noHistory")}
                 </StoneText>
-              ) : null}
-              {recent.map((session) => (
-                <Surface key={session.id} style={styles.historyCard}>
-                  <View
-                    accessible
-                    accessibilityLabel={t("focus.historyA11y", {
-                      mode: modeLabel(session.mode, t),
-                      date: formatDateOnly(locale, session.startedAt.slice(0, 10)),
-                      duration: formatDuration(
-                        locale,
-                        Math.max(1, Math.round(session.actualFocusSeconds / 60)),
-                      ),
-                    })}
-                    style={styles.historyBody}
-                  >
-                    <StoneText variant="title3">
-                      {formatDuration(
-                        locale,
-                        Math.max(1, Math.round(session.actualFocusSeconds / 60)),
-                      )}
-                    </StoneText>
-                    <StoneText variant="caption" tone="muted">
-                      {formatInstant(locale, session.startedAt, timezone)}
-                    </StoneText>
-                    <View style={styles.historyBadges}>
-                      <Badge label={modeLabel(session.mode, t)} tone="accent" />
-                      <Badge label={phaseLabel(session.phase, t)} tone="neutral" />
-                      {session.category ? (
-                        <Badge label={session.category} tone="info" icon="pricetag-outline" />
-                      ) : null}
-                      {session.manuallyAdjustedSeconds !== null ? (
-                        <Badge label={t("focus.manualBadge")} tone="warning" />
+              ) : (
+                <ListGroup>
+                  {recent.map((session) => (
+                    <View key={session.id}>
+                      <ListRow
+                        title={formatDuration(
+                          locale,
+                          Math.max(1, Math.round(session.actualFocusSeconds / 60)),
+                        )}
+                        subtitle={[
+                          modeLabel(session.mode, t),
+                          session.category,
+                          session.manuallyAdjustedSeconds !== null ? t("focus.manualBadge") : null,
+                        ]
+                          .filter(Boolean)
+                          .join(" · ")}
+                        meta={formatInstant(locale, session.startedAt, timezone, {
+                          day: "numeric",
+                          month: "short",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                        accessibilityLabel={t("focus.historyA11y", {
+                          mode: modeLabel(session.mode, t),
+                          date: formatDateOnly(locale, session.startedAt.slice(0, 10)),
+                          duration: formatDuration(
+                            locale,
+                            Math.max(1, Math.round(session.actualFocusSeconds / 60)),
+                          ),
+                        })}
+                        onLongPress={() => setSessionActions(session)}
+                        onPress={() => setSessionActions(session)}
+                      />
+                      {editingId === session.id ? (
+                        <View style={styles.correction}>
+                          <StoneInput
+                            label={t("focus.correctionMinutes")}
+                            keyboardType="number-pad"
+                            value={correctionMinutes}
+                            onChangeText={setCorrectionMinutes}
+                            containerStyle={styles.field}
+                          />
+                          <StoneButton
+                            label={t("focus.saveCorrection")}
+                            size="sm"
+                            onPress={() => void saveCorrection()}
+                          />
+                        </View>
                       ) : null}
                     </View>
-                  </View>
-                  <View style={styles.historyActions}>
-                    <IconButton
-                      icon="pencil-outline"
-                      accessibilityLabel={t("focus.correct")}
-                      active={editingId === session.id}
-                      onPress={() => {
-                        setEditingId(editingId === session.id ? null : session.id);
-                        setCorrectionMinutes(
-                          String(Math.max(1, Math.round(session.actualFocusSeconds / 60))),
-                        );
-                      }}
-                    />
-                    <IconButton
-                      icon="trash-outline"
-                      tone="muted"
-                      accessibilityLabel={t("focus.delete")}
-                      onPress={() => deleteSession(session)}
-                    />
-                  </View>
-                  {editingId === session.id ? (
-                    <View style={styles.correction}>
-                      <StoneInput
-                        label={t("focus.correctionMinutes")}
-                        keyboardType="number-pad"
-                        value={correctionMinutes}
-                        onChangeText={setCorrectionMinutes}
-                        containerStyle={styles.field}
-                      />
-                      <StoneButton
-                        label={t("focus.saveCorrection")}
-                        size="sm"
-                        onPress={() => void saveCorrection()}
-                      />
-                    </View>
-                  ) : null}
-                </Surface>
-              ))}
+                  ))}
+                </ListGroup>
+              )}
             </View>
             <StoneText variant="caption" tone="muted" style={styles.notice}>
               {t("focus.inAppNotice")}
@@ -566,6 +583,32 @@ export default function FocusScreen() {
           </View>
         </ResponsiveContent>
       </ScrollView>
+      <ActionSheet
+        visible={sessionActions !== null}
+        onClose={() => setSessionActions(null)}
+        options={
+          sessionActions
+            ? [
+                {
+                  label: t("focus.correct"),
+                  icon: "pencil-outline",
+                  onPress: () => {
+                    setEditingId(sessionActions.id);
+                    setCorrectionMinutes(
+                      String(Math.max(1, Math.round(sessionActions.actualFocusSeconds / 60))),
+                    );
+                  },
+                },
+                {
+                  label: t("focus.delete"),
+                  icon: "trash-outline",
+                  destructive: true,
+                  onPress: () => deleteSession(sessionActions),
+                },
+              ]
+            : []
+        }
+      />
     </Screen>
   );
 }
@@ -743,6 +786,18 @@ const styles = StyleSheet.create({
   timerPrimary: { flex: 1 },
 
   starter: { gap: spacing.md },
+  starterTime: {
+    fontFamily: "Inter_700Bold",
+    fontSize: 56,
+    lineHeight: 64,
+    letterSpacing: -2,
+    textAlign: "center",
+    fontVariant: ["tabular-nums"],
+    marginVertical: spacing.sm,
+  },
+  presetRow: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: spacing.xs },
+  details: { gap: spacing.md },
+  historyHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   choices: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
   row: { flexDirection: "row", flexWrap: "wrap", gap: spacing.md },
   field: { flex: 1, minWidth: 140 },

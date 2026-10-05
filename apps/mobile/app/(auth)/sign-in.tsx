@@ -23,7 +23,7 @@ export default function SignInScreen() {
     setError(null);
     try {
       await service.signIn(email, password);
-      router.replace("/(tabs)/notes");
+      router.replace("/(tabs)/today");
     } catch (caught) {
       setError(t(authErrorKey(caught, "auth.signInFailed")));
     } finally {

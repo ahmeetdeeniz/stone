@@ -26,6 +26,7 @@ import {
   type CalendarRecurrenceEditScope,
 } from "@stone/domain";
 import GithubPanel from "./GithubPanel";
+import { Icon, type IconName } from "./icons";
 import { UpdateBanner, UpdateSettingsCard, useAppUpdates } from "./updates";
 import { ConflictsPanel, HistoryPanel, TrashPanel } from "./RecoveryPanels";
 import { NewProjectForm, ProjectEditorForm } from "./ProjectEditing";
@@ -60,6 +61,8 @@ import {
 import { useI18n } from "./i18n";
 
 type Section = "notes" | "projects" | "tasks" | "calendar" | "today" | "focus" | "settings";
+/** Sidebar order; Settings sits apart at the bottom. */
+const mainSections = ["notes", "today", "tasks", "projects", "calendar", "focus"] as const;
 type Theme = "system" | "light" | "dark";
 function titleFromMarkdown(markdown: string, fallback: string): string {
   const heading = markdown.match(/^#\s+(.+)$/m)?.[1]?.trim();
@@ -234,6 +237,7 @@ function StoneShell({ session, onSignedOut }: { session: AuthSession; onSignedOu
   const updates = useAppUpdates();
   const [projectEntities, setProjectEntities] = useState<DesktopProject[]>([]);
   const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
+  const [creatingProject, setCreatingProject] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [recoveryKey, setRecoveryKey] = useState(0);
   const [pendingConflicts, setPendingConflicts] = useState(0);
@@ -594,20 +598,17 @@ function StoneShell({ session, onSignedOut }: { session: AuthSession; onSignedOu
     setSection("notes");
   }
 
-  const activeLabel =
-    section === "notes"
-      ? t("tabs.notes")
-      : section === "projects"
-        ? t("tabs.projects")
-        : section === "tasks"
-          ? t("tabs.tasks")
-          : section === "calendar"
-            ? t("tabs.calendar")
-            : section === "today"
-              ? t("tabs.today")
-              : section === "focus"
-                ? t("tabs.focus")
-                : t("tabs.settings");
+  const sectionLabel = (item: Section): string =>
+    ({
+      notes: t("tabs.notes"),
+      today: t("tabs.today"),
+      tasks: t("tabs.tasks"),
+      projects: t("tabs.projects"),
+      calendar: t("tabs.calendar"),
+      focus: t("tabs.focus"),
+      settings: t("tabs.settings"),
+    })[item];
+  const activeLabel = sectionLabel(section);
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -616,60 +617,66 @@ function StoneShell({ session, onSignedOut }: { session: AuthSession; onSignedOu
           <span className="brand-wordmark">Stone</span>
         </div>
         <nav aria-label={t("navigation.main")}>
-          <NavButton active={section === "notes"} onClick={() => setSection("notes")} icon="✎">
-            {t("tabs.notes")}
-          </NavButton>
-          <NavButton
-            active={section === "projects"}
-            onClick={() => setSection("projects")}
-            icon="▦"
-          >
-            {t("tabs.projects")}
-          </NavButton>
-          <NavButton active={section === "tasks"} onClick={() => setSection("tasks")} icon="✓">
-            {t("tabs.tasks")}
-          </NavButton>
-          <NavButton
-            active={section === "calendar"}
-            onClick={() => setSection("calendar")}
-            icon="□"
-          >
-            {t("tabs.calendar")}
-          </NavButton>
-          <NavButton active={section === "today"} onClick={() => setSection("today")} icon="◷">
-            {t("tabs.today")}
-          </NavButton>
-          <NavButton active={section === "focus"} onClick={() => setSection("focus")} icon="◉">
-            {t("tabs.focus")}
-          </NavButton>
+          {mainSections.map((item) => (
+            <NavButton
+              key={item}
+              active={section === item}
+              onClick={() => setSection(item)}
+              icon={item}
+            >
+              {sectionLabel(item)}
+            </NavButton>
+          ))}
+        </nav>
+        <div className="sidebar-bottom">
           <NavButton
             active={section === "settings"}
             onClick={() => setSection("settings")}
-            icon="⚙"
+            icon="settings"
           >
             {t("tabs.settings")}
           </NavButton>
-        </nav>
-        <div className="sidebar-bottom">
-          <span className="sync-dot" /> {session.email}
+          <div className="sidebar-account">
+            <span className={`sync-dot ${syncing ? "syncing" : ""}`} />
+            <span className="sidebar-email">{session.email}</span>
+            <button
+              className="icon-only"
+              title={syncing ? t("desktop.syncing") : t("desktop.sync")}
+              aria-label={syncing ? t("desktop.syncing") : t("desktop.sync")}
+              disabled={syncing}
+              onClick={() => void syncNow()}
+            >
+              <Icon name="sync" size={15} />
+            </button>
+          </div>
         </div>
       </aside>
       <main className="content">
         <header className="topbar">
-          <div>
-            <p className="eyebrow">{t("navigation.workspace").toLocaleUpperCase()}</p>
-            <h1>{activeLabel}</h1>
-          </div>
+          <h1>{activeLabel}</h1>
           <div className="top-actions">
-            <button className="secondary-button" disabled={syncing} onClick={() => void syncNow()}>
-              {syncing ? t("desktop.syncing") : t("desktop.sync")}
-            </button>
-            <button className="secondary-button" onClick={() => void openFolder()}>
-              {t("desktop.linkFolder")}
-            </button>
-            <button className="primary-button compact" onClick={() => void createNote()}>
-              + {t("desktop.newNote")}
-            </button>
+            {section === "projects" ? (
+              <button
+                className="primary-button compact"
+                aria-expanded={creatingProject}
+                onClick={() => setCreatingProject((open) => !open)}
+              >
+                <Icon name="plus" size={15} />
+                {t("projects.new")}
+              </button>
+            ) : null}
+            {section === "notes" ? (
+              <>
+                <button className="secondary-button compact" onClick={() => void openFolder()}>
+                  <Icon name="folder" size={15} />
+                  {t("desktop.linkFolder")}
+                </button>
+                <button className="primary-button compact" onClick={() => void createNote()}>
+                  <Icon name="plus" size={15} />
+                  {t("desktop.newNote")}
+                </button>
+              </>
+            ) : null}
           </div>
         </header>
         <UpdateBanner state={updates.state} onInstall={() => void updates.install()} />
@@ -795,19 +802,19 @@ function StoneShell({ session, onSignedOut }: { session: AuthSession; onSignedOu
         {section === "projects" && (
           <section className="projects-workspace">
             <div className="project-intro">
-              <p className="eyebrow">{t("desktop.projectHubEyebrow")}</p>
-              <h2>{t("desktop.projectHubTitle")}</h2>
-              <p className="muted">{t("desktop.projectHubDetail")}</p>
-              <NewProjectForm
-                onCreated={(project, created) => {
-                  setProjectEntities((current) => [project, ...current]);
-                  setDocuments((current) => [
-                    ...created,
-                    ...current.filter((item) => !created.some((entry) => entry.id === item.id)),
-                  ]);
-                  setMessage(t("desktop.projectCreated", { title: project.title }));
-                }}
-              />
+              {creatingProject ? (
+                <NewProjectForm
+                  onCreated={(project, created) => {
+                    setCreatingProject(false);
+                    setProjectEntities((current) => [project, ...current]);
+                    setDocuments((current) => [
+                      ...created,
+                      ...current.filter((item) => !created.some((entry) => entry.id === item.id)),
+                    ]);
+                    setMessage(t("desktop.projectCreated", { title: project.title }));
+                  }}
+                />
+              ) : null}
               {editingProject && editingDocument ? (
                 <ProjectEditorForm
                   key={editingProject.id}
@@ -834,7 +841,6 @@ function StoneShell({ session, onSignedOut }: { session: AuthSession; onSignedOu
                 onEdit={setEditingProjectId}
               />
             </div>
-            <GithubPanel />
           </section>
         )}
         {section === "tasks" && (
@@ -944,12 +950,16 @@ function NavButton({
 }: {
   active: boolean;
   onClick: () => void;
-  icon: string;
+  icon: IconName;
   children: string;
 }) {
   return (
-    <button className={`nav-button ${active ? "active" : ""}`} onClick={onClick}>
-      <span aria-hidden="true">{icon}</span>
+    <button
+      className={`nav-button ${active ? "active" : ""}`}
+      aria-current={active ? "page" : undefined}
+      onClick={onClick}
+    >
+      <Icon name={icon} />
       {children}
     </button>
   );
@@ -1325,19 +1335,20 @@ function ProjectOverview({
               value={project.completedTasks}
               aria-label={t("desktop.projectProgressA11y", { title: project.title })}
             />
-            <span>
-              {project.currentVersion ?? t("desktop.currentVersionMissing")} →{" "}
-              {project.nextVersion ?? t("desktop.nextVersionMissing")}
-            </span>
-            <span>{project.nextAction ?? t("desktop.nextActionMissing")}</span>
-            <span>
-              {project.blockers.length > 0
-                ? tp("desktop.openBlockerCount", project.blockers.length)
-                : t("desktop.noOpenBlockers")}
-              {project.versions.length > 0
-                ? ` · ${tp("desktop.versionCount", project.versions.length)}`
-                : ""}
-            </span>
+            {project.nextAction ? (
+              <span className="next-action">→ {project.nextAction}</span>
+            ) : null}
+            {project.currentVersion || project.nextVersion ? (
+              <span>
+                {project.currentVersion ?? t("desktop.currentVersionMissing")} →{" "}
+                {project.nextVersion ?? t("desktop.nextVersionMissing")}
+              </span>
+            ) : null}
+            {project.blockers.length > 0 ? (
+              <span className="danger-text">
+                {tp("desktop.openBlockerCount", project.blockers.length)}
+              </span>
+            ) : null}
           </button>
           <button
             className="text-button"
@@ -1370,6 +1381,8 @@ function CalendarWorkspace({
 }) {
   const { t } = useI18n();
   const [view, setView] = useState<"month" | "week" | "day" | "agenda">("week");
+  const [composing, setComposing] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -1635,6 +1648,7 @@ function CalendarWorkspace({
       setDescription("");
       setLocation("");
       setTaskId("");
+      if (!input) setComposing(false);
       onMessage(task ? t("desktop.taskBlockScheduled") : t("desktop.calendarRecordSaved"));
     } catch (caught) {
       onMessage(toMessage(caught));
@@ -1886,418 +1900,459 @@ function CalendarWorkspace({
             </button>
           ))}
         </div>
-        <button onClick={() => shiftPeriod(-1)}>{t("desktop.previous")}</button>
-        <button onClick={() => setDate(new Date().toISOString().slice(0, 10))}>
-          {t("tasks.today")}
-        </button>
+        <div className="calendar-nav">
+          <button aria-label={t("desktop.previous")} onClick={() => shiftPeriod(-1)}>
+            ‹
+          </button>
+          <button onClick={() => setDate(new Date().toISOString().slice(0, 10))}>
+            {t("tasks.today")}
+          </button>
+          <button aria-label={t("desktop.next")} onClick={() => shiftPeriod(1)}>
+            ›
+          </button>
+        </div>
         <input
           aria-label={t("desktop.goToDate")}
           type="date"
           value={date}
           onChange={(event) => setDate(event.target.value)}
         />
-        <button onClick={() => shiftPeriod(1)}>{t("desktop.next")}</button>
-        <button onClick={() => void importIcs()}>{t("calendar.importIcs")}</button>
-        <button onClick={() => void exportIcs()}>{t("calendar.exportIcs")}</button>
-      </div>
-      <div className="calendar-grid">
-        <div className="calendar-create">
-          <h2>{date}</h2>
-          <p className="muted">
-            {t("desktop.hoursTimezone", {
-              timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-            })}
-          </p>
-          <label>
-            {t("calendar.titleField")}
-            <input value={title} onChange={(event) => setTitle(event.target.value)} />
-          </label>
-          <label>
-            {t("calendar.description")}
-            <textarea
-              value={description}
-              onChange={(event) => setDescription(event.target.value)}
-            />
-          </label>
-          <label>
-            {t("calendar.location")}
-            <input value={location} onChange={(event) => setLocation(event.target.value)} />
-          </label>
-          <label className="calendar-checkbox">
-            <input
-              type="checkbox"
-              checked={allDay}
-              onChange={(event) => setAllDay(event.target.checked)}
-            />
-            {t("calendar.allDay")}
-          </label>
-          <label>
-            {t("desktop.endDate")}
-            <input
-              type="date"
-              min={date}
-              value={eventEndDate || date}
-              onChange={(event) => setEventEndDate(event.target.value)}
-            />
-          </label>
-          <label>
-            {t("calendar.timezone")}
-            <input
-              value={eventTimezone}
-              onChange={(event) => setEventTimezone(event.target.value)}
-            />
-          </label>
-          <label>
-            {t("calendar.category")}
-            <select
-              value={eventCategory}
-              onChange={(event) => setEventCategory(event.target.value as CalendarItem["category"])}
-            >
-              {(["neutral", "purple", "blue", "green", "amber", "red"] as const).map((category) => (
-                <option key={category}>{t(`calendar.category.${category}`)}</option>
-              ))}
-            </select>
-          </label>
-          <label>
-            {t("calendar.project")}
-            <select
-              value={eventProjectId}
-              onChange={(event) => setEventProjectId(event.target.value)}
-            >
-              <option value="">{t("calendar.noProject")}</option>
-              {projects.map((project) => (
-                <option key={project.id} value={project.id}>
-                  {project.title}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            {t("calendar.sourceNote")}
-            <select
-              value={eventSourceDocumentId}
-              onChange={(event) => setEventSourceDocumentId(event.target.value)}
-            >
-              <option value="">{t("desktop.noSourceNote")}</option>
-              {documents.slice(0, 200).map((document) => (
-                <option key={document.id} value={document.id}>
-                  {document.title}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            {t("calendar.recurrence")}
-            <select
-              value={recurrenceFrequency}
-              onChange={(event) =>
-                setRecurrenceFrequency(
-                  event.target.value as "" | "daily" | "weekdays" | "weekly" | "monthly",
-                )
-              }
-            >
-              <option value="">{t("recurrence.none")}</option>
-              <option value="daily">{t("desktop.repeat.daily")}</option>
-              <option value="weekdays">{t("desktop.repeat.weekdays")}</option>
-              <option value="weekly">{t("desktop.repeat.weekly")}</option>
-              <option value="monthly">{t("desktop.repeat.monthly")}</option>
-            </select>
-          </label>
-          {recurrenceFrequency ? (
-            <label>
-              {t("desktop.repeatEnd")}
-              <input
-                type="date"
-                min={date}
-                value={recurrenceUntilDate}
-                onChange={(event) => setRecurrenceUntilDate(event.target.value)}
-              />
-            </label>
-          ) : null}
-          <label>
-            {t("desktop.orScheduleTask")}
-            <select value={taskId} onChange={(event) => setTaskId(event.target.value)}>
-              <option value="">{t("desktop.noTaskSelected")}</option>
-              {tasks
-                .filter((task) => task.state === "open" && !task.deletedAt)
-                .map((task) => (
-                  <option key={task.id} value={task.id}>
-                    {task.title}
-                  </option>
-                ))}
-            </select>
-            <div className="draggable-tasks" aria-label={t("desktop.draggableTasksA11y")}>
-              {tasks
-                .filter((task) => task.state === "open" && !task.deletedAt)
-                .slice(0, 30)
-                .map((task) => (
-                  <button
-                    key={task.id}
-                    draggable
-                    onDragStart={(event) => event.dataTransfer.setData("text/stone-task", task.id)}
-                    onClick={() => setTaskId(task.id)}
-                  >
-                    {task.title}
-                  </button>
-                ))}
-            </div>
-          </label>
-          {!allDay || taskId ? (
-            <div className="time-fields">
-              <label>
-                {t("calendar.start")}
-                <input
-                  type="time"
-                  value={startTime}
-                  onChange={(event) => setStartTime(event.target.value)}
-                />
-              </label>
-              <label>
-                {t("calendar.end")}
-                <input
-                  type="time"
-                  value={endTime}
-                  onChange={(event) => setEndTime(event.target.value)}
-                />
-              </label>
-            </div>
-          ) : null}
-          <button
-            className="primary-button"
-            onClick={() => void create()}
-            disabled={!title.trim() && !taskId}
-          >
-            {t("desktop.addToCalendar")}
-          </button>
-          <p className="hint">{t("desktop.remindersUnavailable")}</p>
-          <div className="calendar-filters" aria-label={t("desktop.calendarFiltersA11y")}>
-            <label>
-              {t("common.search")}
-              <input
-                type="search"
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-              />
-            </label>
-            <label>
-              {t("calendar.project")}
-              <select
-                value={projectFilter}
-                onChange={(event) => setProjectFilter(event.target.value)}
-              >
-                <option value="">{t("desktop.allProjects")}</option>
-                {projects.map((project) => (
-                  <option key={project.id} value={project.id}>
-                    {project.title}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              {t("desktop.type")}
-              <select
-                value={kindFilter}
-                onChange={(event) => setKindFilter(event.target.value as "" | CalendarItem["kind"])}
-              >
-                <option value="">{t("desktop.allTypes")}</option>
-                <option value="event">{t("calendar.event")}</option>
-                <option value="task_block">{t("calendar.taskBlock")}</option>
-              </select>
-            </label>
-            <label>
-              {t("calendar.category")}
-              <select
-                value={categoryFilter}
-                onChange={(event) =>
-                  setCategoryFilter(event.target.value as "" | CalendarItem["category"])
-                }
-              >
-                <option value="">{t("desktop.allCategories")}</option>
-                {(["neutral", "purple", "blue", "green", "amber", "red"] as const).map(
-                  (category) => (
-                    <option key={category} value={category}>
-                      {t(`calendar.category.${category}`)}
-                    </option>
-                  ),
-                )}
-              </select>
-            </label>
-            <label>
-              {t("desktop.taskStatus")}
-              <select
-                value={completionFilter}
-                onChange={(event) =>
-                  setCompletionFilter(event.target.value as "" | "open" | "completed")
-                }
-              >
-                <option value="">{t("desktop.allStatuses")}</option>
-                <option value="open">{t("tasks.status.open")}</option>
-                <option value="completed">{t("tasks.status.completed")}</option>
-              </select>
-            </label>
+        <span className="toolbar-spacer" />
+        <button
+          className="toolbar-toggle"
+          aria-pressed={filtersOpen}
+          onClick={() => setFiltersOpen((open) => !open)}
+        >
+          {t("projects.filters")}
+        </button>
+        <details className="toolbar-menu">
+          <summary aria-label={t("common.more")}>⋯</summary>
+          <div className="toolbar-menu-items">
+            <button onClick={() => void importIcs()}>{t("calendar.importIcs")}</button>
+            <button onClick={() => void exportIcs()}>{t("calendar.exportIcs")}</button>
           </div>
-          {selectedItem ? (
-            <div className="calendar-edit-panel">
-              <h3>{t("desktop.editSelectedRecord")}</h3>
-              <label>
-                {t("calendar.titleField")}
-                <input value={editTitle} onChange={(event) => setEditTitle(event.target.value)} />
-              </label>
-              <label>
-                {t("calendar.description")}
-                <textarea
-                  value={editDescription}
-                  onChange={(event) => setEditDescription(event.target.value)}
-                  disabled={editsOccurrenceOnly}
-                />
-              </label>
-              {editsOccurrenceOnly ? <p>{t("desktop.occurrenceEditLimit")}</p> : null}
-              <label>
-                {t("calendar.location")}
-                <input
-                  value={editLocation}
-                  onChange={(event) => setEditLocation(event.target.value)}
-                  disabled={editsOccurrenceOnly}
-                />
-              </label>
-              <label className="calendar-checkbox">
-                <input
-                  type="checkbox"
-                  checked={editAllDay}
-                  onChange={(event) => setEditAllDay(event.target.checked)}
-                  disabled={editsOccurrenceOnly}
-                />
-                {t("calendar.allDay")}
-              </label>
-              <label>
-                {t("calendar.startDate")}
-                <input
-                  type="date"
-                  value={editStartDate}
-                  onChange={(event) => setEditStartDate(event.target.value)}
-                  disabled={editsOccurrenceOnly}
-                />
-              </label>
-              <label>
-                {t("calendar.endDate")}
-                <input
-                  type="date"
-                  value={editEndDate}
-                  onChange={(event) => setEditEndDate(event.target.value)}
-                  disabled={editsOccurrenceOnly}
-                />
-              </label>
-              {!editAllDay ? (
-                <>
-                  <label>
-                    {t("calendar.startTime")}
-                    <input
-                      type="time"
-                      value={editStartTime}
-                      onChange={(event) => setEditStartTime(event.target.value)}
-                    />
-                  </label>
-                  <label>
-                    {t("calendar.endTime")}
-                    <input
-                      type="time"
-                      value={editEndTime}
-                      onChange={(event) => setEditEndTime(event.target.value)}
-                    />
-                  </label>
-                </>
-              ) : null}
-              <label>
-                {t("calendar.timezone")}
-                <input
-                  value={editTimezone}
-                  onChange={(event) => setEditTimezone(event.target.value)}
-                  disabled={editsOccurrenceOnly}
-                />
-              </label>
-              <label>
-                {t("calendar.category")}
-                <select
-                  value={editCategory}
-                  onChange={(event) =>
-                    setEditCategory(event.target.value as CalendarItem["category"])
-                  }
-                  disabled={editsOccurrenceOnly}
-                >
-                  {(["neutral", "purple", "blue", "green", "amber", "red"] as const).map(
-                    (category) => (
-                      <option key={category} value={category}>
-                        {t(`calendar.category.${category}`)}
-                      </option>
-                    ),
-                  )}
-                </select>
-              </label>
-              <label>
-                {t("calendar.project")}
-                <select
-                  value={editProjectId}
-                  onChange={(event) => setEditProjectId(event.target.value)}
-                  disabled={editsOccurrenceOnly}
-                >
-                  <option value="">{t("calendar.noProject")}</option>
-                  {projects.map((project) => (
-                    <option key={project.id} value={project.id}>
-                      {project.title}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                {t("calendar.sourceNote")}
-                <select
-                  value={editSourceDocumentId}
-                  onChange={(event) => setEditSourceDocumentId(event.target.value)}
-                  disabled={editsOccurrenceOnly}
-                >
-                  <option value="">{t("calendar.noLink")}</option>
-                  {documents.slice(0, 200).map((document) => (
-                    <option key={document.id} value={document.id}>
-                      {document.title}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                {t("desktop.planningNote")}
-                <textarea
-                  value={editPlanningNote}
-                  onChange={(event) => setEditPlanningNote(event.target.value)}
-                  disabled={editsOccurrenceOnly}
-                />
-              </label>
-              {selectedItem.recurrence && selectedOccurrenceDate ? (
+        </details>
+        <button
+          className="primary-button compact"
+          aria-expanded={composing}
+          onClick={() => setComposing((open) => !open)}
+        >
+          + {t("calendar.createEvent")}
+        </button>
+      </div>
+      <div className={`calendar-grid ${composing || filtersOpen || selectedItem ? "" : "solo"}`}>
+        {composing || filtersOpen || selectedItem ? (
+          <div className="calendar-create">
+            {composing ? (
+              <>
+                <h2>{date}</h2>
+                <p className="muted">
+                  {t("desktop.hoursTimezone", {
+                    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+                  })}
+                </p>
                 <label>
-                  {t("desktop.repeatScope")}
+                  {t("calendar.titleField")}
+                  <input value={title} onChange={(event) => setTitle(event.target.value)} />
+                </label>
+                <label>
+                  {t("calendar.description")}
+                  <textarea
+                    value={description}
+                    onChange={(event) => setDescription(event.target.value)}
+                  />
+                </label>
+                <label>
+                  {t("calendar.location")}
+                  <input value={location} onChange={(event) => setLocation(event.target.value)} />
+                </label>
+                <label className="calendar-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={allDay}
+                    onChange={(event) => setAllDay(event.target.checked)}
+                  />
+                  {t("calendar.allDay")}
+                </label>
+                <label>
+                  {t("desktop.endDate")}
+                  <input
+                    type="date"
+                    min={date}
+                    value={eventEndDate || date}
+                    onChange={(event) => setEventEndDate(event.target.value)}
+                  />
+                </label>
+                <label>
+                  {t("calendar.timezone")}
+                  <input
+                    value={eventTimezone}
+                    onChange={(event) => setEventTimezone(event.target.value)}
+                  />
+                </label>
+                <label>
+                  {t("calendar.category")}
                   <select
-                    value={recurrenceScope}
+                    value={eventCategory}
                     onChange={(event) =>
-                      setRecurrenceScope(event.target.value as CalendarRecurrenceEditScope)
+                      setEventCategory(event.target.value as CalendarItem["category"])
                     }
                   >
-                    <option value="occurrence">{t("calendar.scope.occurrence")}</option>
-                    <option value="future">{t("calendar.scope.future")}</option>
-                    <option value="series">{t("calendar.scope.series")}</option>
+                    {(["neutral", "purple", "blue", "green", "amber", "red"] as const).map(
+                      (category) => (
+                        <option key={category}>{t(`calendar.category.${category}`)}</option>
+                      ),
+                    )}
                   </select>
                 </label>
-              ) : null}
-              <div className="calendar-event-actions">
-                <button onClick={() => void saveSelected()}>{t("desktop.save")}</button>
-                <button onClick={() => void duplicateSelected()}>{t("desktop.duplicate")}</button>
-                <button onClick={() => void deleteSelected()}>
-                  {selectedItem.kind === "task_block"
-                    ? t("desktop.removeBlock")
-                    : t("desktop.delete")}
+                <label>
+                  {t("calendar.project")}
+                  <select
+                    value={eventProjectId}
+                    onChange={(event) => setEventProjectId(event.target.value)}
+                  >
+                    <option value="">{t("calendar.noProject")}</option>
+                    {projects.map((project) => (
+                      <option key={project.id} value={project.id}>
+                        {project.title}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  {t("calendar.sourceNote")}
+                  <select
+                    value={eventSourceDocumentId}
+                    onChange={(event) => setEventSourceDocumentId(event.target.value)}
+                  >
+                    <option value="">{t("desktop.noSourceNote")}</option>
+                    {documents.slice(0, 200).map((document) => (
+                      <option key={document.id} value={document.id}>
+                        {document.title}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  {t("calendar.recurrence")}
+                  <select
+                    value={recurrenceFrequency}
+                    onChange={(event) =>
+                      setRecurrenceFrequency(
+                        event.target.value as "" | "daily" | "weekdays" | "weekly" | "monthly",
+                      )
+                    }
+                  >
+                    <option value="">{t("recurrence.none")}</option>
+                    <option value="daily">{t("desktop.repeat.daily")}</option>
+                    <option value="weekdays">{t("desktop.repeat.weekdays")}</option>
+                    <option value="weekly">{t("desktop.repeat.weekly")}</option>
+                    <option value="monthly">{t("desktop.repeat.monthly")}</option>
+                  </select>
+                </label>
+                {recurrenceFrequency ? (
+                  <label>
+                    {t("desktop.repeatEnd")}
+                    <input
+                      type="date"
+                      min={date}
+                      value={recurrenceUntilDate}
+                      onChange={(event) => setRecurrenceUntilDate(event.target.value)}
+                    />
+                  </label>
+                ) : null}
+                <label>
+                  {t("desktop.orScheduleTask")}
+                  <select value={taskId} onChange={(event) => setTaskId(event.target.value)}>
+                    <option value="">{t("desktop.noTaskSelected")}</option>
+                    {tasks
+                      .filter((task) => task.state === "open" && !task.deletedAt)
+                      .map((task) => (
+                        <option key={task.id} value={task.id}>
+                          {task.title}
+                        </option>
+                      ))}
+                  </select>
+                  <div className="draggable-tasks" aria-label={t("desktop.draggableTasksA11y")}>
+                    {tasks
+                      .filter((task) => task.state === "open" && !task.deletedAt)
+                      .slice(0, 30)
+                      .map((task) => (
+                        <button
+                          key={task.id}
+                          draggable
+                          onDragStart={(event) =>
+                            event.dataTransfer.setData("text/stone-task", task.id)
+                          }
+                          onClick={() => setTaskId(task.id)}
+                        >
+                          {task.title}
+                        </button>
+                      ))}
+                  </div>
+                </label>
+                {!allDay || taskId ? (
+                  <div className="time-fields">
+                    <label>
+                      {t("calendar.start")}
+                      <input
+                        type="time"
+                        value={startTime}
+                        onChange={(event) => setStartTime(event.target.value)}
+                      />
+                    </label>
+                    <label>
+                      {t("calendar.end")}
+                      <input
+                        type="time"
+                        value={endTime}
+                        onChange={(event) => setEndTime(event.target.value)}
+                      />
+                    </label>
+                  </div>
+                ) : null}
+                <button
+                  className="primary-button"
+                  onClick={() => void create()}
+                  disabled={!title.trim() && !taskId}
+                >
+                  {t("desktop.addToCalendar")}
                 </button>
+              </>
+            ) : null}
+            {filtersOpen ? (
+              <div className="calendar-filters" aria-label={t("desktop.calendarFiltersA11y")}>
+                <label>
+                  {t("common.search")}
+                  <input
+                    type="search"
+                    value={search}
+                    onChange={(event) => setSearch(event.target.value)}
+                  />
+                </label>
+                <label>
+                  {t("calendar.project")}
+                  <select
+                    value={projectFilter}
+                    onChange={(event) => setProjectFilter(event.target.value)}
+                  >
+                    <option value="">{t("desktop.allProjects")}</option>
+                    {projects.map((project) => (
+                      <option key={project.id} value={project.id}>
+                        {project.title}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  {t("desktop.type")}
+                  <select
+                    value={kindFilter}
+                    onChange={(event) =>
+                      setKindFilter(event.target.value as "" | CalendarItem["kind"])
+                    }
+                  >
+                    <option value="">{t("desktop.allTypes")}</option>
+                    <option value="event">{t("calendar.event")}</option>
+                    <option value="task_block">{t("calendar.taskBlock")}</option>
+                  </select>
+                </label>
+                <label>
+                  {t("calendar.category")}
+                  <select
+                    value={categoryFilter}
+                    onChange={(event) =>
+                      setCategoryFilter(event.target.value as "" | CalendarItem["category"])
+                    }
+                  >
+                    <option value="">{t("desktop.allCategories")}</option>
+                    {(["neutral", "purple", "blue", "green", "amber", "red"] as const).map(
+                      (category) => (
+                        <option key={category} value={category}>
+                          {t(`calendar.category.${category}`)}
+                        </option>
+                      ),
+                    )}
+                  </select>
+                </label>
+                <label>
+                  {t("desktop.taskStatus")}
+                  <select
+                    value={completionFilter}
+                    onChange={(event) =>
+                      setCompletionFilter(event.target.value as "" | "open" | "completed")
+                    }
+                  >
+                    <option value="">{t("desktop.allStatuses")}</option>
+                    <option value="open">{t("tasks.status.open")}</option>
+                    <option value="completed">{t("tasks.status.completed")}</option>
+                  </select>
+                </label>
               </div>
-            </div>
-          ) : null}
-        </div>
+            ) : null}
+            {selectedItem ? (
+              <div className="calendar-edit-panel">
+                <h3>{t("desktop.editSelectedRecord")}</h3>
+                <label>
+                  {t("calendar.titleField")}
+                  <input value={editTitle} onChange={(event) => setEditTitle(event.target.value)} />
+                </label>
+                <label>
+                  {t("calendar.description")}
+                  <textarea
+                    value={editDescription}
+                    onChange={(event) => setEditDescription(event.target.value)}
+                    disabled={editsOccurrenceOnly}
+                  />
+                </label>
+                {editsOccurrenceOnly ? <p>{t("desktop.occurrenceEditLimit")}</p> : null}
+                <label>
+                  {t("calendar.location")}
+                  <input
+                    value={editLocation}
+                    onChange={(event) => setEditLocation(event.target.value)}
+                    disabled={editsOccurrenceOnly}
+                  />
+                </label>
+                <label className="calendar-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={editAllDay}
+                    onChange={(event) => setEditAllDay(event.target.checked)}
+                    disabled={editsOccurrenceOnly}
+                  />
+                  {t("calendar.allDay")}
+                </label>
+                <label>
+                  {t("calendar.startDate")}
+                  <input
+                    type="date"
+                    value={editStartDate}
+                    onChange={(event) => setEditStartDate(event.target.value)}
+                    disabled={editsOccurrenceOnly}
+                  />
+                </label>
+                <label>
+                  {t("calendar.endDate")}
+                  <input
+                    type="date"
+                    value={editEndDate}
+                    onChange={(event) => setEditEndDate(event.target.value)}
+                    disabled={editsOccurrenceOnly}
+                  />
+                </label>
+                {!editAllDay ? (
+                  <>
+                    <label>
+                      {t("calendar.startTime")}
+                      <input
+                        type="time"
+                        value={editStartTime}
+                        onChange={(event) => setEditStartTime(event.target.value)}
+                      />
+                    </label>
+                    <label>
+                      {t("calendar.endTime")}
+                      <input
+                        type="time"
+                        value={editEndTime}
+                        onChange={(event) => setEditEndTime(event.target.value)}
+                      />
+                    </label>
+                  </>
+                ) : null}
+                <label>
+                  {t("calendar.timezone")}
+                  <input
+                    value={editTimezone}
+                    onChange={(event) => setEditTimezone(event.target.value)}
+                    disabled={editsOccurrenceOnly}
+                  />
+                </label>
+                <label>
+                  {t("calendar.category")}
+                  <select
+                    value={editCategory}
+                    onChange={(event) =>
+                      setEditCategory(event.target.value as CalendarItem["category"])
+                    }
+                    disabled={editsOccurrenceOnly}
+                  >
+                    {(["neutral", "purple", "blue", "green", "amber", "red"] as const).map(
+                      (category) => (
+                        <option key={category} value={category}>
+                          {t(`calendar.category.${category}`)}
+                        </option>
+                      ),
+                    )}
+                  </select>
+                </label>
+                <label>
+                  {t("calendar.project")}
+                  <select
+                    value={editProjectId}
+                    onChange={(event) => setEditProjectId(event.target.value)}
+                    disabled={editsOccurrenceOnly}
+                  >
+                    <option value="">{t("calendar.noProject")}</option>
+                    {projects.map((project) => (
+                      <option key={project.id} value={project.id}>
+                        {project.title}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  {t("calendar.sourceNote")}
+                  <select
+                    value={editSourceDocumentId}
+                    onChange={(event) => setEditSourceDocumentId(event.target.value)}
+                    disabled={editsOccurrenceOnly}
+                  >
+                    <option value="">{t("calendar.noLink")}</option>
+                    {documents.slice(0, 200).map((document) => (
+                      <option key={document.id} value={document.id}>
+                        {document.title}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  {t("desktop.planningNote")}
+                  <textarea
+                    value={editPlanningNote}
+                    onChange={(event) => setEditPlanningNote(event.target.value)}
+                    disabled={editsOccurrenceOnly}
+                  />
+                </label>
+                {selectedItem.recurrence && selectedOccurrenceDate ? (
+                  <label>
+                    {t("desktop.repeatScope")}
+                    <select
+                      value={recurrenceScope}
+                      onChange={(event) =>
+                        setRecurrenceScope(event.target.value as CalendarRecurrenceEditScope)
+                      }
+                    >
+                      <option value="occurrence">{t("calendar.scope.occurrence")}</option>
+                      <option value="future">{t("calendar.scope.future")}</option>
+                      <option value="series">{t("calendar.scope.series")}</option>
+                    </select>
+                  </label>
+                ) : null}
+                <div className="calendar-event-actions">
+                  <button onClick={() => void saveSelected()}>{t("desktop.save")}</button>
+                  <button onClick={() => void duplicateSelected()}>{t("desktop.duplicate")}</button>
+                  <button onClick={() => void deleteSelected()}>
+                    {selectedItem.kind === "task_block"
+                      ? t("desktop.removeBlock")
+                      : t("desktop.delete")}
+                  </button>
+                </div>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
         {view === "month" ? (
           <MonthCalendar
             days={days as ReturnType<typeof monthGrid>}
@@ -2438,7 +2493,7 @@ function TimeGrid({
   onEventDrop: (itemId: string, occurrenceDate: string | null, date: string, time: string) => void;
   onOpen: (itemId: string, occurrenceDate?: string | null) => void;
 }) {
-  const { t } = useI18n();
+  const { locale, t } = useI18n();
   const now = new Date();
   const localToday = [
     now.getFullYear(),
@@ -2453,8 +2508,16 @@ function TimeGrid({
     >
       <div />
       {dates.map((date) => (
-        <strong key={date} className="time-grid-header">
-          {date}
+        <strong
+          key={date}
+          className="time-grid-header"
+          aria-current={date === localToday ? "date" : undefined}
+          title={date}
+        >
+          <span>
+            {new Date(`${date}T12:00:00`).toLocaleDateString(locale, { weekday: "short" })}
+          </span>
+          {Number(date.slice(8))}
         </strong>
       ))}
       <div className="all-day-label">{t("desktop.allDayLabel")}</div>
@@ -2713,11 +2776,6 @@ function TodayOverview({
     .slice(0, 8);
   return (
     <section className="today-workspace">
-      <div className="today-heading">
-        <p className="eyebrow">{t("desktop.todayEyebrow")}</p>
-        <h2 className="brand-heading">{t("desktop.todayTitle")}</h2>
-        <p className="muted">{t("desktop.todayDetail")}</p>
-      </div>
       {timeline.length > 0 ? (
         <div className="today-section" aria-label={t("desktop.todayTimelineA11y")}>
           <h3>{t("desktop.todayTimeline")}</h3>
