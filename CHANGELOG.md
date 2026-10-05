@@ -27,6 +27,14 @@ tag, so no release date or semantic version is claimed.
 - `pnpm setup:self-host` walks a self-hoster through connecting their own Firebase project
   (desktop env, `.firebaserc`, app identifiers, native config checks, next steps) and
   `pnpm doctor:self-host` re-checks it; Maestro smoke flows cover launch, sign-in and note creation.
+- Drawings are now multi-page notebooks for handwritten lecture notes: A4 pages or one endless
+  page, lined/grid/dotted/Cornell/blank paper, a page rail on tablets, pressure-sensitive strokes
+  that render live while writing, pen-only mode where fingers scroll and pinch-zoom, lasso
+  select/resize, a one-step eraser undo and a two-finger-tap undo. Existing drawings open as a
+  one-page notebook. Notebooks get their own shelf on the Notes tab.
+- Fixed the S Pen being ignored in pen-only mode (the stylus pointer type was compared against
+  the mouse value) and pen pressure always reading as full, and fixed strokes landing in the
+  wrong place after zooming or panning.
 - Added note attachments on mobile and desktop: images (PNG, JPEG, GIF, WebP, HEIC) and PDFs up
   to 20 MB are stored under their SHA-256, linked from the note with portable Markdown, uploaded
   to the owner's Firebase Storage on sync and downloaded when a note is opened elsewhere. They are
