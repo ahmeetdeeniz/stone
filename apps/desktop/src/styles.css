@@ -1887,6 +1887,52 @@ nav {
   border-radius: var(--radius-md);
 }
 
+/* Note attachments: a quiet strip of thumbnails and file chips above the editor. */
+.attachment-strip {
+  display: flex;
+  gap: 10px;
+  padding: 10px 16px;
+  overflow-x: auto;
+  border-bottom: var(--hairline) solid var(--line);
+}
+.attachment-item {
+  display: grid;
+  grid-template-rows: 64px auto;
+  flex: 0 0 96px;
+  padding: 0;
+  overflow: hidden;
+  color: var(--text);
+  text-align: start;
+  background: var(--surface);
+  border: var(--hairline) solid var(--line);
+  border-radius: var(--radius-sm);
+}
+.attachment-item:hover,
+.attachment-item:focus-visible {
+  border-color: var(--accent);
+  outline: none;
+}
+.attachment-item img {
+  width: 100%;
+  height: 64px;
+  object-fit: cover;
+}
+.attachment-placeholder {
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  background: var(--surface-strong);
+}
+.attachment-label {
+  padding: 4px 6px;
+  overflow: hidden;
+  font-size: 11px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
 /* Editor toolbar: quiet text buttons so the note, not the chrome, carries the weight. */
 .editor-toolbar .icon-button {
   min-height: 32px;

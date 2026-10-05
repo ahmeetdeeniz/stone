@@ -16,6 +16,7 @@ use std::{
 use tauri::{AppHandle, Emitter, Manager, State};
 use uuid::Uuid;
 
+mod attachments;
 pub mod git;
 pub mod github;
 mod recovery;
@@ -165,6 +166,7 @@ struct SyncSummary {
     pulled: u32,
     conflicts: u32,
     offline: bool,
+    attachments_uploaded: u32,
 }
 
 #[derive(Debug, Deserialize)]
@@ -276,6 +278,9 @@ pub fn run() {
             auth_password_reset,
             auth_sign_out,
             sync_now,
+            pick_attachment,
+            read_attachment,
+            open_attachment,
             github_device_start,
             github_device_poll,
             github_status,
@@ -387,6 +392,16 @@ impl Database {
             connection.pragma_update(None, "user_version", 8_i64)?;
             connection.execute(
                 "INSERT OR IGNORE INTO migrations(version, applied_at) VALUES(8, ?1)",
+                [Utc::now().to_rfc3339()],
+            )?;
+        }
+        if current < 9 {
+            // Note attachments are content-addressed files; this only records which ones each
+            // account has already uploaded so sync does not re-check them every time.
+            connection.execute_batch("CREATE TABLE IF NOT EXISTS attachment_uploads (owner_id TEXT NOT NULL, file_name TEXT NOT NULL, uploaded_at TEXT NOT NULL, PRIMARY KEY(owner_id, file_name));")?;
+            connection.pragma_update(None, "user_version", 9_i64)?;
+            connection.execute(
+                "INSERT OR IGNORE INTO migrations(version, applied_at) VALUES(9, ?1)",
                 [Utc::now().to_rfc3339()],
             )?;
         }
@@ -1960,8 +1975,10 @@ fn apply_remote_documents(
 
 #[tauri::command]
 async fn sync_now(
+    app: AppHandle,
     api_key: String,
     project_id: String,
+    storage_bucket: Option<String>,
     database: State<'_, Mutex<Database>>,
     auth: State<'_, AuthState>,
 ) -> Result<SyncSummary, String> {
@@ -2143,11 +2160,23 @@ async fn sync_now(
         Err(FetchError::Offline) => return Ok(SyncSummary::offline(pushed, conflicts)),
         Err(FetchError::Failed(message)) => return Err(message),
     }
+    // Attachment uploads ride along with every sync; a failed upload is retried next time and
+    // must not fail the sync of the notes that reference it.
+    let bucket = attachments::bucket_or_default(storage_bucket.as_deref(), &project_id);
+    let attachments_uploaded = upload_pending_attachments(
+        &client,
+        &database,
+        &attachments_dir(&app)?,
+        &bucket,
+        &session,
+    )
+    .await;
     Ok(SyncSummary {
         pushed,
         pulled,
         conflicts,
         offline: false,
+        attachments_uploaded,
     })
 }
 
@@ -2415,6 +2444,7 @@ impl SyncSummary {
             pulled: 0,
             conflicts,
             offline: true,
+            attachments_uploaded: 0,
         }
     }
 }
@@ -3158,6 +3188,249 @@ fn cancel_restore(
         .map_err(|_| "Restore kilidi alınamadı.")?
         .insert(run_id);
     Ok(())
+}
+
+fn attachments_dir(app: &AppHandle) -> Result<PathBuf, String> {
+    app.path()
+        .app_data_dir()
+        .map(|directory| directory.join("attachments"))
+        .map_err(|error| error.to_string())
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AttachmentImport {
+    file_name: String,
+    label: String,
+}
+
+/// Lets the user pick an image or PDF and stores it under its content hash.
+#[tauri::command]
+async fn pick_attachment(app: AppHandle) -> Result<Option<AttachmentImport>, String> {
+    let Some(file) = rfd::AsyncFileDialog::new()
+        .add_filter(
+            "Görsel veya PDF",
+            &["png", "jpg", "jpeg", "gif", "webp", "heic", "heif", "pdf"],
+        )
+        .pick_file()
+        .await
+    else {
+        return Ok(None);
+    };
+    let path = file.path().to_path_buf();
+    let size = fs::metadata(&path)
+        .map_err(|error| error.to_string())?
+        .len();
+    if size > attachments::MAX_ATTACHMENT_BYTES as u64 {
+        return Err("Ekler en fazla 20 MB olabilir.".to_owned());
+    }
+    let label = path
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let bytes = fs::read(&path).map_err(|error| error.to_string())?;
+    let file_name = attachments::import_bytes(&attachments_dir(&app)?, &label, &bytes)?;
+    Ok(Some(AttachmentImport { file_name, label }))
+}
+
+/// Local path of an attachment, downloading it first when this device does not have it yet.
+async fn ensure_local_attachment(
+    app: &AppHandle,
+    auth: &AuthState,
+    api_key: &str,
+    project_id: &str,
+    storage_bucket: Option<&str>,
+    file_name: &str,
+) -> Result<PathBuf, String> {
+    let path = attachments::local_path(&attachments_dir(app)?, file_name)?;
+    if path.exists() {
+        return Ok(path);
+    }
+    if api_key.is_empty() || project_id.is_empty() {
+        return Err("Firebase senkronizasyon yapılandırması eksik.".to_owned());
+    }
+    let client = Client::new();
+    let session = match fresh_session(&client, api_key, auth).await {
+        Ok(session) => session,
+        Err(SessionError::Offline) => {
+            return Err("Bu ek henüz bu cihazda değil; çevrimiçi olunca indirilecek.".to_owned())
+        }
+        Err(SessionError::Failed(message)) => return Err(message),
+    };
+    let bucket = attachments::bucket_or_default(storage_bucket, project_id);
+    match attachments::download(
+        &client,
+        &bucket,
+        &session.uid,
+        file_name,
+        &session.id_token,
+        &path,
+    )
+    .await
+    {
+        Ok(()) => Ok(path),
+        Err(attachments::StorageError::Offline) => {
+            Err("Bu ek henüz bu cihazda değil; çevrimiçi olunca indirilecek.".to_owned())
+        }
+        Err(attachments::StorageError::Failed(message)) => Err(message),
+    }
+}
+
+/// Raw bytes of an image attachment for an in-app preview (sent as an ArrayBuffer).
+#[tauri::command]
+async fn read_attachment(
+    app: AppHandle,
+    api_key: String,
+    project_id: String,
+    storage_bucket: Option<String>,
+    file_name: String,
+    auth: State<'_, AuthState>,
+) -> Result<tauri::ipc::Response, String> {
+    if !attachments::is_image(&file_name) {
+        return Err("Yalnızca görseller önizlenebilir.".to_owned());
+    }
+    let path = ensure_local_attachment(
+        &app,
+        &auth,
+        &api_key,
+        &project_id,
+        storage_bucket.as_deref(),
+        &file_name,
+    )
+    .await?;
+    let bytes = fs::read(path).map_err(|error| error.to_string())?;
+    Ok(tauri::ipc::Response::new(bytes))
+}
+
+/// Opens an attachment with the system's default viewer.
+#[tauri::command]
+async fn open_attachment(
+    app: AppHandle,
+    api_key: String,
+    project_id: String,
+    storage_bucket: Option<String>,
+    file_name: String,
+    auth: State<'_, AuthState>,
+) -> Result<(), String> {
+    let path = ensure_local_attachment(
+        &app,
+        &auth,
+        &api_key,
+        &project_id,
+        storage_bucket.as_deref(),
+        &file_name,
+    )
+    .await?;
+    let path = display_path(&fs::canonicalize(path).map_err(|error| error.to_string())?);
+    let opener = if cfg!(windows) {
+        "explorer.exe"
+    } else if cfg!(target_os = "macos") {
+        "open"
+    } else {
+        "xdg-open"
+    };
+    Command::new(opener)
+        .arg(path)
+        .spawn()
+        .map(|_| ())
+        .map_err(|error| format!("{opener} başlatılamadı: {error}"))
+}
+
+/// Uploads attachments that notes reference and this account has not uploaded yet.
+async fn upload_pending_attachments(
+    client: &Client,
+    database: &Mutex<Database>,
+    directory: &Path,
+    bucket: &str,
+    session: &AuthSession,
+) -> u32 {
+    let pending = match pending_attachment_uploads(database, &session.uid) {
+        Ok(pending) => pending,
+        Err(_) => return 0,
+    };
+    let mut uploaded = 0;
+    for file_name in pending {
+        let Ok(path) = attachments::local_path(directory, &file_name) else {
+            continue;
+        };
+        // Referenced but not on this device: another device added it and owns the upload.
+        let Ok(bytes) = fs::read(&path) else { continue };
+        match attachments::upload(
+            client,
+            bucket,
+            &session.uid,
+            &file_name,
+            bytes,
+            &session.id_token,
+        )
+        .await
+        {
+            Ok(()) => {
+                if mark_attachment_uploaded(database, &session.uid, &file_name).is_ok() {
+                    uploaded += 1;
+                }
+            }
+            Err(attachments::StorageError::Offline) => break,
+            Err(attachments::StorageError::Failed(_)) => continue,
+        }
+    }
+    uploaded
+}
+
+fn pending_attachment_uploads(
+    database: &Mutex<Database>,
+    owner_id: &str,
+) -> Result<Vec<String>, String> {
+    let db = database
+        .lock()
+        .map_err(|_| "Veritabanı kilidi alınamadı.")?;
+    let mut statement = db
+        .connection
+        .prepare("SELECT markdown FROM documents WHERE deleted_at IS NULL AND markdown LIKE '%](attachments/%'")
+        .map_err(|error| error.to_string())?;
+    let markdowns = statement
+        .query_map([], |row| row.get::<_, String>(0))
+        .map_err(|error| error.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| error.to_string())?;
+    let mut pending = Vec::new();
+    for markdown in markdowns {
+        for file_name in attachments::referenced_attachments(&markdown) {
+            if pending.contains(&file_name) {
+                continue;
+            }
+            let uploaded: Option<String> = db
+                .connection
+                .query_row(
+                    "SELECT uploaded_at FROM attachment_uploads WHERE owner_id = ?1 AND file_name = ?2",
+                    params![owner_id, file_name],
+                    |row| row.get(0),
+                )
+                .optional()
+                .map_err(|error| error.to_string())?;
+            if uploaded.is_none() {
+                pending.push(file_name);
+            }
+        }
+    }
+    Ok(pending)
+}
+
+fn mark_attachment_uploaded(
+    database: &Mutex<Database>,
+    owner_id: &str,
+    file_name: &str,
+) -> Result<(), String> {
+    let db = database
+        .lock()
+        .map_err(|_| "Veritabanı kilidi alınamadı.")?;
+    db.connection
+        .execute(
+            "INSERT OR IGNORE INTO attachment_uploads(owner_id, file_name, uploaded_at) VALUES(?1, ?2, ?3)",
+            params![owner_id, file_name, Utc::now().to_rfc3339()],
+        )
+        .map(|_| ())
+        .map_err(|error| error.to_string())
 }
 
 #[tauri::command]

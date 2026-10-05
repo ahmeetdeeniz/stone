@@ -2,6 +2,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { StoneDatabase } from "./database";
 
 const deletedFiles: string[] = [];
+const purgedAttachmentOwners: string[] = [];
+
+vi.mock("../../attachments/expo-attachment-files", () => ({
+  deleteLocalAttachments: (ownerId: string) => purgedAttachmentOwners.push(ownerId),
+}));
 
 vi.mock("expo-file-system", () => ({
   File: class {
@@ -33,6 +38,8 @@ describe("account-local privacy purge", () => {
     await new SQLitePrivacyRepository(database).purgeOwner("owner-1");
 
     expect(deletedFiles).toEqual(["file:///source.stoneink", "file:///preview.png"]);
+    expect(purgedAttachmentOwners).toEqual(["owner-1"]);
+    expect(statements.join("\n")).toContain("DELETE FROM attachment_uploads WHERE owner_id = ?");
     expect(statements.join("\n")).toContain("DELETE FROM project_tags");
     expect(statements.join("\n")).toContain("DELETE FROM tags WHERE owner_id = ?");
     expect(statements.join("\n")).toContain("DELETE FROM sync_cursors");

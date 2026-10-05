@@ -154,6 +154,13 @@ export const migrations: readonly Migration[] = [
       "CREATE INDEX IF NOT EXISTS sync_tombstones_owner_created_idx ON sync_tombstones (owner_id, created_at DESC)",
     ],
   },
+  {
+    version: 11,
+    statements: [
+      // Note attachments are content-addressed files; this is only the upload queue for them.
+      "CREATE TABLE IF NOT EXISTS attachment_uploads (owner_id TEXT NOT NULL, file_name TEXT NOT NULL, state TEXT NOT NULL DEFAULT 'pending', attempts INTEGER NOT NULL DEFAULT 0, last_error TEXT, updated_at TEXT NOT NULL, PRIMARY KEY (owner_id, file_name))",
+    ],
+  },
 ];
 
 export const latestMigrationVersion = migrations.at(-1)?.version ?? 0;

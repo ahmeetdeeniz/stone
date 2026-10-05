@@ -9,7 +9,14 @@ import {
   type FocusSession,
 } from "@stone/domain";
 import { File } from "expo-file-system";
-import { normalizeMarkdown, sanitizeFileName } from "@stone/markdown";
+import {
+  attachmentLinkTarget,
+  attachmentTypeOf,
+  normalizeMarkdown,
+  referencedAttachmentFiles,
+  sanitizeFileName,
+} from "@stone/markdown";
+import { readLocalAttachmentBase64 } from "../../attachments/expo-attachment-files";
 import type { StoneDatabase } from "./database";
 
 interface ExportDocumentRow {
@@ -85,6 +92,19 @@ export async function exportWorkspace(
         encoding: "base64",
         mimeType: "image/png",
       });
+  }
+  // Attachments live at the workspace root so `attachments/<file>` links resolve from it.
+  const attachmentFiles = new Set(rows.flatMap((row) => referencedAttachmentFiles(row.markdown)));
+  for (const fileName of [...attachmentFiles].sort()) {
+    const content = await readLocalAttachmentBase64(ownerId, fileName);
+    const type = attachmentTypeOf(fileName);
+    if (content === null || !type) continue;
+    assets.push({
+      path: attachmentLinkTarget(fileName),
+      content,
+      encoding: "base64",
+      mimeType: type.mimeType,
+    });
   }
   const tasks = await database.getAllAsync<ExportJsonRow>(
     "SELECT id, schema_version, title, description, state, completed_at, due_date, due_time, timezone, priority, sort_order, tags, project_id, source_document_id, source_block_id, parent_task_id, estimated_minutes, recurrence, recurrence_series_id, occurrence_date, revision, created_at, updated_at, deleted_at, updated_by_device_id FROM tasks WHERE owner_id = ? ORDER BY created_at, id",

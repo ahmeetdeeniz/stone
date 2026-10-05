@@ -20,6 +20,7 @@ For desktop, copy `apps/desktop/.env.example` to `apps/desktop/.env.local` and s
 VITE_FIREBASE_API_KEY
 VITE_FIREBASE_PROJECT_ID
 VITE_FIREBASE_AUTH_DOMAIN
+VITE_FIREBASE_STORAGE_BUCKET   # optional, see Storage below
 ```
 
 Vite embeds these public client values at build time. Changing local or GitHub repository
@@ -49,6 +50,19 @@ Do not loosen rules to work around configuration errors. Emulator tests use the 
 Drawing sources and previews are uploaded to immutable revision paths under the authenticated
 owner. Storage rules restrict names, MIME types, ownership, and a 10 MiB file limit. Firestore
 stores metadata; Storage stores `.stoneink` and PNG objects.
+
+Note attachments (images and PDFs, up to 20 MB each) are stored at
+`users/{uid}/attachments/{sha256}.{ext}`. The name is the SHA-256 of the file, so an object is
+written once and never changed: the rules allow only the owner to create it, require the
+content type that matches the extension (PNG, JPEG, GIF, WebP, HEIC or PDF) and reject updates.
+Notes link them with portable relative Markdown (`![Photo](attachments/<sha256>.png)`), and a
+workspace export includes them under `attachments/`. Files are uploaded on the next sync after
+they are added and downloaded the first time a note that links them is opened on another
+device. Attachments no longer linked from any note stay in Storage until the account is deleted.
+
+The desktop app talks to Storage over REST and uses `<project id>.firebasestorage.app` by
+default. For older projects whose bucket is `<project id>.appspot.com`, set
+`VITE_FIREBASE_STORAGE_BUCKET` (locally or as a repository Variable for release builds).
 
 ## Crash reporting (optional)
 

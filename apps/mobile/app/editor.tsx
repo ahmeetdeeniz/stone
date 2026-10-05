@@ -15,6 +15,8 @@ import * as Linking from "expo-linking";
 import type { Document } from "@stone/domain";
 import {
   extractDrawingBlocks,
+  insertAttachment,
+  parseAttachmentLinkTarget,
   parseWikiLinkUrl,
   type ParsedStoneDrawingBlock,
 } from "@stone/markdown";
@@ -30,13 +32,19 @@ import { exportNote } from "../src/notes/note-files";
 import { useAuth } from "../src/providers/auth-provider";
 import { useAppServices } from "../src/providers/app-provider";
 import { useI18n } from "../src/i18n/provider";
+import { AttachmentStrip } from "../src/attachments/AttachmentStrip";
+import {
+  attachmentErrorKey,
+  openAttachmentExternally,
+  pickAttachment,
+} from "../src/attachments/attachment-picker";
 
 export default function EditorScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
   const router = useRouter();
   const { colors, mode } = useTheme();
   const { user } = useAuth();
-  const { noteUseCases, notes: noteRepository, deviceId, drawings } = useAppServices();
+  const { noteUseCases, notes: noteRepository, deviceId, drawings, attachments } = useAppServices();
   const { t } = useI18n();
   const webViewRef = useRef<EditorWebViewHandle>(null);
   const contentRef = useRef("");
@@ -52,6 +60,7 @@ export default function EditorScreen() {
   const [recoveredDraft, setRecoveredDraft] = useState<string | null>(null);
   const [findQuery, setFindQuery] = useState("");
   const [drawingBlocks, setDrawingBlocks] = useState<readonly ParsedStoneDrawingBlock[]>([]);
+  const [attaching, setAttaching] = useState(false);
 
   useEffect(() => {
     if (!id || !user) return;
@@ -153,8 +162,53 @@ export default function EditorScreen() {
     };
   }, [note, noteRepository, user]);
 
+  /** Picks an image or PDF, stores it and inserts its link at the cursor. */
+  const attach = async () => {
+    if (!user || !note) return;
+    try {
+      const picked = await pickAttachment();
+      if (!picked) return;
+      setAttaching(true);
+      const fileName = await attachments.add(user.uid, picked);
+      const inserted = insertAttachment(
+        contentRef.current,
+        selectionRef.current,
+        picked.name,
+        fileName,
+      );
+      contentRef.current = inserted.source;
+      selectionRef.current = { from: inserted.caret, to: inserted.caret };
+      setContent(inserted.source);
+      setStatus("unsaved");
+      webViewRef.current?.post({
+        protocolVersion: 1,
+        type: "setDocument",
+        payload: { markdown: inserted.source },
+      });
+      void attachments.flush(user.uid);
+    } catch (caught) {
+      const key = attachmentErrorKey(caught);
+      Alert.alert(
+        t("attachments.addFailed"),
+        key ? t(key) : caught instanceof Error ? caught.message : t("app.unknownError"),
+      );
+    } finally {
+      setAttaching(false);
+    }
+  };
+
   /** `[[Title]]` opens (or creates) that note; other links only open for safe schemes. */
   const openLink = async (url: string) => {
+    const attachment = parseAttachmentLinkTarget(url);
+    if (attachment) {
+      if (!user) return;
+      try {
+        await openAttachmentExternally(await attachments.resolve(user.uid, attachment), attachment);
+      } catch {
+        Alert.alert(t("attachments.unavailable"), t("attachments.unavailableDetail"));
+      }
+      return;
+    }
     const target = parseWikiLinkUrl(url);
     if (target === null) {
       if (/^(?:https?:|mailto:|tel:)/iu.test(url)) await Linking.openURL(url);
@@ -405,6 +459,7 @@ export default function EditorScreen() {
               ))}
             </View>
           ) : null}
+          <AttachmentStrip service={attachments} ownerId={user?.uid} markdown={content} />
           {backlinks.length > 0 ? (
             <View
               style={[
@@ -480,6 +535,14 @@ export default function EditorScreen() {
                 }
               />
             ))}
+            <StoneButton
+              label={attaching ? t("attachments.adding") : t("editor.toolbar.attach")}
+              variant="secondary"
+              icon="attach-outline"
+              disabled={attaching}
+              onPress={() => void attach()}
+              testID="editor-attach"
+            />
           </View>
         </KeyboardAvoidingView>
       </ResponsiveContent>

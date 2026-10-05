@@ -18,6 +18,7 @@ import { assertFirebaseConfigured } from "./config";
 import { runDrawingUpload } from "./drawing-lifecycle";
 import { DrawingStorageUploadError, FirebaseDrawingStorage, storagePath } from "./storage";
 import type { DrawingStoragePayload } from "./storage";
+import { FirebaseAttachmentStorage } from "./attachment-storage";
 
 const PAGE_LIMIT = 200;
 const MAX_CASCADE_DRAWINGS = 100;
@@ -104,6 +105,7 @@ export class FirebaseSyncRemote implements SyncRemote {
     try {
       assertFirebaseConfigured();
       await this.drawingStorage.deleteOwnerDrawings(ownerId);
+      await new FirebaseAttachmentStorage().deleteOwnerAttachments(ownerId);
       const database = firestore();
       for (const collection of [
         "documents",

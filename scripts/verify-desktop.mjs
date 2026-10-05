@@ -64,6 +64,7 @@ for (const key of [
   "VITE_FIREBASE_API_KEY",
   "VITE_FIREBASE_PROJECT_ID",
   "VITE_FIREBASE_AUTH_DOMAIN",
+  "VITE_FIREBASE_STORAGE_BUCKET",
 ]) {
   if (!new RegExp(`^${key}=`, "m").test(envExample)) {
     throw new Error(`apps/desktop/.env.example is missing documented key: ${key}`);
@@ -112,6 +113,7 @@ const desktopBuildVars = [
   "VITE_FIREBASE_API_KEY",
   "VITE_FIREBASE_PROJECT_ID",
   "VITE_FIREBASE_AUTH_DOMAIN",
+  "VITE_FIREBASE_STORAGE_BUCKET",
   "VITE_GITHUB_CLIENT_ID",
 ];
 if (/EXPO_PUBLIC_/.test(releaseWorkflow)) {

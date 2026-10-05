@@ -9,7 +9,7 @@ import {
   formatWeekdayName,
   type TranslationKey,
 } from "@stone/i18n";
-import { normalizeMarkdown } from "@stone/markdown";
+import { insertAttachment, normalizeMarkdown } from "@stone/markdown";
 import { listen } from "@tauri-apps/api/event";
 import {
   buildAgendaItems,
@@ -32,6 +32,7 @@ import { ConflictsPanel, HistoryPanel, TrashPanel } from "./RecoveryPanels";
 import { NewProjectForm, ProjectEditorForm } from "./ProjectEditing";
 import { isLinkedFilePath } from "./project-editing";
 import FocusPanel from "./FocusPanel";
+import { AttachmentStrip } from "./AttachmentStrip";
 import {
   buildProjectSummaries,
   buildTodayItems,
@@ -507,6 +508,30 @@ function StoneShell({ session, onSignedOut }: { session: AuthSession; onSignedOu
     onSignedOut();
   }
 
+  /** Picks an image or PDF and inserts its link at the cursor as its own paragraph. */
+  async function attachFile() {
+    const view = editor.current;
+    if (!view) return;
+    try {
+      const picked = await desktopApi.pickAttachment();
+      if (!picked) return;
+      const selection = view.state.selection.main;
+      const next = insertAttachment(
+        view.state.doc.toString(),
+        { from: selection.from, to: selection.to },
+        picked.label,
+        picked.fileName,
+      );
+      view.dispatch({
+        changes: { from: 0, to: view.state.doc.length, insert: next.source },
+        selection: { anchor: next.caret },
+      });
+      view.focus();
+    } catch (caught) {
+      setMessage(toMessage(caught));
+    }
+  }
+
   async function syncNow() {
     setSyncing(true);
     try {
@@ -725,6 +750,9 @@ function StoneShell({ session, onSignedOut }: { session: AuthSession; onSignedOu
                           </button>
                         </>
                       )}
+                      <button className="icon-button" onClick={() => void attachFile()}>
+                        {t("editor.toolbar.attach")}
+                      </button>
                       <button
                         className="icon-button"
                         aria-pressed={showHistory}
@@ -749,6 +777,7 @@ function StoneShell({ session, onSignedOut }: { session: AuthSession; onSignedOu
                       {t("desktop.externalChange")}
                     </div>
                   )}
+                  <AttachmentStrip markdown={document.markdown} onError={setMessage} />
                   <div className="editor-body">
                     <div className="editor-host" ref={editorHost} />
                     {showHistory && (
