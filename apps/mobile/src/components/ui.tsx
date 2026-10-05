@@ -1,5 +1,13 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
-import { useEffect, useRef, useState, type ComponentProps, type PropsWithChildren } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  type ComponentProps,
+  type PropsWithChildren,
+} from "react";
 import type { ReactNode } from "react";
 import {
   AccessibilityInfo,
@@ -65,8 +73,28 @@ function usePressScale(active: number) {
   };
 }
 
+/** True inside a pane of a split view, where the outer screen already handles safe areas. */
+const EmbeddedScreen = createContext(false);
+
+export function EmbeddedScreenProvider({ children }: PropsWithChildren) {
+  return <EmbeddedScreen.Provider value>{children}</EmbeddedScreen.Provider>;
+}
+
 export function Screen({ children, padded = true }: PropsWithChildren<{ padded?: boolean }>) {
   const { colors } = useTheme();
+  const embedded = useContext(EmbeddedScreen);
+  if (embedded)
+    return (
+      <View
+        style={[
+          styles.screen,
+          { backgroundColor: colors.background },
+          padded && styles.screenPadded,
+        ]}
+      >
+        {children}
+      </View>
+    );
   return (
     <SafeAreaView
       style={[styles.screen, { backgroundColor: colors.background }, padded && styles.screenPadded]}

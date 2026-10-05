@@ -1,11 +1,21 @@
 import { useFocusEffect, useRouter } from "expo-router";
-import { useCallback, useMemo, useState, type ReactNode } from "react";
-import { Alert, Image, Pressable, ScrollView, SectionList, StyleSheet, View } from "react-native";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  Alert,
+  Image,
+  Pressable,
+  ScrollView,
+  SectionList,
+  StyleSheet,
+  useWindowDimensions,
+  View,
+} from "react-native";
 import type { Document, Drawing } from "@stone/domain";
 import { ResponsiveContent } from "../../src/components/responsive";
 import { EmptyState, ErrorState, LoadingState } from "../../src/components/states";
 import {
   ActionSheet,
+  EmbeddedScreenProvider,
   IconButton,
   ListRow,
   Overline,
@@ -21,6 +31,8 @@ import { useTheme } from "../../src/design/theme";
 import { useAuth } from "../../src/providers/auth-provider";
 import { useAppServices } from "../../src/providers/app-provider";
 import { pickAndImportNote } from "../../src/notes/note-files";
+import { NoteEditor } from "../../src/notes/NoteEditor";
+import { NotebookEditor } from "../../src/drawings/NotebookEditor";
 import { useI18n } from "../../src/i18n/provider";
 import {
   localIsoDate,
@@ -30,8 +42,27 @@ import {
   type NoteTemplate,
 } from "../../src/notes/templates";
 
+/** From this width the list stays on the left and the open note or notebook fills the right. */
+const SPLIT_WIDTH = 1000;
+const LIST_PANE_WIDTH = 400;
+
+/** `id` is what the list highlights; `opened` is what the editor was opened with ("new"). */
+type Selection = { kind: "note" | "notebook"; id: string; opened: string };
+
 export default function NotesScreen() {
   const router = useRouter();
+  const { width } = useWindowDimensions();
+  const split = width >= SPLIT_WIDTH;
+  const [selected, setSelected] = useState<Selection | null>(null);
+  const { colors } = useTheme();
+
+  // Rotating to portrait drops the split view: keep the open item open as a full screen.
+  useEffect(() => {
+    if (split || !selected) return;
+    setSelected(null);
+    if (selected.kind === "note") router.push({ pathname: "/editor", params: { id: selected.id } });
+    else router.push({ pathname: "/drawing/[id]", params: { id: selected.id } });
+  }, [router, selected, split]);
   const { user } = useAuth();
   const { noteUseCases, notes: noteRepository, deviceId, drawings } = useAppServices();
   const { locale, t, tp } = useI18n();
@@ -71,6 +102,28 @@ export default function NotesScreen() {
     }, [loadNotes]),
   );
 
+  // Editors beside the list report saves; refresh titles and previews without reloading per key.
+  const reloadTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reloadSoon = useCallback(() => {
+    if (reloadTimer.current) clearTimeout(reloadTimer.current);
+    reloadTimer.current = setTimeout(() => void loadNotes(), 600);
+  }, [loadNotes]);
+  useEffect(
+    () => () => {
+      if (reloadTimer.current) clearTimeout(reloadTimer.current);
+    },
+    [],
+  );
+
+  const openNote = (id: string) => {
+    if (split) setSelected({ kind: "note", id, opened: id });
+    else router.push({ pathname: "/editor", params: { id } });
+  };
+  const openNotebook = (id: string) => {
+    if (split) setSelected({ kind: "notebook", id, opened: id });
+    else router.push({ pathname: "/drawing/[id]", params: { id } });
+  };
+
   const createNote = async (template: NoteTemplate) => {
     if (!user) return;
     setBusy(true);
@@ -88,7 +141,7 @@ export default function NotesScreen() {
             ...noteFromTemplate(template, { t, today }),
           }),
         ));
-      router.push({ pathname: "/editor", params: { id: note.id } });
+      openNote(note.id);
     } catch (caught) {
       Alert.alert(
         t("notes.createFailed"),
@@ -104,7 +157,7 @@ export default function NotesScreen() {
     setBusy(true);
     try {
       const note = await pickAndImportNote(user.uid, deviceId, noteUseCases);
-      if (note) router.push({ pathname: "/editor", params: { id: note.id } });
+      if (note) openNote(note.id);
     } catch (caught) {
       Alert.alert(
         t("notes.importFailed"),
@@ -137,7 +190,10 @@ export default function NotesScreen() {
         onPress: () => {
           void drawings
             .softDelete(user!.uid, notebook.id, deviceId)
-            .then(loadNotes)
+            .then(() => {
+              if (selected?.id === notebook.id) setSelected(null);
+              return loadNotes();
+            })
             .catch((caught: unknown) => {
               Alert.alert(
                 t("notes.deleteFailed"),
@@ -158,7 +214,10 @@ export default function NotesScreen() {
         onPress: () => {
           void noteUseCases
             .trash(user!.uid, note.id, deviceId)
-            .then(loadNotes)
+            .then(() => {
+              if (selected?.id === note.id) setSelected(null);
+              return loadNotes();
+            })
             .catch((caught: unknown) => {
               Alert.alert(
                 t("notes.deleteFailed"),
@@ -184,106 +243,162 @@ export default function NotesScreen() {
     ];
   }, [notes, t]);
 
-  return (
-    <Screen>
-      <ResponsiveContent>
-        <ScreenHeader
-          title={t("tabs.notes")}
-          subtitle={loading ? undefined : subtitle}
-          actions={
-            <>
-              <IconButton
-                icon="search"
-                accessibilityLabel={t("search.title")}
-                onPress={() => router.push("/search")}
-              />
-              <IconButton
-                icon="add"
-                tone="accent"
-                active
-                accessibilityLabel={t("notes.new")}
-                onPress={() => setCreateSheet(true)}
-                disabled={busy}
-                testID="notes-new"
-              />
-            </>
+  const list = (
+    <>
+      <ScreenHeader
+        title={t("tabs.notes")}
+        subtitle={loading ? undefined : subtitle}
+        actions={
+          <>
+            <IconButton
+              icon="search"
+              accessibilityLabel={t("search.title")}
+              onPress={() => router.push("/search")}
+            />
+            <IconButton
+              icon="add"
+              tone="accent"
+              active
+              accessibilityLabel={t("notes.new")}
+              onPress={() => setCreateSheet(true)}
+              disabled={busy}
+              testID="notes-new"
+            />
+          </>
+        }
+      />
+      <SearchField
+        value={search}
+        onChangeText={setSearch}
+        placeholder={t("notes.searchPlaceholder")}
+        accessibilityLabel={t("notes.search")}
+        onClear={() => setSearch("")}
+      />
+      {loading && notes.length === 0 ? (
+        <LoadingState label={t("notes.loading")} />
+      ) : error ? (
+        <ErrorState message={error} onRetry={() => void loadNotes()} />
+      ) : (
+        <SectionList
+          sections={sections}
+          keyExtractor={(item) => item.id}
+          showsVerticalScrollIndicator={false}
+          stickySectionHeadersEnabled={false}
+          contentContainerStyle={
+            notes.length === 0 && notebooks.length === 0 ? styles.emptyList : styles.list
           }
+          ListHeaderComponent={
+            notebooks.length > 0 ? (
+              <NotebookShelf
+                notebooks={notebooks}
+                title={t("notes.notebooks")}
+                activeId={selected?.kind === "notebook" ? selected.id : null}
+                onOpen={(item) => openNotebook(item.id)}
+                onLongPress={deleteNotebook}
+              />
+            ) : null
+          }
+          ListEmptyComponent={
+            notebooks.length > 0 ? null : (
+              <EmptyState
+                icon={search ? "search-outline" : "document-text-outline"}
+                title={search ? t("notes.searchEmpty") : t("notes.emptyTitle")}
+                description={search ? t("notes.searchEmptyDetail") : t("notes.emptyDetail")}
+                action={
+                  search ? null : (
+                    <StoneButton
+                      label={t("notes.new")}
+                      icon="add"
+                      onPress={() => void createNote("blank")}
+                      disabled={busy}
+                    />
+                  )
+                }
+              />
+            )
+          }
+          renderSectionHeader={({ section }) =>
+            section.title ? (
+              <View style={styles.sectionHeader}>
+                <Overline>{section.title}</Overline>
+              </View>
+            ) : (
+              <View style={styles.sectionGap} />
+            )
+          }
+          renderItem={({ item, index, section }) => (
+            <GroupedRow
+              index={index}
+              count={section.data.length}
+              active={selected?.kind === "note" && selected.id === item.id}
+            >
+              <ListRow
+                title={item.title || t("notes.untitled")}
+                subtitle={preview(item, t("notes.emptyMarkdown"))}
+                meta={shortDate(locale, item.updatedAt)}
+                accessibilityLabel={t("notes.openA11y", { title: item.title })}
+                onPress={() => openNote(item.id)}
+                onLongPress={() => setActionsFor(item)}
+              />
+            </GroupedRow>
+          )}
         />
-        <SearchField
-          value={search}
-          onChangeText={setSearch}
-          placeholder={t("notes.searchPlaceholder")}
-          accessibilityLabel={t("notes.search")}
-          onClear={() => setSearch("")}
-        />
-        {loading && notes.length === 0 ? (
-          <LoadingState label={t("notes.loading")} />
-        ) : error ? (
-          <ErrorState message={error} onRetry={() => void loadNotes()} />
-        ) : (
-          <SectionList
-            sections={sections}
-            keyExtractor={(item) => item.id}
-            showsVerticalScrollIndicator={false}
-            stickySectionHeadersEnabled={false}
-            contentContainerStyle={
-              notes.length === 0 && notebooks.length === 0 ? styles.emptyList : styles.list
-            }
-            ListHeaderComponent={
-              notebooks.length > 0 ? (
-                <NotebookShelf
-                  notebooks={notebooks}
-                  title={t("notes.notebooks")}
-                  onOpen={(item) =>
-                    router.push({ pathname: "/drawing/[id]", params: { id: item.id } })
-                  }
-                  onLongPress={deleteNotebook}
-                />
-              ) : null
-            }
-            ListEmptyComponent={
-              notebooks.length > 0 ? null : (
-                <EmptyState
-                  icon={search ? "search-outline" : "document-text-outline"}
-                  title={search ? t("notes.searchEmpty") : t("notes.emptyTitle")}
-                  description={search ? t("notes.searchEmptyDetail") : t("notes.emptyDetail")}
-                  action={
-                    search ? null : (
-                      <StoneButton
-                        label={t("notes.new")}
-                        icon="add"
-                        onPress={() => void createNote("blank")}
-                        disabled={busy}
-                      />
-                    )
-                  }
-                />
-              )
-            }
-            renderSectionHeader={({ section }) =>
-              section.title ? (
-                <View style={styles.sectionHeader}>
-                  <Overline>{section.title}</Overline>
-                </View>
-              ) : (
-                <View style={styles.sectionGap} />
-              )
-            }
-            renderItem={({ item, index, section }) => (
-              <GroupedRow index={index} count={section.data.length}>
-                <ListRow
-                  title={item.title || t("notes.untitled")}
-                  subtitle={preview(item, t("notes.emptyMarkdown"))}
-                  meta={shortDate(locale, item.updatedAt)}
-                  accessibilityLabel={t("notes.openA11y", { title: item.title })}
-                  onPress={() => router.push({ pathname: "/editor", params: { id: item.id } })}
-                  onLongPress={() => setActionsFor(item)}
-                />
-              </GroupedRow>
+      )}
+    </>
+  );
+
+  return (
+    <Screen padded={!split}>
+      {split ? (
+        <View style={styles.split}>
+          <View
+            style={[
+              styles.listPane,
+              { borderColor: colors.border, backgroundColor: colors.background },
+            ]}
+          >
+            {list}
+          </View>
+          <View style={styles.detailPane}>
+            {selected ? (
+              <EmbeddedScreenProvider>
+                {selected.kind === "note" ? (
+                  <NoteEditor
+                    key={selected.opened}
+                    id={selected.opened}
+                    onBack={() => setSelected(null)}
+                    onOpenNote={openNote}
+                    onOpenNotebook={openNotebook}
+                    onChanged={reloadSoon}
+                  />
+                ) : (
+                  <NotebookEditor
+                    key={selected.opened}
+                    id={selected.opened}
+                    onBack={() => setSelected(null)}
+                    onChanged={(drawingId) => {
+                      setSelected((current) =>
+                        current?.opened === selected.opened
+                          ? { ...current, id: drawingId }
+                          : current,
+                      );
+                      reloadSoon();
+                    }}
+                  />
+                )}
+              </EmbeddedScreenProvider>
+            ) : (
+              <EmptyState
+                icon="reader-outline"
+                title={t("notes.splitEmpty")}
+                description={t("notes.splitEmptyDetail")}
+              />
             )}
-          />
-        )}
-      </ResponsiveContent>
+          </View>
+        </View>
+      ) : (
+        <ResponsiveContent>{list}</ResponsiveContent>
+      )}
       <ActionSheet
         visible={createSheet}
         title={t("notes.new")}
@@ -297,7 +412,7 @@ export default function NotesScreen() {
           {
             label: t("notes.newDrawing"),
             icon: "book-outline" as const,
-            onPress: () => router.push({ pathname: "/drawing/[id]", params: { id: "new" } }),
+            onPress: () => openNotebook("new"),
           },
           {
             label: t("notes.openMarkdown"),
@@ -336,11 +451,13 @@ export default function NotesScreen() {
 function NotebookShelf({
   notebooks,
   title,
+  activeId,
   onOpen,
   onLongPress,
 }: {
   notebooks: readonly Drawing[];
   title: string;
+  activeId: string | null;
   onOpen: (notebook: Drawing) => void;
   onLongPress: (notebook: Drawing) => void;
 }) {
@@ -366,7 +483,13 @@ function NotebookShelf({
             delayLongPress={350}
             style={({ pressed }) => [styles.cover, { opacity: pressed ? 0.7 : 1 }]}
           >
-            <View style={[styles.coverPage, { borderColor: colors.border }]}>
+            <View
+              style={[
+                styles.coverPage,
+                { borderColor: colors.border },
+                item.id === activeId && { borderColor: colors.primary, borderWidth: 2 },
+              ]}
+            >
               {item.previewPath ? (
                 <Image
                   source={{ uri: item.previewPath }}
@@ -395,10 +518,12 @@ const templateIcons: Readonly<Record<NoteTemplate, IconName>> = {
 function GroupedRow({
   index,
   count,
+  active = false,
   children,
 }: {
   index: number;
   count: number;
+  active?: boolean;
   children: ReactNode;
 }) {
   const { colors } = useTheme();
@@ -408,7 +533,10 @@ function GroupedRow({
     <View
       style={[
         styles.groupRow,
-        { backgroundColor: colors.surface, borderColor: colors.border },
+        {
+          backgroundColor: active ? colors.primarySoft : colors.surface,
+          borderColor: colors.border,
+        },
         first && styles.groupFirst,
         last && styles.groupLast,
       ]}
@@ -444,6 +572,14 @@ function shortDate(locale: string, instant: string): string {
 }
 
 const styles = StyleSheet.create({
+  split: { flex: 1, flexDirection: "row" },
+  listPane: {
+    width: LIST_PANE_WIDTH,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.lg,
+    borderRightWidth: hairline,
+  },
+  detailPane: { flex: 1, paddingTop: spacing.sm },
   list: { paddingTop: spacing.sm, paddingBottom: spacing.giant },
   emptyList: { flexGrow: 1 },
   sectionHeader: { paddingTop: spacing.lg, paddingBottom: spacing.sm },

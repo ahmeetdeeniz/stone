@@ -1,0 +1,639 @@
+import { useRouter } from "expo-router";
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  AppState,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  View,
+} from "react-native";
+import * as Linking from "expo-linking";
+import type { Document } from "@stone/domain";
+import {
+  extractDrawingBlocks,
+  insertAttachment,
+  parseAttachmentLinkTarget,
+  parseWikiLinkUrl,
+  type ParsedStoneDrawingBlock,
+} from "@stone/markdown";
+import type { EditorBridgeMessage } from "@stone/editor";
+import { ErrorState, LoadingState } from "../components/states";
+import { ResponsiveContent } from "../components/responsive";
+import { Chip, Screen, StoneButton, StoneInput, StoneText } from "../components/ui";
+import { localIsoDate, newNoteDocument, noteFromTemplate } from "./templates";
+import { useTheme } from "../design/theme";
+import { spacing } from "../design/tokens";
+import { EditorWebView, type EditorWebViewHandle } from "../editor/EditorWebView";
+import { exportNote } from "./note-files";
+import { useAuth } from "../providers/auth-provider";
+import { useAppServices } from "../providers/app-provider";
+import { useI18n } from "../i18n/provider";
+import { AttachmentStrip } from "../attachments/AttachmentStrip";
+import {
+  attachmentErrorKey,
+  openAttachmentExternally,
+  pickAttachment,
+} from "../attachments/attachment-picker";
+
+export interface NoteEditorProps {
+  id: string | undefined;
+  /** Leaves the editor; defaults to navigating back. */
+  onBack?: () => void;
+  /** Opens another note (wiki links, backlinks); defaults to pushing the editor route. */
+  onOpenNote?: (id: string) => void;
+  /** Opens a drawing/notebook; defaults to pushing its route. */
+  onOpenNotebook?: (id: string) => void;
+  /** Called after the note was saved, renamed or trashed (to refresh a list beside it). */
+  onChanged?: () => void;
+}
+
+/** The Markdown note editor, as a full screen route or embedded in the tablet split view. */
+export function NoteEditor({ id, onBack, onOpenNote, onOpenNotebook, onChanged }: NoteEditorProps) {
+  const router = useRouter();
+  const changedRef = useRef(onChanged);
+  changedRef.current = onChanged;
+  const back = onBack ?? (() => router.back());
+  const openNote =
+    onOpenNote ??
+    ((noteId: string) => router.push({ pathname: "/editor", params: { id: noteId } }));
+  const openNotebook =
+    onOpenNotebook ??
+    ((drawingId: string) => router.push({ pathname: "/drawing/[id]", params: { id: drawingId } }));
+  const { colors, mode } = useTheme();
+  const { user } = useAuth();
+  const { noteUseCases, notes: noteRepository, deviceId, drawings, attachments } = useAppServices();
+  const { t } = useI18n();
+  const webViewRef = useRef<EditorWebViewHandle>(null);
+  const contentRef = useRef("");
+  const selectionRef = useRef({ from: 0, to: 0 });
+  const saveRef = useRef<() => Promise<void>>(() => Promise.resolve());
+  const [note, setNote] = useState<Document | null>(null);
+  const [backlinks, setBacklinks] = useState<readonly Document[]>([]);
+  const [content, setContent] = useState("");
+  const [title, setTitle] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [status, setStatus] = useState<"saved" | "unsaved" | "saving" | "error">("saved");
+  const [recoveredDraft, setRecoveredDraft] = useState<string | null>(null);
+  const [findQuery, setFindQuery] = useState("");
+  const [drawingBlocks, setDrawingBlocks] = useState<readonly ParsedStoneDrawingBlock[]>([]);
+  const [attaching, setAttaching] = useState(false);
+
+  useEffect(() => {
+    if (!id || !user) return;
+    let active = true;
+    setLoading(true);
+    void noteUseCases
+      .get(user.uid, id)
+      .then(async (loaded) => {
+        if (!active) return;
+        if (!loaded) throw new Error(t("editor.notFound"));
+        const draft = await noteUseCases.getDraft(user.uid, id);
+        const useDraft = Boolean(
+          draft && new Date(draft.updatedAt).getTime() > new Date(loaded.updatedAt).getTime(),
+        );
+        const nextContent = useDraft && draft ? draft.markdown : loaded.markdown;
+        contentRef.current = nextContent;
+        setContent(nextContent);
+        setTitle(loaded.title);
+        setNote(loaded);
+        setDrawingBlocks(extractDrawingBlocks(nextContent));
+        if (useDraft && draft) setRecoveredDraft(draft.markdown);
+      })
+      .catch((caught: unknown) => {
+        if (active) setError(caught instanceof Error ? caught.message : t("editor.loadFailed"));
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [id, noteUseCases, user]);
+
+  const saveCurrent = useCallback(async () => {
+    if (!note || !user) return;
+    if (contentRef.current === note.markdown) {
+      setStatus("saved");
+      return;
+    }
+    setStatus("saving");
+    try {
+      const now = new Date().toISOString();
+      await noteUseCases.saveDraft({
+        documentId: note.id,
+        ownerId: user.uid,
+        markdown: contentRef.current,
+        updatedAt: now,
+        selectionFrom: selectionRef.current.from,
+        selectionTo: selectionRef.current.to,
+      });
+      const updated = await noteUseCases.updateMarkdown(
+        user.uid,
+        note.id,
+        contentRef.current,
+        deviceId,
+      );
+      await noteUseCases.clearDraft(user.uid, note.id);
+      setNote(updated);
+      setStatus("saved");
+      changedRef.current?.();
+    } catch (caught) {
+      setStatus("error");
+      setError(caught instanceof Error ? caught.message : t("editor.saveFailed"));
+    }
+  }, [deviceId, note, noteUseCases, user]);
+
+  useEffect(() => {
+    if (!note || !user) return;
+    void drawings.list(user.uid, note.id).then((available) => {
+      const availableIds = new Set(available.map((item) => item.id));
+      setDrawingBlocks(extractDrawingBlocks(contentRef.current, availableIds));
+    });
+  }, [content, drawings, note, user]);
+  saveRef.current = saveCurrent;
+
+  useEffect(() => {
+    if (!note) return;
+    const timer = setTimeout(() => void saveCurrent(), 450);
+    return () => clearTimeout(timer);
+  }, [content, note, saveCurrent]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (nextState) => {
+      if (nextState === "background" || nextState === "inactive") void saveRef.current();
+    });
+    return () => subscription.remove();
+  }, []);
+
+  // Switching notes in the split view unmounts the editor: don't drop the pending save.
+  useEffect(() => () => void saveRef.current(), []);
+
+  useEffect(() => {
+    if (!note || !user) return;
+    let active = true;
+    void noteRepository
+      .listBacklinks(user.uid, note.title, note.id)
+      .then((found) => {
+        if (active) setBacklinks(found);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [note, noteRepository, user]);
+
+  /** Picks an image or PDF, stores it and inserts its link at the cursor. */
+  const attach = async () => {
+    if (!user || !note) return;
+    try {
+      const picked = await pickAttachment();
+      if (!picked) return;
+      setAttaching(true);
+      const fileName = await attachments.add(user.uid, picked);
+      const inserted = insertAttachment(
+        contentRef.current,
+        selectionRef.current,
+        picked.name,
+        fileName,
+      );
+      contentRef.current = inserted.source;
+      selectionRef.current = { from: inserted.caret, to: inserted.caret };
+      setContent(inserted.source);
+      setStatus("unsaved");
+      webViewRef.current?.post({
+        protocolVersion: 1,
+        type: "setDocument",
+        payload: { markdown: inserted.source },
+      });
+      void attachments.flush(user.uid);
+    } catch (caught) {
+      const key = attachmentErrorKey(caught);
+      Alert.alert(
+        t("attachments.addFailed"),
+        key ? t(key) : caught instanceof Error ? caught.message : t("app.unknownError"),
+      );
+    } finally {
+      setAttaching(false);
+    }
+  };
+
+  /** `[[Title]]` opens (or creates) that note; other links only open for safe schemes. */
+  const openLink = async (url: string) => {
+    const attachment = parseAttachmentLinkTarget(url);
+    if (attachment) {
+      if (!user) return;
+      try {
+        await openAttachmentExternally(await attachments.resolve(user.uid, attachment), attachment);
+      } catch {
+        Alert.alert(t("attachments.unavailable"), t("attachments.unavailableDetail"));
+      }
+      return;
+    }
+    const target = parseWikiLinkUrl(url);
+    if (target === null) {
+      if (/^(?:https?:|mailto:|tel:)/iu.test(url)) await Linking.openURL(url);
+      return;
+    }
+    if (!user) return;
+    try {
+      await saveRef.current();
+      const existing = await noteRepository.findByTitle(user.uid, target);
+      const linked =
+        existing ??
+        (await noteUseCases.create(
+          newNoteDocument({
+            ownerId: user.uid,
+            deviceId,
+            ...noteFromTemplate("blank", { t, today: localIsoDate(), title: target }),
+          }),
+        ));
+      openNote(linked.id);
+    } catch (caught) {
+      Alert.alert(
+        t("notes.linkOpenFailed"),
+        caught instanceof Error ? caught.message : t("app.unknownError"),
+      );
+    }
+  };
+
+  const handleMessage = (message: EditorBridgeMessage) => {
+    if (message.type === "documentChanged") {
+      contentRef.current = message.payload.markdown;
+      setContent(message.payload.markdown);
+      setStatus("unsaved");
+    } else if (message.type === "selectionChanged" || message.type === "stateSnapshot") {
+      selectionRef.current = { from: message.payload.from, to: message.payload.to };
+    } else if (message.type === "openLink") {
+      void openLink(message.payload.url);
+    } else if (message.type === "editorError") {
+      setError(message.payload.message);
+    }
+  };
+
+  const rename = async () => {
+    if (!note || !user || title.trim() === note.title) return;
+    try {
+      const updated = await noteUseCases.rename(user.uid, note.id, title, deviceId);
+      setTitle(updated.title);
+      setNote(updated);
+      changedRef.current?.();
+    } catch (caught) {
+      Alert.alert(
+        t("editor.titleSaveFailed"),
+        caught instanceof Error ? caught.message : t("app.unknownError"),
+      );
+    }
+  };
+
+  const moveToTrash = () => {
+    if (!note || !user) return;
+    Alert.alert(t("editor.trashConfirm"), t("editor.trashDetail"), [
+      { text: t("common.cancel"), style: "cancel" },
+      {
+        text: t("notes.moveToTrash"),
+        style: "destructive",
+        onPress: () =>
+          void noteUseCases.trash(user.uid, note.id, deviceId).then(() => {
+            onChanged?.();
+            back();
+          }),
+      },
+    ]);
+  };
+
+  const shareExport = async () => {
+    if (!note) return;
+    try {
+      await exportNote(note);
+    } catch (caught) {
+      Alert.alert(
+        t("editor.exportFailed"),
+        caught instanceof Error ? caught.message : t("projects.shareFailed"),
+      );
+    }
+  };
+
+  if (loading)
+    return (
+      <Screen>
+        <LoadingState label={t("editor.preparing")} />
+      </Screen>
+    );
+  if (error && !note)
+    return (
+      <Screen>
+        <ErrorState
+          message={error}
+          onRetry={() =>
+            onBack ? back() : router.replace({ pathname: "/editor", params: { id } })
+          }
+        />
+      </Screen>
+    );
+  if (!note || !id)
+    return (
+      <Screen>
+        <ErrorState message={t("editor.notFound")} />
+      </Screen>
+    );
+
+  return (
+    <Screen padded={false}>
+      <ResponsiveContent>
+        <KeyboardAvoidingView
+          style={styles.container}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+        >
+          <View
+            style={[
+              styles.toolbar,
+              { borderBottomColor: colors.border, backgroundColor: colors.surface },
+            ]}
+          >
+            <StoneButton
+              label={t("common.back")}
+              variant="quiet"
+              testID="editor-back"
+              onPress={() => {
+                void saveCurrent();
+                back();
+              }}
+            />
+            <StoneInput
+              label={t("editor.noteTitle")}
+              value={title}
+              onChangeText={setTitle}
+              onEndEditing={() => void rename()}
+              containerStyle={styles.titleInput}
+              testID="editor-title"
+            />
+            <View style={styles.toolbarActions}>
+              <StoneText variant="caption" tone={status === "error" ? "danger" : "muted"}>
+                {statusLabel(status, t)}
+              </StoneText>
+              {status === "saving" ? (
+                <ActivityIndicator color={colors.primary} size="small" />
+              ) : null}
+              <StoneButton
+                label={t("editor.export")}
+                variant="quiet"
+                onPress={() => void shareExport()}
+              />
+              {note ? (
+                <StoneButton
+                  label={t("focus.startLinked")}
+                  variant="quiet"
+                  onPress={() =>
+                    router.push({
+                      pathname: "/(tabs)/focus",
+                      params: { documentId: note.id, projectId: note.projectId ?? undefined },
+                    })
+                  }
+                />
+              ) : null}
+              <StoneButton label={t("notes.moveToTrash")} variant="quiet" onPress={moveToTrash} />
+            </View>
+          </View>
+          <View
+            style={[
+              styles.findBar,
+              { backgroundColor: colors.backgroundSecondary, borderBottomColor: colors.border },
+            ]}
+          >
+            <StoneInput
+              label={t("editor.search")}
+              value={findQuery}
+              onChangeText={(query) => {
+                setFindQuery(query);
+                webViewRef.current?.post({
+                  protocolVersion: 1,
+                  type: "setFindQuery",
+                  payload: { query },
+                });
+              }}
+              containerStyle={styles.findInput}
+              autoCapitalize="none"
+              autoCorrect={false}
+              returnKeyType="search"
+              onSubmitEditing={() =>
+                webViewRef.current?.post({
+                  protocolVersion: 1,
+                  type: "executeCommand",
+                  payload: { command: "find" },
+                })
+              }
+            />
+            <StoneButton
+              label={t("editor.find")}
+              variant="secondary"
+              onPress={() =>
+                webViewRef.current?.post({
+                  protocolVersion: 1,
+                  type: "executeCommand",
+                  payload: { command: "find" },
+                })
+              }
+            />
+          </View>
+          {recoveredDraft ? (
+            <View
+              style={[
+                styles.recovery,
+                { backgroundColor: colors.backgroundSecondary, borderColor: colors.border },
+              ]}
+            >
+              <StoneText variant="bodySmall">{t("editor.recoveredDraft")}</StoneText>
+              <StoneButton
+                label={t("editor.discardDraft")}
+                variant="quiet"
+                onPress={() => {
+                  contentRef.current = note.markdown;
+                  setContent(note.markdown);
+                  setRecoveredDraft(null);
+                  void noteUseCases.clearDraft(user!.uid, note.id);
+                }}
+              />
+            </View>
+          ) : null}
+          {drawingBlocks.length > 0 ? (
+            <View
+              style={[
+                styles.drawingBlocks,
+                { backgroundColor: colors.backgroundSecondary, borderBottomColor: colors.border },
+              ]}
+            >
+              {drawingBlocks.map((block) => (
+                <Pressable
+                  key={block.id}
+                  accessibilityRole="button"
+                  accessibilityLabel={t("editor.openDrawingA11y", { title: block.title })}
+                  onPress={() => openNotebook(block.id)}
+                  style={[
+                    styles.drawingBlock,
+                    { borderColor: colors.border, backgroundColor: colors.surface },
+                  ]}
+                >
+                  <StoneText variant="label">{block.title}</StoneText>
+                  <StoneText variant="caption" style={{ color: colors.textSecondary }}>
+                    {block.sourceAvailable
+                      ? t("editor.editableDrawing")
+                      : t("editor.missingDrawing")}
+                  </StoneText>
+                </Pressable>
+              ))}
+            </View>
+          ) : null}
+          <AttachmentStrip service={attachments} ownerId={user?.uid} markdown={content} />
+          {backlinks.length > 0 ? (
+            <View
+              style={[
+                styles.backlinks,
+                { backgroundColor: colors.backgroundSecondary, borderBottomColor: colors.border },
+              ]}
+            >
+              <StoneText variant="caption" style={{ color: colors.textSecondary }}>
+                {t("notes.backlinks", { count: backlinks.length })}
+              </StoneText>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                <View style={styles.backlinkRow}>
+                  {backlinks.map((linked) => (
+                    <Chip
+                      key={linked.id}
+                      label={linked.title}
+                      icon="link-outline"
+                      onPress={() => openNote(linked.id)}
+                    />
+                  ))}
+                </View>
+              </ScrollView>
+            </View>
+          ) : null}
+          <EditorWebView
+            ref={webViewRef}
+            documentId={note.id}
+            markdown={content}
+            theme={mode}
+            onMessage={handleMessage}
+          />
+          {error ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t("editor.dismissErrorA11y")}
+              onPress={() => setError(null)}
+              style={styles.error}
+            >
+              <StoneText variant="caption" tone="danger">
+                {error}
+              </StoneText>
+            </Pressable>
+          ) : null}
+          <View
+            style={[
+              styles.commandBar,
+              { backgroundColor: colors.surface, borderTopColor: colors.border },
+            ]}
+          >
+            {(
+              [
+                ["toggleBold", t("editor.toolbar.bold")],
+                ["toggleItalic", t("editor.toolbar.italic")],
+                ["toggleBulletList", t("editor.toolbar.list")],
+                ["toggleTask", t("editor.toolbar.task")],
+                ["cycleHeading", t("editor.toolbar.heading")],
+                ["undo", t("editor.toolbar.undo")],
+                ["redo", t("editor.toolbar.redo")],
+              ] as const
+            ).map(([command, label]) => (
+              <StoneButton
+                key={command}
+                label={label}
+                variant="secondary"
+                onPress={() =>
+                  webViewRef.current?.post({
+                    protocolVersion: 1,
+                    type: "executeCommand",
+                    payload: { command },
+                  })
+                }
+              />
+            ))}
+            <StoneButton
+              label={attaching ? t("attachments.adding") : t("editor.toolbar.attach")}
+              variant="secondary"
+              icon="attach-outline"
+              disabled={attaching}
+              onPress={() => void attach()}
+              testID="editor-attach"
+            />
+          </View>
+        </KeyboardAvoidingView>
+      </ResponsiveContent>
+    </Screen>
+  );
+}
+
+function statusLabel(
+  status: "saved" | "unsaved" | "saving" | "error",
+  t: ReturnType<typeof useI18n>["t"],
+): string {
+  return status === "saved"
+    ? t("editor.status.saved")
+    : status === "saving"
+      ? t("editor.status.saving")
+      : status === "error"
+        ? t("editor.status.error")
+        : t("editor.status.unsaved");
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1 },
+  toolbar: {
+    minHeight: 72,
+    borderBottomWidth: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    paddingHorizontal: spacing.sm,
+  },
+  titleInput: { flex: 1 },
+  toolbarActions: { flexDirection: "row", alignItems: "center", gap: spacing.xs },
+  recovery: {
+    borderBottomWidth: 1,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  error: { padding: spacing.sm },
+  findBar: {
+    borderBottomWidth: 1,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+  },
+  findInput: { flex: 1 },
+  commandBar: {
+    borderTopWidth: 1,
+    padding: spacing.sm,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.xs,
+  },
+  drawingBlocks: { borderBottomWidth: 1, padding: spacing.sm, gap: spacing.sm },
+  backlinks: {
+    borderBottomWidth: 1,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    gap: spacing.xs,
+  },
+  backlinkRow: { flexDirection: "row", gap: spacing.xs },
+  drawingBlock: { borderWidth: 1, borderRadius: 10, padding: spacing.sm, gap: spacing.xs },
+});
