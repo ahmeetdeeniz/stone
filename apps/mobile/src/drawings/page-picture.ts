@@ -198,9 +198,23 @@ export function measureTextHeight(text: InkText, typeface: SkTypeface | null): n
   return Math.max(1, lines.length) * lineHeightFor(text.size);
 }
 
+/** A PDF page's pre-rendered image filling the page; a blank sheet until it has loaded. */
+function drawBackground(canvas: SkCanvas, page: InkPage, width: number, assets: PageAssets): void {
+  const white = Skia.Paint();
+  white.setColor(Skia.Color("#FFFFFF"));
+  const rect = Skia.XYWHRect(0, 0, width, page.height);
+  canvas.drawRect(rect, white);
+  const image = page.background ? assets.images.get(page.background.image) : undefined;
+  if (!image) return;
+  const paint = Skia.Paint();
+  paint.setAntiAlias(true);
+  canvas.drawImageRect(image, Skia.XYWHRect(0, 0, image.width(), image.height()), rect, paint);
+}
+
 /**
- * Records a whole page once (paper, photos, text, shapes, then strokes on top, so ink can
- * annotate a photo); it is redrawn from the picture.
+ * Records a whole page once (paper or PDF page, photos, text, shapes, then strokes on top, so
+ * ink can annotate a photo or a slide); it is redrawn from the picture. `layers: "ink"` leaves
+ * the paper and PDF page out (transparent), for laying the notes over an original PDF page.
  */
 export function recordPage(
   page: InkPage,
@@ -208,13 +222,17 @@ export function recordPage(
   width: number,
   assets: PageAssets = NO_ASSETS,
   palette: PaperPalette = PAPER_PALETTE,
+  layers: "page" | "ink" = "page",
 ): SkPicture {
   const recorder = Skia.PictureRecorder();
   const bounds = Skia.XYWHRect(0, 0, width, page.height);
   const canvas = recorder.beginRecording(bounds);
   // Nothing (a photo dragged to the edge, a long stroke) draws past the paper onto the desk.
   canvas.clipRect(bounds, ClipOp.Intersect, true);
-  drawPaper(canvas, paper, width, page.height, palette);
+  if (layers === "page") {
+    if (page.background) drawBackground(canvas, page, width, assets);
+    else drawPaper(canvas, paper, width, page.height, palette);
+  }
   for (const image of page.images ?? []) drawImage(canvas, image, assets.images.get(image.file));
   for (const text of page.texts ?? []) drawText(canvas, text, assets.typeface);
   for (const shape of page.shapes) drawShape(canvas, shape);
@@ -229,6 +247,7 @@ export function renderPagePng(
   width: number,
   assets: PageAssets = NO_ASSETS,
   scale = 1,
+  layers: "page" | "ink" = "page",
 ): Uint8Array | null {
   const surface = Skia.Surface.MakeOffscreen(
     Math.round(width * scale),
@@ -237,7 +256,7 @@ export function renderPagePng(
   if (!surface) return null;
   const canvas = surface.getCanvas();
   canvas.scale(scale, scale);
-  canvas.drawPicture(recordPage(page, paper, width, assets));
+  canvas.drawPicture(recordPage(page, paper, width, assets, PAPER_PALETTE, layers));
   surface.flush();
   return surface.makeImageSnapshot().encodeToBytes();
 }

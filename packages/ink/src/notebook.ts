@@ -9,9 +9,11 @@ import {
 } from "./index.js";
 import {
   objectBounds,
+  validateBackground,
   validateImages,
   validateTexts,
   type InkImage,
+  type InkPageBackground,
   type InkText,
 } from "./page-objects.js";
 
@@ -54,6 +56,8 @@ export interface InkPage {
   images?: readonly InkImage[];
   /** Typed text boxes (schema 3). */
   texts?: readonly InkText[];
+  /** A PDF page shown instead of paper (schema 3); the page keeps the PDF page's aspect. */
+  background?: InkPageBackground;
 }
 
 export interface InkNotebook {
@@ -190,6 +194,7 @@ export function validateNotebook(value: unknown): InkNotebook {
     });
     const images = validateImages(page.images);
     const texts = validateTexts(page.texts);
+    const background = validateBackground(page.background);
     return {
       id: page.id,
       height,
@@ -197,6 +202,7 @@ export function validateNotebook(value: unknown): InkNotebook {
       shapes: checked.shapes,
       ...(images.length ? { images } : {}),
       ...(texts.length ? { texts } : {}),
+      ...(background ? { background } : {}),
     };
   });
   const first = validateInk({
@@ -220,7 +226,7 @@ export function validateNotebook(value: unknown): InkNotebook {
     throw new InkValidationError("Notebook contains too many objects.");
   if (new Set(pages.map((page) => page.id)).size !== pages.length)
     throw new InkValidationError("Notebook page ids must be unique.");
-  const rich = pages.some((page) => page.images?.length || page.texts?.length);
+  const rich = pages.some((page) => page.images?.length || page.texts?.length || page.background);
   return {
     schema: rich ? INK_NOTEBOOK_RICH_SCHEMA_VERSION : INK_NOTEBOOK_SCHEMA_VERSION,
     id: first.id,
@@ -259,7 +265,9 @@ export function replacePage(
 ): InkNotebook {
   const page = requirePage(notebook, index);
   const height =
-    notebook.layout === "infinite" ? grownHeight(notebook, page.height, document) : page.height;
+    notebook.layout === "infinite" && !page.background
+      ? grownHeight(notebook, page.height, document)
+      : page.height;
   const pages = notebook.pages.map((item, position) =>
     position === index
       ? { ...item, height, strokes: document.strokes, shapes: document.shapes }
@@ -427,7 +435,7 @@ export function setPageObjects(
   const images = objects.images ?? page.images ?? [];
   const texts = objects.texts ?? page.texts ?? [];
   let height = page.height;
-  if (notebook.layout === "infinite") {
+  if (notebook.layout === "infinite" && !page.background) {
     const bottom = Math.max(
       0,
       ...[...images, ...texts].map((object) => objectBounds(object).bottom),
@@ -441,6 +449,7 @@ export function setPageObjects(
     shapes: page.shapes,
     ...(images.length ? { images } : {}),
     ...(texts.length ? { texts } : {}),
+    ...(page.background ? { background: page.background } : {}),
   };
   return {
     ...notebook,
@@ -490,6 +499,62 @@ export function duplicatePage(
 /** Attachment files (`<sha256>.<ext>`) the notebook's pages refer to. */
 export function notebookAttachments(notebook: InkNotebook): readonly string[] {
   const files = new Set<string>();
-  for (const page of notebook.pages) for (const image of page.images ?? []) files.add(image.file);
+  for (const page of notebook.pages) {
+    for (const image of page.images ?? []) files.add(image.file);
+    if (page.background) {
+      files.add(page.background.image);
+      files.add(page.background.file);
+    }
+  }
   return [...files];
+}
+
+/** A page of an imported PDF: its rendered image and its height at the notebook's page width. */
+export interface PdfPageImport {
+  id: string;
+  height: number;
+  background: InkPageBackground;
+}
+
+/**
+ * Inserts imported PDF pages after `afterIndex` (-1 puts them first). With `replaceBlank`, a
+ * notebook that is still a single empty page is replaced instead of keeping that page.
+ */
+export function insertPdfPages(
+  notebook: InkNotebook,
+  afterIndex: number,
+  imported: readonly PdfPageImport[],
+  now = new Date().toISOString(),
+  replaceBlank = false,
+): InkNotebook {
+  if (imported.length === 0) return notebook;
+  const pages: InkPage[] = imported.map((item) => ({
+    id: item.id,
+    height: Math.min(MAX_PAGE_HEIGHT, Math.max(1, item.height)),
+    strokes: [],
+    shapes: [],
+    background: item.background,
+  }));
+  const only = notebook.pages[0];
+  const blank =
+    replaceBlank &&
+    notebook.pages.length === 1 &&
+    only !== undefined &&
+    only.strokes.length + only.shapes.length === 0 &&
+    !only.images?.length &&
+    !only.texts?.length &&
+    !only.background;
+  const kept = blank ? [] : notebook.pages;
+  if (kept.length + pages.length > MAX_PAGES)
+    throw new InkValidationError("Notebook has too many pages.");
+  const position = blank ? 0 : Math.max(-1, Math.min(afterIndex, kept.length - 1)) + 1;
+  const next = [...kept.slice(0, position), ...pages, ...kept.slice(position)];
+  if (new Set(next.map((page) => page.id)).size !== next.length)
+    throw new InkValidationError("Notebook page ids must be unique.");
+  return { ...notebook, pages: next, updatedAt: now };
+}
+
+/** How many more pages a notebook can take. */
+export function remainingPages(notebook: InkNotebook): number {
+  return MAX_PAGES - notebook.pages.length;
 }

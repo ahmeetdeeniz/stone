@@ -47,7 +47,13 @@ const SPLIT_WIDTH = 1000;
 const LIST_PANE_WIDTH = 400;
 
 /** `id` is what the list highlights; `opened` is what the editor was opened with ("new"). */
-type Selection = { kind: "note" | "notebook"; id: string; opened: string };
+type Selection = {
+  kind: "note" | "notebook";
+  id: string;
+  opened: string;
+  /** "pdf": a new notebook that starts by importing a PDF. */
+  from?: "pdf";
+};
 
 export default function NotesScreen() {
   const router = useRouter();
@@ -119,9 +125,9 @@ export default function NotesScreen() {
     if (split) setSelected({ kind: "note", id, opened: id });
     else router.push({ pathname: "/editor", params: { id } });
   };
-  const openNotebook = (id: string) => {
-    if (split) setSelected({ kind: "notebook", id, opened: id });
-    else router.push({ pathname: "/drawing/[id]", params: { id } });
+  const openNotebook = (id: string, from?: "pdf") => {
+    if (split) setSelected({ kind: "notebook", id, opened: id, ...(from ? { from } : {}) });
+    else router.push({ pathname: "/drawing/[id]", params: { id, ...(from ? { from } : {}) } });
   };
 
   const createNote = async (template: NoteTemplate) => {
@@ -373,8 +379,9 @@ export default function NotesScreen() {
                   />
                 ) : (
                   <NotebookEditor
-                    key={selected.opened}
+                    key={`${selected.opened}:${selected.from ?? ""}`}
                     id={selected.opened}
+                    from={selected.from}
                     onBack={() => setSelected(null)}
                     onChanged={(drawingId) => {
                       setSelected((current) =>
@@ -413,6 +420,11 @@ export default function NotesScreen() {
             label: t("notes.newDrawing"),
             icon: "book-outline" as const,
             onPress: () => openNotebook("new"),
+          },
+          {
+            label: t("notes.notebookFromPdf"),
+            icon: "document-attach-outline" as const,
+            onPress: () => openNotebook("new", "pdf"),
           },
           {
             label: t("notes.openMarkdown"),

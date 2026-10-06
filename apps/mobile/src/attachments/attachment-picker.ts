@@ -39,6 +39,24 @@ export async function pickImage(): Promise<PickedAttachment | null> {
   };
 }
 
+/** Lets the user pick one PDF (lecture slides to write on); null when they cancel. */
+export async function pickPdf(): Promise<PickedAttachment | null> {
+  const result = await DocumentPicker.getDocumentAsync({
+    type: ["application/pdf"],
+    copyToCacheDirectory: true,
+    multiple: false,
+  });
+  if (result.canceled) return null;
+  const asset = result.assets[0];
+  if (!asset) return null;
+  return {
+    uri: asset.uri,
+    name: asset.name,
+    mimeType: asset.mimeType ?? "application/pdf",
+    size: asset.size ?? null,
+  };
+}
+
 /** Hands a local attachment to the system (Quick Look / an installed viewer, or share). */
 export async function openAttachmentExternally(uri: string, fileName: string): Promise<void> {
   const type = attachmentTypeOf(fileName);

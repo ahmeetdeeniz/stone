@@ -19,4 +19,11 @@ resolution.
 - **Windows desktop navigation** — uses four text glyphs from the operating-system/system font
   stack with accessible text labels. No raw icon image is bundled.
 
+## Inlined code
+
+- **pdf.js via `pdfjs-dist`** (Apache-2.0, Mozilla) — the legacy build's `pdf.min.mjs` and
+  `pdf.worker.min.mjs` are inlined, with their license headers, into
+  `apps/mobile/src/pdf/pdf-renderer-html.ts` by `apps/mobile/scripts/build-pdf-renderer.mjs`. The
+  app loads that page in a hidden WebView to render imported PDF pages to images.
+
 The repository intentionally contains no private brand font or unproven raw icon directory.

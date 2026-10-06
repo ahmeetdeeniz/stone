@@ -5,6 +5,12 @@ tag, so no release date or semantic version is claimed.
 
 ## Unreleased
 
+- Write on PDFs: "Notebook from PDF" (Notes tab) or "Add PDF pages" (notebook menu) turns a PDF
+  such as lecture slides into notebook pages you can write, highlight, type and place photos on.
+  Pages keep the PDF's shape (16:9 slides stay 16:9); each page is pre-rendered once (pdf.js in a
+  hidden WebView) so every device shows it, and the original PDF syncs as an attachment. Sharing
+  the notebook as a PDF puts your notes over the original pages, so slide text stays sharp and
+  selectable.
 - Notebook tools: hold the pen still at the end of a stroke to snap it to a clean line, ellipse
   or rectangle; type text boxes (three sizes, Inter, wrap width adjustable); place photos that
   sync like note attachments and can be moved and resized; reorder, duplicate or insert pages

@@ -12,6 +12,7 @@ import {
   serializeNotebook,
   setPageObjects,
   addPage,
+  insertPdfPages,
   type InkImage,
   type InkPoint,
   type InkText,
@@ -33,6 +34,7 @@ const image: InkImage = {
   height: 200,
   createdAt: now,
 };
+const imageObject = image;
 const text: InkText = {
   id: "txt",
   text: "Newton'un 2. yasası: F = m·a",
@@ -177,5 +179,55 @@ describe("shape recognition", () => {
     const arc = ring(300, 300, 100, 100).slice(0, 45);
     expect(recognizeShape(arc)).toBeNull();
     expect(recognizeShape(ring(0, 0, 2, 2))).toBeNull();
+  });
+});
+
+describe("PDF page backgrounds", () => {
+  const pdf = `${"c".repeat(64)}.pdf`;
+  const image = `${"d".repeat(64)}.webp`;
+  const slide = (n: number) => ({
+    id: `pdf-${n}`,
+    height: 447,
+    background: { kind: "pdf" as const, file: pdf, page: n, image },
+  });
+
+  it("replaces a blank notebook with the PDF pages and lists their files", () => {
+    const nb = insertPdfPages(
+      createNotebook({ id: "nb", title: "Slaytlar", pageId: "p1", now }),
+      0,
+      [slide(1), slide(2)],
+      now,
+      true,
+    );
+    expect(nb.pages.map((page) => page.id)).toEqual(["pdf-1", "pdf-2"]);
+    expect(nb.pages[1]!.height).toBe(447);
+    expect(new Set(notebookAttachments(nb))).toEqual(new Set([pdf, image]));
+    const back = parseNotebook(serializeNotebook(nb));
+    expect(json(serializeNotebook(nb)).schema).toBe(3);
+    expect(back.pages[0]!.background).toEqual(slide(1).background);
+  });
+
+  it("inserts after a page in a notebook that has content, and keeps PDF pages from growing", () => {
+    let nb = createNotebook({ id: "nb", title: "x", pageId: "p1", layout: "infinite", now });
+    nb = setPageObjects(nb, 0, { texts: [text] }, now);
+    nb = insertPdfPages(nb, 0, [slide(1)], now, true);
+    expect(nb.pages.map((page) => page.id)).toEqual(["p1", "pdf-1"]);
+    const low = setPageObjects(nb, 1, { images: [{ ...imageObject, y: 400, height: 100 }] }, now);
+    expect(low.pages[1]!.height).toBe(447);
+  });
+
+  it("rejects backgrounds that are not a PDF plus an image", () => {
+    const bad = (background: unknown) =>
+      JSON.stringify({
+        ...json(serializeNotebook(notebook())),
+        schema: 3,
+        pages: [{ id: "p1", height: 500, strokes: [], shapes: [], background }],
+      });
+    expect(() => parseNotebook(bad({ kind: "pdf", file: image, page: 1, image }))).toThrow();
+    expect(() => parseNotebook(bad({ kind: "pdf", file: pdf, page: 0, image }))).toThrow();
+    expect(() => parseNotebook(bad({ kind: "pdf", file: pdf, page: 1, image: pdf }))).toThrow();
+    expect(
+      parseNotebook(bad({ kind: "pdf", file: pdf, page: 3, image })).pages[0]!.background,
+    ).toMatchObject({ page: 3 });
   });
 });

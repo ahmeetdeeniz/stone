@@ -40,6 +40,7 @@
     "verify:i18n": "node scripts/verify-i18n.mjs",
     "verify:clean-workspace": "node scripts/verify-clean-workspace.mjs",
     "editor:bundle": "pnpm --filter @stone/editor run build:web",
+    "pdf:bundle": "node apps/mobile/scripts/build-pdf-renderer.mjs",
     "verify:native-dependencies": "node scripts/verify-native-dependencies.mjs",
     "verify:android-widget-compile": "node scripts/verify-android-widget-compile.mjs",
     "verify:widgets": "node scripts/verify-native-widgets.mjs",

@@ -19,7 +19,13 @@ export function usePageAssets(
   const resolveRef = useRef(resolve);
   resolveRef.current = resolve;
   const files = useMemo(
-    () => (notebook ? notebookAttachments(notebook).join("|") : ""),
+    () =>
+      notebook
+        ? notebookAttachments(notebook)
+            // The original PDFs are only needed for export; pages show their rendered images.
+            .filter((file) => !file.endsWith(".pdf"))
+            .join("|")
+        : "",
     [notebook],
   );
 

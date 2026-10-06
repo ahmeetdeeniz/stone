@@ -1086,6 +1086,16 @@ export const tr = {
   "notebook.insertBlankAfter": "Sonrasına boş sayfa ekle",
   "notebook.sharePdf": "PDF olarak paylaş",
   "notebook.exporting": "PDF hazırlanıyor…",
+  "notebook.addPdf": "PDF sayfaları ekle",
+  "notebook.pdfImporting": "PDF hazırlanıyor",
+  "notebook.pdfOpening": "Dosya açılıyor…",
+  "notebook.pdfProgress": "Sayfa {{done}} / {{total}}",
+  "notebook.pdfFailed": "PDF eklenemedi",
+  "notebook.pdfPassword":
+    "Şifreli PDF'ler henüz açılamıyor. Şifresiz bir kopyasını kaydedip tekrar dene.",
+  "notebook.pdfTooLong":
+    "Yalnızca ilk {{count}} sayfa eklendi (bir defter en fazla 500 sayfa, tek seferde 300 sayfa alır).",
+  "notes.notebookFromPdf": "PDF'ten defter",
   "widgets.privacy": "Widget gizliliği",
   "widgets.privacyDescription":
     "Yalnızca sayılar, Stone dışında görünen bilgiler için güvenli varsayılandır.",
