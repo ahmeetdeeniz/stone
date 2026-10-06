@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   MAX_SCALE,
+  centreInFree,
   clampView,
   fitWidth,
   pinchView,
@@ -20,6 +21,23 @@ describe("notebook viewport math", () => {
     const tablet = fitWidth(1480, 794);
     expect(tablet.scale).toBe(1.25);
     expect(tablet.dx).toBeCloseTo((1480 - 794 * 1.25) / 2);
+  });
+
+  it("moves the page beside a floating video when there is room", () => {
+    const right = fitWidth(1480, 794, { side: "right", width: 404 });
+    expect(right.scale).toBe(1.25);
+    expect(right.dx).toBeCloseTo((1076 - 992.5) / 2);
+    const left = fitWidth(1480, 794, { side: "left", width: 404 });
+    expect(left.dx).toBeCloseTo(404 + (1076 - 992.5) / 2);
+    // A phone has no free width to spare: the video floats over the page instead.
+    expect(fitWidth(412, 794, { side: "right", width: 300 })).toEqual(fitWidth(412, 794));
+    const view = { dx: 0, dy: -400, scale: 1.25 };
+    expect(centreInFree(view, 1480, 794, { side: "left", width: 404 })).toEqual({
+      ...view,
+      dx: 404 + (1076 - 992.5) / 2,
+    });
+    const zoomed = { dx: -300, dy: 0, scale: 3 };
+    expect(centreInFree(zoomed, 1480, 794, null)).toBe(zoomed);
   });
 
   it("zooms around the pinch focal point and follows it", () => {

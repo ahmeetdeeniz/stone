@@ -35,6 +35,11 @@ tag, so no release date or semantic version is claimed.
 - Fixed the S Pen being ignored in pen-only mode (the stylus pointer type was compared against
   the mouse value) and pen pressure always reading as full, and fixed strokes landing in the
   wrong place after zooming or panning.
+- Lecture videos float over notes and notebooks: paste a YouTube (or direct video) link and it
+  plays in a small window you drag to any corner, with play/pause, ±10 s, speed and size. The
+  page and toolbars move out of its way on tablets, each note remembers its video and where you
+  stopped (on this device), and the video can pause while the pen is down. A setting keeps a top
+  corner free for another app's pop-up window (Samsung pop-up view, picture-in-picture).
 - On tablets in landscape (1000 dp and wider) the Notes tab is a split view: the list stays on
   the left and the open note or notebook fills the right. Switching items saves pending edits
   first, and rotating to portrait opens the current item full screen.

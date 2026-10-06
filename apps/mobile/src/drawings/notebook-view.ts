@@ -18,10 +18,56 @@ const MARGIN = 16;
  */
 export const MAX_FIT_SCALE = 1.25;
 
-/** Fits the page width into the viewport with a small margin, top-aligned and centred. */
-export function fitWidth(viewportWidth: number, pageWidth: number): NotebookView {
-  const scale = clamp((viewportWidth - MARGIN * 2) / pageWidth, MIN_SCALE, MAX_FIT_SCALE);
-  return { dx: (viewportWidth - pageWidth * scale) / 2, dy: MARGIN, scale };
+/** A side strip of the viewport the page should stay out of (a floating video). */
+export interface AvoidStrip {
+  side: "left" | "right";
+  width: number;
+}
+
+/** Narrowest free width worth moving the page into; below it the video just floats over. */
+export const MIN_FREE_WIDTH = 600;
+
+function freeArea(
+  viewportWidth: number,
+  avoid: AvoidStrip | null,
+): { left: number; width: number } {
+  if (!avoid || viewportWidth - avoid.width < MIN_FREE_WIDTH)
+    return { left: 0, width: viewportWidth };
+  return {
+    left: avoid.side === "left" ? avoid.width : 0,
+    width: viewportWidth - avoid.width,
+  };
+}
+
+/**
+ * Fits the page width into the viewport (or the free part beside a floating video) with a small
+ * margin, top-aligned and centred.
+ */
+export function fitWidth(
+  viewportWidth: number,
+  pageWidth: number,
+  avoid: AvoidStrip | null = null,
+): NotebookView {
+  const free = freeArea(viewportWidth, avoid);
+  const scale = clamp((free.width - MARGIN * 2) / pageWidth, MIN_SCALE, MAX_FIT_SCALE);
+  return { dx: free.left + (free.width - pageWidth * scale) / 2, dy: MARGIN, scale };
+}
+
+/**
+ * Re-centres the page horizontally at its current zoom: in the free width when it fits there,
+ * else in the whole viewport. A page zoomed wider than the viewport keeps the user's position.
+ */
+export function centreInFree(
+  view: NotebookView,
+  viewportWidth: number,
+  pageWidth: number,
+  avoid: AvoidStrip | null,
+): NotebookView {
+  const width = pageWidth * view.scale;
+  const free = freeArea(viewportWidth, avoid);
+  if (width <= free.width) return { ...view, dx: free.left + (free.width - width) / 2 };
+  if (width <= viewportWidth) return { ...view, dx: (viewportWidth - width) / 2 };
+  return view;
 }
 
 export function toNotebook(view: NotebookView, x: number, y: number): { x: number; y: number } {

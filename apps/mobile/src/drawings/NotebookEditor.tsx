@@ -68,6 +68,8 @@ import { renderPagePng } from "../drawings/page-picture";
 import { useAuth } from "../providers/auth-provider";
 import { useAppServices } from "../providers/app-provider";
 import { useI18n } from "../i18n/provider";
+import { useVideoSession } from "../video/use-video-session";
+import { barPadding } from "../video/video-layout";
 
 const SAVE_DELAY_MS = 1500;
 const WIDE_LAYOUT = 1000;
@@ -118,6 +120,8 @@ export function NotebookEditor({ id, layout, paper, onBack, onChanged }: Noteboo
   const dirty = useRef(false);
   /** Page to scroll to once the canvas has re-rendered with a newly added page. */
   const pendingPage = useRef<number | null>(null);
+  const [area, setArea] = useState({ width: 0, height: 0 });
+  const video = useVideoSession(drawing?.id, area);
   const color = tool === "highlighter" ? highlightColor : penColor;
 
   const setNotebook = (next: InkNotebook) => {
@@ -382,248 +386,272 @@ export function NotebookEditor({ id, layout, paper, onBack, onChanged }: Noteboo
     canvasRef.current?.scrollToPage(target);
   };
 
+  const clearOfVideo = barPadding(video.reservation, area.width);
+
   return (
     <Screen padded={false}>
       <View
-        style={[
-          styles.header,
-          { backgroundColor: colors.surface, borderBottomColor: colors.border },
-        ]}
+        style={styles.area}
+        onLayout={(event) => {
+          const { width: areaWidth, height: areaHeight } = event.nativeEvent.layout;
+          setArea({ width: areaWidth, height: areaHeight });
+        }}
       >
-        <ToolButton
-          icon="chevron-left"
-          label={t("common.back")}
-          onPress={() => {
-            void save();
-            back();
-          }}
-        />
-        <StoneInput
-          label={t("notebook.titleField")}
-          value={title}
-          onChangeText={(value) => {
-            titleEdited.current = true;
-            setTitle(value);
-            dirty.current = true;
-            setStatus("unsaved");
-          }}
-          containerStyle={styles.title}
-        />
-        {windowWidth >= 600 || status === "error" ? (
-          <StoneText variant="caption" tone={status === "error" ? "danger" : "muted"}>
-            {t(`editor.status.${status}`)}
-          </StoneText>
-        ) : null}
-        <ToolButton
-          icon="undo"
-          label={t("editor.toolbar.undo")}
-          disabled={!historyRef.current?.canUndo()}
-          onPress={undo}
-        />
-        <ToolButton
-          icon="redo"
-          label={t("editor.toolbar.redo")}
-          disabled={!historyRef.current?.canRedo()}
-          onPress={() => {
-            const next = historyRef.current?.redo();
-            if (next) {
-              setNotebook(next);
+        <View
+          style={[
+            styles.header,
+            { backgroundColor: colors.surface, borderBottomColor: colors.border },
+            clearOfVideo,
+          ]}
+        >
+          <ToolButton
+            icon="chevron-left"
+            label={t("common.back")}
+            onPress={() => {
+              void save();
+              back();
+            }}
+          />
+          <StoneInput
+            label={t("notebook.titleField")}
+            value={title}
+            onChangeText={(value) => {
+              titleEdited.current = true;
+              setTitle(value);
               dirty.current = true;
               setStatus("unsaved");
+            }}
+            containerStyle={styles.title}
+          />
+          {windowWidth >= 600 || status === "error" ? (
+            <StoneText variant="caption" tone={status === "error" ? "danger" : "muted"}>
+              {t(`editor.status.${status}`)}
+            </StoneText>
+          ) : null}
+          <ToolButton
+            icon="undo"
+            label={t("editor.toolbar.undo")}
+            disabled={!historyRef.current?.canUndo()}
+            onPress={undo}
+          />
+          <ToolButton
+            icon="redo"
+            label={t("editor.toolbar.redo")}
+            disabled={!historyRef.current?.canRedo()}
+            onPress={() => {
+              const next = historyRef.current?.redo();
+              if (next) {
+                setNotebook(next);
+                dirty.current = true;
+                setStatus("unsaved");
+              }
+            }}
+          />
+          <ToolButton
+            icon={video.linked ? "play-box" : "play-box-outline"}
+            label={video.open ? t("video.close") : t("video.show")}
+            active={video.open}
+            onPress={video.toggle}
+          />
+          <ToolButton
+            icon="dots-horizontal"
+            label={t("common.more")}
+            onPress={() => setMenuOpen(true)}
+          />
+        </View>
+        <View
+          style={[
+            styles.tools,
+            { backgroundColor: colors.surface, borderBottomColor: colors.border },
+            clearOfVideo,
+          ]}
+        >
+          <NotebookToolbar
+            tool={tool}
+            color={color}
+            width={width}
+            onTool={(next) => {
+              setTool(next);
+              if (next !== "lasso") setSelection(null);
+            }}
+            onColor={(next) =>
+              tool === "highlighter" ? setHighlightColor(next) : setPenColor(next)
             }
-          }}
-        />
-        <ToolButton
-          icon="dots-horizontal"
-          label={t("common.more")}
-          onPress={() => setMenuOpen(true)}
-        />
-      </View>
-      <View
-        style={[
-          styles.tools,
-          { backgroundColor: colors.surface, borderBottomColor: colors.border },
-        ]}
-      >
-        <NotebookToolbar
-          tool={tool}
-          color={color}
-          width={width}
-          onTool={(next) => {
-            setTool(next);
-            if (next !== "lasso") setSelection(null);
-          }}
-          onColor={(next) => (tool === "highlighter" ? setHighlightColor(next) : setPenColor(next))}
-          onWidth={setWidth}
-        />
-        {notebook.layout === "pages" ? (
-          <View style={styles.pager}>
-            <ToolButton
-              icon="chevron-left"
-              label={t("notebook.previousPage")}
-              disabled={pageIndex === 0}
-              onPress={() => goToPage(pageIndex - 1)}
-            />
-            <StoneText variant="label" style={styles.pageLabel}>
-              {t("notebook.pageOf", { page: pageIndex + 1, total: pageCount })}
+            onWidth={setWidth}
+          />
+          {notebook.layout === "pages" ? (
+            <View style={styles.pager}>
+              <ToolButton
+                icon="chevron-left"
+                label={t("notebook.previousPage")}
+                disabled={pageIndex === 0}
+                onPress={() => goToPage(pageIndex - 1)}
+              />
+              <StoneText variant="label" style={styles.pageLabel}>
+                {t("notebook.pageOf", { page: pageIndex + 1, total: pageCount })}
+              </StoneText>
+              <ToolButton
+                icon="chevron-right"
+                label={t("notebook.nextPage")}
+                disabled={pageIndex >= pageCount - 1}
+                onPress={() => goToPage(pageIndex + 1)}
+              />
+              <ToolButton
+                icon="plus"
+                label={t("notebook.addPage")}
+                onPress={() => {
+                  pendingPage.current = pageIndex + 1;
+                  commit(addPage(notebook, Crypto.randomUUID(), pageIndex));
+                }}
+              />
+            </View>
+          ) : null}
+        </View>
+        {selection ? (
+          <View style={[styles.selectionBar, { backgroundColor: colors.backgroundSecondary }]}>
+            <StoneText variant="caption" tone="secondary">
+              {t("notebook.selected", {
+                count: selection.selection.strokeIds.length + selection.selection.shapeIds.length,
+              })}
             </StoneText>
             <ToolButton
-              icon="chevron-right"
-              label={t("notebook.nextPage")}
-              disabled={pageIndex >= pageCount - 1}
-              onPress={() => goToPage(pageIndex + 1)}
+              icon="magnify-minus-outline"
+              label={t("notebook.shrink")}
+              onPress={() => scaleSelection(0.9)}
             />
             <ToolButton
-              icon="plus"
-              label={t("notebook.addPage")}
+              icon="magnify-plus-outline"
+              label={t("notebook.grow")}
+              onPress={() => scaleSelection(1.1)}
+            />
+            <ToolButton
+              icon="content-copy"
+              label={t("drawing.duplicate")}
+              onPress={() =>
+                editSelection((page, current) =>
+                  duplicateSelection(page, current.selection, Crypto.randomUUID),
+                )
+              }
+            />
+            <ToolButton
+              icon="delete-outline"
+              label={t("drawing.deleteSelection")}
               onPress={() => {
-                pendingPage.current = pageIndex + 1;
-                commit(addPage(notebook, Crypto.randomUUID(), pageIndex));
+                editSelection((page, current) => deleteSelection(page, current.selection));
+                setSelection(null);
               }}
             />
           </View>
         ) : null}
-      </View>
-      {selection ? (
-        <View style={[styles.selectionBar, { backgroundColor: colors.backgroundSecondary }]}>
-          <StoneText variant="caption" tone="secondary">
-            {t("notebook.selected", {
-              count: selection.selection.strokeIds.length + selection.selection.shapeIds.length,
-            })}
-          </StoneText>
-          <ToolButton
-            icon="magnify-minus-outline"
-            label={t("notebook.shrink")}
-            onPress={() => scaleSelection(0.9)}
-          />
-          <ToolButton
-            icon="magnify-plus-outline"
-            label={t("notebook.grow")}
-            onPress={() => scaleSelection(1.1)}
-          />
-          <ToolButton
-            icon="content-copy"
-            label={t("drawing.duplicate")}
-            onPress={() =>
-              editSelection((page, current) =>
-                duplicateSelection(page, current.selection, Crypto.randomUUID),
-              )
-            }
-          />
-          <ToolButton
-            icon="delete-outline"
-            label={t("drawing.deleteSelection")}
-            onPress={() => {
-              editSelection((page, current) => deleteSelection(page, current.selection));
-              setSelection(null);
-            }}
+        <View style={styles.body}>
+          {wide && notebook.layout === "pages" && pageCount > 1 ? (
+            <ScrollView
+              style={[
+                styles.rail,
+                { borderRightColor: colors.border, backgroundColor: colors.surface },
+              ]}
+              contentContainerStyle={styles.railContent}
+            >
+              {notebook.pages.map((page, index) => (
+                <Pressable
+                  key={page.id}
+                  accessibilityRole="button"
+                  accessibilityLabel={t("notebook.goToPage", { page: index + 1 })}
+                  onPress={() => goToPage(index)}
+                  style={[
+                    styles.railPage,
+                    {
+                      borderColor: index === pageIndex ? colors.primary : colors.border,
+                      backgroundColor: "#FFFFFF",
+                    },
+                  ]}
+                >
+                  <StoneText variant="caption" style={{ color: "#57534E" }}>
+                    {index + 1}
+                  </StoneText>
+                  <StoneText variant="caption" style={{ color: "#857F7A" }}>
+                    {page.strokes.length + page.shapes.length > 0 ? "•" : ""}
+                  </StoneText>
+                </Pressable>
+              ))}
+            </ScrollView>
+          ) : null}
+          <NotebookCanvas
+            ref={canvasRef}
+            notebook={notebook}
+            tool={tool}
+            color={color}
+            width={width}
+            stylusOnly={stylusOnly}
+            selection={selection}
+            onStroke={onStroke}
+            onErase={onErase}
+            onShape={onShape}
+            onSelect={setSelection}
+            onPageChange={setPageIndex}
+            onUndo={undo}
+            onInkStart={video.writingStarted}
+            onInkEnd={video.writingEnded}
+            avoid={video.reservation}
           />
         </View>
-      ) : null}
-      <View style={styles.body}>
-        {wide && notebook.layout === "pages" && pageCount > 1 ? (
-          <ScrollView
-            style={[
-              styles.rail,
-              { borderRightColor: colors.border, backgroundColor: colors.surface },
-            ]}
-            contentContainerStyle={styles.railContent}
-          >
-            {notebook.pages.map((page, index) => (
-              <Pressable
-                key={page.id}
-                accessibilityRole="button"
-                accessibilityLabel={t("notebook.goToPage", { page: index + 1 })}
-                onPress={() => goToPage(index)}
-                style={[
-                  styles.railPage,
-                  {
-                    borderColor: index === pageIndex ? colors.primary : colors.border,
-                    backgroundColor: "#FFFFFF",
-                  },
-                ]}
-              >
-                <StoneText variant="caption" style={{ color: "#57534E" }}>
-                  {index + 1}
-                </StoneText>
-                <StoneText variant="caption" style={{ color: "#857F7A" }}>
-                  {page.strokes.length + page.shapes.length > 0 ? "•" : ""}
-                </StoneText>
-              </Pressable>
-            ))}
-          </ScrollView>
+        {error ? (
+          <Pressable accessibilityRole="button" onPress={() => setError(null)}>
+            <StoneText tone="danger" style={styles.error}>
+              {error}
+            </StoneText>
+          </Pressable>
         ) : null}
-        <NotebookCanvas
-          ref={canvasRef}
-          notebook={notebook}
-          tool={tool}
-          color={color}
-          width={width}
-          stylusOnly={stylusOnly}
-          selection={selection}
-          onStroke={onStroke}
-          onErase={onErase}
-          onShape={onShape}
-          onSelect={setSelection}
-          onPageChange={setPageIndex}
-          onUndo={undo}
-        />
-      </View>
-      {error ? (
-        <Pressable accessibilityRole="button" onPress={() => setError(null)}>
-          <StoneText tone="danger" style={styles.error}>
-            {error}
-          </StoneText>
-        </Pressable>
-      ) : null}
-      <ActionSheet
-        visible={menuOpen}
-        onClose={() => setMenuOpen(false)}
-        options={[
-          {
-            label: stylusOnly ? t("notebook.stylusOnlyOn") : t("notebook.stylusOnlyOff"),
-            icon: "pencil-outline",
-            onPress: () => setStylusOnly((value) => !value),
-          },
-          {
-            label: t("notebook.changePaper"),
-            icon: "document-outline",
-            onPress: () => setPaperOpen(true),
-          },
-          ...(notebook.layout === "pages"
-            ? [
-                {
-                  label: t("notebook.deletePage", { page: pageIndex + 1 }),
-                  icon: "trash-outline" as const,
-                  destructive: true,
-                  onPress: () =>
-                    Alert.alert(t("notebook.deletePageConfirm"), undefined, [
-                      { text: t("common.cancel"), style: "cancel" },
-                      {
-                        text: t("common.delete"),
-                        style: "destructive",
-                        onPress: () => {
-                          commit(removePage(notebook, pageIndex));
-                          setSelection(null);
-                          setPageIndex(Math.max(0, Math.min(pageIndex, pageCount - 2)));
+        <ActionSheet
+          visible={menuOpen}
+          onClose={() => setMenuOpen(false)}
+          options={[
+            {
+              label: stylusOnly ? t("notebook.stylusOnlyOn") : t("notebook.stylusOnlyOff"),
+              icon: "pencil-outline",
+              onPress: () => setStylusOnly((value) => !value),
+            },
+            {
+              label: t("notebook.changePaper"),
+              icon: "document-outline",
+              onPress: () => setPaperOpen(true),
+            },
+            ...(notebook.layout === "pages"
+              ? [
+                  {
+                    label: t("notebook.deletePage", { page: pageIndex + 1 }),
+                    icon: "trash-outline" as const,
+                    destructive: true,
+                    onPress: () =>
+                      Alert.alert(t("notebook.deletePageConfirm"), undefined, [
+                        { text: t("common.cancel"), style: "cancel" },
+                        {
+                          text: t("common.delete"),
+                          style: "destructive",
+                          onPress: () => {
+                            commit(removePage(notebook, pageIndex));
+                            setSelection(null);
+                            setPageIndex(Math.max(0, Math.min(pageIndex, pageCount - 2)));
+                          },
                         },
-                      },
-                    ]),
-                },
-              ]
-            : []),
-        ]}
-      />
-      <ActionSheet
-        visible={paperOpen}
-        title={t("notebook.paper")}
-        onClose={() => setPaperOpen(false)}
-        options={INK_PAPERS.map((paper) => ({
-          label: t(`notebook.paper.${paper}`),
-          icon: paper === notebook.paper ? ("checkmark" as const) : ("ellipse-outline" as const),
-          onPress: () => commit(setPaper(notebook, paper)),
-        }))}
-      />
+                      ]),
+                  },
+                ]
+              : []),
+          ]}
+        />
+        <ActionSheet
+          visible={paperOpen}
+          title={t("notebook.paper")}
+          onClose={() => setPaperOpen(false)}
+          options={INK_PAPERS.map((paper) => ({
+            label: t(`notebook.paper.${paper}`),
+            icon: paper === notebook.paper ? ("checkmark" as const) : ("ellipse-outline" as const),
+            onPress: () => commit(setPaper(notebook, paper)),
+          }))}
+        />
+        {video.element}
+      </View>
     </Screen>
   );
 }
@@ -685,6 +713,7 @@ function NotebookSetup({
 }
 
 const styles = StyleSheet.create({
+  area: { flex: 1 },
   header: {
     minHeight: 64,
     borderBottomWidth: 1,

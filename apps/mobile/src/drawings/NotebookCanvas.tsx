@@ -1,4 +1,4 @@
-import { forwardRef, memo, useImperativeHandle, useMemo, useRef, useState } from "react";
+import { forwardRef, memo, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { StyleSheet, View, type LayoutChangeEvent } from "react-native";
 import { Canvas, Group, Path, Picture, Rect, Skia } from "@shopify/react-native-skia";
 import { Gesture, GestureDetector, PointerType } from "react-native-gesture-handler";
@@ -21,6 +21,7 @@ import { useTheme } from "../design/theme";
 import { useI18n } from "../i18n/provider";
 import {
   clampView,
+  centreInFree,
   fitWidth,
   pinchView,
   strokeOutline,
@@ -58,6 +59,11 @@ export interface NotebookCanvasProps {
   onPageChange?(index: number): void;
   /** Two-finger tap, the usual "undo" shortcut in note apps. */
   onUndo?(): void;
+  /** The pen (or finger) touched a page with a writing tool, and lifted again. */
+  onInkStart?(): void;
+  onInkEnd?(): void;
+  /** A screen strip covered by a floating video: pages are placed in the free width beside it. */
+  avoid?: { side: "left" | "right"; width: number } | null;
 }
 
 type Interaction =
@@ -124,11 +130,24 @@ export const NotebookCanvas = forwardRef<NotebookCanvasHandle, NotebookCanvasPro
       // Keep the page centred when the canvas resizes (rotation, split screen, page rail).
       setView(
         previous
-          ? { ...previous, dx: previous.dx + (layoutWidth - size.width) / 2 }
-          : fitWidth(layoutWidth, notebook.pageWidth),
+          ? centreInFree(
+              { ...previous, dx: previous.dx + (layoutWidth - size.width) / 2 },
+              layoutWidth,
+              notebook.pageWidth,
+              props.avoid ?? null,
+            )
+          : fitWidth(layoutWidth, notebook.pageWidth, props.avoid ?? null),
       );
       setSize({ width: layoutWidth, height: layoutHeight });
     };
+
+    // A video docked over one side moves the page into the free width (and back when it closes).
+    const avoidKey = props.avoid ? `${props.avoid.side}:${props.avoid.width}` : "";
+    useEffect(() => {
+      const previous = viewRef.current;
+      if (!previous || size.width === 0) return;
+      setView(centreInFree(previous, size.width, notebook.pageWidth, props.avoid ?? null));
+    }, [avoidKey]);
 
     const pageAt = (x: number, y: number) => {
       const current = viewRef.current;
@@ -152,6 +171,7 @@ export const NotebookCanvas = forwardRef<NotebookCanvasHandle, NotebookCanvasPro
       const current = interaction.current;
       interaction.current = { kind: "idle" };
       setLive(null);
+      if (current.kind === "draw") propsRef.current.onInkEnd?.();
       if (current.kind !== "draw" || cancelled) return;
       const { pageIndex, points } = current;
       const activeTool = propsRef.current.tool;
@@ -228,6 +248,7 @@ export const NotebookCanvas = forwardRef<NotebookCanvasHandle, NotebookCanvasPro
               points: [point],
               realPressure: pen,
             };
+            current.onInkStart?.();
             if (current.tool === "eraser") current.onErase(hit.pageIndex, point, false);
           })
           .onUpdate((event) => {
