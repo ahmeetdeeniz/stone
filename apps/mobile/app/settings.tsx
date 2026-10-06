@@ -38,6 +38,13 @@ import {
 } from "@stone/domain";
 import type { WidgetPrivacy } from "@stone/widgets";
 import { readWidgetPrivacy, writeWidgetPrivacy } from "../src/widgets/widget-lifecycle";
+import { readVideoPrefs, writeVideoPrefs } from "../src/video/video-store";
+import {
+  DEFAULT_VIDEO_PREFS,
+  EXTERNAL_CORNERS,
+  VIDEO_SIZES,
+  type VideoPrefs,
+} from "../src/video/video-layout";
 import { refreshNativeWidgets } from "../src/widgets/snapshot";
 import { clearWidgetsForAccountLifecycle } from "../src/widgets/snapshot";
 import { AuthFailure, authErrorKey } from "../src/infrastructure/firebase/auth";
@@ -69,12 +76,14 @@ export default function SettingsScreen() {
   const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [syncState, setSyncState] = useState<SyncState | null>(null);
   const [widgetPrivacy, setWidgetPrivacy] = useState<WidgetPrivacy>("counts_only");
+  const [videoPrefs, setVideoPrefs] = useState<VideoPrefs>(DEFAULT_VIDEO_PREFS);
   const [crashReporting, setCrashReportingState] = useState(false);
   const [checkingUpdates, setCheckingUpdates] = useState(false);
   const [reminders, setReminders] = useState<ReminderSettings>(DEFAULT_REMINDER_SETTINGS);
   const [reminderPermission, setReminderPermission] = useState(true);
   useEffect(() => {
     void readWidgetPrivacy().then(setWidgetPrivacy);
+    void readVideoPrefs().then(setVideoPrefs);
     void readCrashReporting().then(setCrashReportingState);
     void readReminderSettings().then(setReminders);
     void reminderPermissionGranted()
@@ -167,6 +176,11 @@ export default function SettingsScreen() {
     setWidgetPrivacy(value);
     await writeWidgetPrivacy(value);
     if (user) await refreshNativeWidgets(services, user.uid, locale, value);
+  };
+  const updateVideoPrefs = (patch: Partial<VideoPrefs>) => {
+    const next = { ...videoPrefs, ...patch };
+    setVideoPrefs(next);
+    void writeVideoPrefs(next).catch(() => undefined);
   };
   const updateReminders = async (next: ReminderSettings) => {
     setReminders(next);
@@ -438,6 +452,54 @@ export default function SettingsScreen() {
                 onPress={() => void requestFocusNotification()}
               />
             ) : null}
+          </SectionCard>
+
+          <SectionCard
+            title={t("settings.video")}
+            description={t("settings.videoDetail")}
+            icon="play-circle-outline"
+          >
+            <Overline>{t("settings.videoSize")}</Overline>
+            <ChoiceRow>
+              {VIDEO_SIZES.map((size) => (
+                <Chip
+                  key={size}
+                  label={t(`settings.videoSize.${size}`)}
+                  selected={videoPrefs.size === size}
+                  onPress={() => updateVideoPrefs({ size })}
+                />
+              ))}
+            </ChoiceRow>
+            <Overline>{t("settings.videoPause")}</Overline>
+            <ChoiceRow>
+              <Chip
+                label={t("reminders.on")}
+                selected={videoPrefs.pauseWhileWriting}
+                onPress={() => updateVideoPrefs({ pauseWhileWriting: true })}
+              />
+              <Chip
+                label={t("reminders.off")}
+                selected={!videoPrefs.pauseWhileWriting}
+                onPress={() => updateVideoPrefs({ pauseWhileWriting: false })}
+              />
+            </ChoiceRow>
+            <StoneText variant="bodySmall" tone="secondary">
+              {t("settings.videoPauseDetail")}
+            </StoneText>
+            <Overline>{t("settings.externalCorner")}</Overline>
+            <ChoiceRow>
+              {EXTERNAL_CORNERS.map((externalCorner) => (
+                <Chip
+                  key={externalCorner}
+                  label={t(`settings.externalCorner.${externalCorner}`)}
+                  selected={videoPrefs.externalCorner === externalCorner}
+                  onPress={() => updateVideoPrefs({ externalCorner })}
+                />
+              ))}
+            </ChoiceRow>
+            <StoneText variant="bodySmall" tone="secondary">
+              {t("settings.externalCornerDetail")}
+            </StoneText>
           </SectionCard>
 
           <SectionCard

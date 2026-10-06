@@ -32,6 +32,8 @@ import { exportNote } from "./note-files";
 import { useAuth } from "../providers/auth-provider";
 import { useAppServices } from "../providers/app-provider";
 import { useI18n } from "../i18n/provider";
+import { useVideoSession } from "../video/use-video-session";
+import { columnPadding } from "../video/video-layout";
 import { AttachmentStrip } from "../attachments/AttachmentStrip";
 import {
   attachmentErrorKey,
@@ -72,6 +74,8 @@ export function NoteEditor({ id, onBack, onOpenNote, onOpenNotebook, onChanged }
   const selectionRef = useRef({ from: 0, to: 0 });
   const saveRef = useRef<() => Promise<void>>(() => Promise.resolve());
   const [note, setNote] = useState<Document | null>(null);
+  const [area, setArea] = useState({ width: 0, height: 0 });
+  const video = useVideoSession(id, area);
   const [backlinks, setBacklinks] = useState<readonly Document[]>([]);
   const [content, setContent] = useState("");
   const [title, setTitle] = useState("");
@@ -344,235 +348,264 @@ export function NoteEditor({ id, onBack, onOpenNote, onOpenNotebook, onChanged }
 
   return (
     <Screen padded={false}>
-      <ResponsiveContent>
-        <KeyboardAvoidingView
-          style={styles.container}
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
-        >
-          <View
-            style={[
-              styles.toolbar,
-              { borderBottomColor: colors.border, backgroundColor: colors.surface },
-            ]}
-          >
-            <StoneButton
-              label={t("common.back")}
-              variant="quiet"
-              testID="editor-back"
-              onPress={() => {
-                void saveCurrent();
-                back();
-              }}
-            />
-            <StoneInput
-              label={t("editor.noteTitle")}
-              value={title}
-              onChangeText={setTitle}
-              onEndEditing={() => void rename()}
-              containerStyle={styles.titleInput}
-              testID="editor-title"
-            />
-            <View style={styles.toolbarActions}>
-              <StoneText variant="caption" tone={status === "error" ? "danger" : "muted"}>
-                {statusLabel(status, t)}
-              </StoneText>
-              {status === "saving" ? (
-                <ActivityIndicator color={colors.primary} size="small" />
-              ) : null}
-              <StoneButton
-                label={t("editor.export")}
-                variant="quiet"
-                onPress={() => void shareExport()}
-              />
-              {note ? (
+      <View
+        style={styles.area}
+        onLayout={(event) => {
+          const { width: areaWidth, height: areaHeight } = event.nativeEvent.layout;
+          setArea({ width: areaWidth, height: areaHeight });
+        }}
+      >
+        {/* The editor column moves beside the video; the video floats over the whole area. */}
+        <View style={[styles.area, columnPadding(video.reservation, area.width)]}>
+          <ResponsiveContent>
+            <KeyboardAvoidingView
+              style={styles.container}
+              behavior={Platform.OS === "ios" ? "padding" : undefined}
+            >
+              <View
+                style={[
+                  styles.toolbar,
+                  { borderBottomColor: colors.border, backgroundColor: colors.surface },
+                ]}
+              >
                 <StoneButton
-                  label={t("focus.startLinked")}
+                  label={t("common.back")}
                   variant="quiet"
-                  onPress={() =>
-                    router.push({
-                      pathname: "/(tabs)/focus",
-                      params: { documentId: note.id, projectId: note.projectId ?? undefined },
+                  testID="editor-back"
+                  onPress={() => {
+                    void saveCurrent();
+                    back();
+                  }}
+                />
+                <StoneInput
+                  label={t("editor.noteTitle")}
+                  value={title}
+                  onChangeText={setTitle}
+                  onEndEditing={() => void rename()}
+                  containerStyle={styles.titleInput}
+                  testID="editor-title"
+                />
+                <View style={styles.toolbarActions}>
+                  <StoneText variant="caption" tone={status === "error" ? "danger" : "muted"}>
+                    {statusLabel(status, t)}
+                  </StoneText>
+                  {status === "saving" ? (
+                    <ActivityIndicator color={colors.primary} size="small" />
+                  ) : null}
+                  <StoneButton
+                    label={t("video.short")}
+                    icon={video.linked ? "play-circle" : "play-circle-outline"}
+                    variant={video.open ? "secondary" : "quiet"}
+                    accessibilityLabel={video.open ? t("video.close") : t("video.show")}
+                    onPress={video.toggle}
+                  />
+                  <StoneButton
+                    label={t("editor.export")}
+                    variant="quiet"
+                    onPress={() => void shareExport()}
+                  />
+                  {note ? (
+                    <StoneButton
+                      label={t("focus.startLinked")}
+                      variant="quiet"
+                      onPress={() =>
+                        router.push({
+                          pathname: "/(tabs)/focus",
+                          params: { documentId: note.id, projectId: note.projectId ?? undefined },
+                        })
+                      }
+                    />
+                  ) : null}
+                  <StoneButton
+                    label={t("notes.moveToTrash")}
+                    variant="quiet"
+                    onPress={moveToTrash}
+                  />
+                </View>
+              </View>
+              <View
+                style={[
+                  styles.findBar,
+                  { backgroundColor: colors.backgroundSecondary, borderBottomColor: colors.border },
+                ]}
+              >
+                <StoneInput
+                  label={t("editor.search")}
+                  value={findQuery}
+                  onChangeText={(query) => {
+                    setFindQuery(query);
+                    webViewRef.current?.post({
+                      protocolVersion: 1,
+                      type: "setFindQuery",
+                      payload: { query },
+                    });
+                  }}
+                  containerStyle={styles.findInput}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  returnKeyType="search"
+                  onSubmitEditing={() =>
+                    webViewRef.current?.post({
+                      protocolVersion: 1,
+                      type: "executeCommand",
+                      payload: { command: "find" },
                     })
                   }
                 />
-              ) : null}
-              <StoneButton label={t("notes.moveToTrash")} variant="quiet" onPress={moveToTrash} />
-            </View>
-          </View>
-          <View
-            style={[
-              styles.findBar,
-              { backgroundColor: colors.backgroundSecondary, borderBottomColor: colors.border },
-            ]}
-          >
-            <StoneInput
-              label={t("editor.search")}
-              value={findQuery}
-              onChangeText={(query) => {
-                setFindQuery(query);
-                webViewRef.current?.post({
-                  protocolVersion: 1,
-                  type: "setFindQuery",
-                  payload: { query },
-                });
-              }}
-              containerStyle={styles.findInput}
-              autoCapitalize="none"
-              autoCorrect={false}
-              returnKeyType="search"
-              onSubmitEditing={() =>
-                webViewRef.current?.post({
-                  protocolVersion: 1,
-                  type: "executeCommand",
-                  payload: { command: "find" },
-                })
-              }
-            />
-            <StoneButton
-              label={t("editor.find")}
-              variant="secondary"
-              onPress={() =>
-                webViewRef.current?.post({
-                  protocolVersion: 1,
-                  type: "executeCommand",
-                  payload: { command: "find" },
-                })
-              }
-            />
-          </View>
-          {recoveredDraft ? (
-            <View
-              style={[
-                styles.recovery,
-                { backgroundColor: colors.backgroundSecondary, borderColor: colors.border },
-              ]}
-            >
-              <StoneText variant="bodySmall">{t("editor.recoveredDraft")}</StoneText>
-              <StoneButton
-                label={t("editor.discardDraft")}
-                variant="quiet"
-                onPress={() => {
-                  contentRef.current = note.markdown;
-                  setContent(note.markdown);
-                  setRecoveredDraft(null);
-                  void noteUseCases.clearDraft(user!.uid, note.id);
-                }}
-              />
-            </View>
-          ) : null}
-          {drawingBlocks.length > 0 ? (
-            <View
-              style={[
-                styles.drawingBlocks,
-                { backgroundColor: colors.backgroundSecondary, borderBottomColor: colors.border },
-              ]}
-            >
-              {drawingBlocks.map((block) => (
-                <Pressable
-                  key={block.id}
-                  accessibilityRole="button"
-                  accessibilityLabel={t("editor.openDrawingA11y", { title: block.title })}
-                  onPress={() => openNotebook(block.id)}
+                <StoneButton
+                  label={t("editor.find")}
+                  variant="secondary"
+                  onPress={() =>
+                    webViewRef.current?.post({
+                      protocolVersion: 1,
+                      type: "executeCommand",
+                      payload: { command: "find" },
+                    })
+                  }
+                />
+              </View>
+              {recoveredDraft ? (
+                <View
                   style={[
-                    styles.drawingBlock,
-                    { borderColor: colors.border, backgroundColor: colors.surface },
+                    styles.recovery,
+                    { backgroundColor: colors.backgroundSecondary, borderColor: colors.border },
                   ]}
                 >
-                  <StoneText variant="label">{block.title}</StoneText>
-                  <StoneText variant="caption" style={{ color: colors.textSecondary }}>
-                    {block.sourceAvailable
-                      ? t("editor.editableDrawing")
-                      : t("editor.missingDrawing")}
-                  </StoneText>
-                </Pressable>
-              ))}
-            </View>
-          ) : null}
-          <AttachmentStrip service={attachments} ownerId={user?.uid} markdown={content} />
-          {backlinks.length > 0 ? (
-            <View
-              style={[
-                styles.backlinks,
-                { backgroundColor: colors.backgroundSecondary, borderBottomColor: colors.border },
-              ]}
-            >
-              <StoneText variant="caption" style={{ color: colors.textSecondary }}>
-                {t("notes.backlinks", { count: backlinks.length })}
-              </StoneText>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                <View style={styles.backlinkRow}>
-                  {backlinks.map((linked) => (
-                    <Chip
-                      key={linked.id}
-                      label={linked.title}
-                      icon="link-outline"
-                      onPress={() => openNote(linked.id)}
-                    />
+                  <StoneText variant="bodySmall">{t("editor.recoveredDraft")}</StoneText>
+                  <StoneButton
+                    label={t("editor.discardDraft")}
+                    variant="quiet"
+                    onPress={() => {
+                      contentRef.current = note.markdown;
+                      setContent(note.markdown);
+                      setRecoveredDraft(null);
+                      void noteUseCases.clearDraft(user!.uid, note.id);
+                    }}
+                  />
+                </View>
+              ) : null}
+              {drawingBlocks.length > 0 ? (
+                <View
+                  style={[
+                    styles.drawingBlocks,
+                    {
+                      backgroundColor: colors.backgroundSecondary,
+                      borderBottomColor: colors.border,
+                    },
+                  ]}
+                >
+                  {drawingBlocks.map((block) => (
+                    <Pressable
+                      key={block.id}
+                      accessibilityRole="button"
+                      accessibilityLabel={t("editor.openDrawingA11y", { title: block.title })}
+                      onPress={() => openNotebook(block.id)}
+                      style={[
+                        styles.drawingBlock,
+                        { borderColor: colors.border, backgroundColor: colors.surface },
+                      ]}
+                    >
+                      <StoneText variant="label">{block.title}</StoneText>
+                      <StoneText variant="caption" style={{ color: colors.textSecondary }}>
+                        {block.sourceAvailable
+                          ? t("editor.editableDrawing")
+                          : t("editor.missingDrawing")}
+                      </StoneText>
+                    </Pressable>
                   ))}
                 </View>
-              </ScrollView>
-            </View>
-          ) : null}
-          <EditorWebView
-            ref={webViewRef}
-            documentId={note.id}
-            markdown={content}
-            theme={mode}
-            onMessage={handleMessage}
-          />
-          {error ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={t("editor.dismissErrorA11y")}
-              onPress={() => setError(null)}
-              style={styles.error}
-            >
-              <StoneText variant="caption" tone="danger">
-                {error}
-              </StoneText>
-            </Pressable>
-          ) : null}
-          <View
-            style={[
-              styles.commandBar,
-              { backgroundColor: colors.surface, borderTopColor: colors.border },
-            ]}
-          >
-            {(
-              [
-                ["toggleBold", t("editor.toolbar.bold")],
-                ["toggleItalic", t("editor.toolbar.italic")],
-                ["toggleBulletList", t("editor.toolbar.list")],
-                ["toggleTask", t("editor.toolbar.task")],
-                ["cycleHeading", t("editor.toolbar.heading")],
-                ["undo", t("editor.toolbar.undo")],
-                ["redo", t("editor.toolbar.redo")],
-              ] as const
-            ).map(([command, label]) => (
-              <StoneButton
-                key={command}
-                label={label}
-                variant="secondary"
-                onPress={() =>
-                  webViewRef.current?.post({
-                    protocolVersion: 1,
-                    type: "executeCommand",
-                    payload: { command },
-                  })
-                }
+              ) : null}
+              <AttachmentStrip service={attachments} ownerId={user?.uid} markdown={content} />
+              {backlinks.length > 0 ? (
+                <View
+                  style={[
+                    styles.backlinks,
+                    {
+                      backgroundColor: colors.backgroundSecondary,
+                      borderBottomColor: colors.border,
+                    },
+                  ]}
+                >
+                  <StoneText variant="caption" style={{ color: colors.textSecondary }}>
+                    {t("notes.backlinks", { count: backlinks.length })}
+                  </StoneText>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                    <View style={styles.backlinkRow}>
+                      {backlinks.map((linked) => (
+                        <Chip
+                          key={linked.id}
+                          label={linked.title}
+                          icon="link-outline"
+                          onPress={() => openNote(linked.id)}
+                        />
+                      ))}
+                    </View>
+                  </ScrollView>
+                </View>
+              ) : null}
+              <EditorWebView
+                ref={webViewRef}
+                documentId={note.id}
+                markdown={content}
+                theme={mode}
+                onMessage={handleMessage}
               />
-            ))}
-            <StoneButton
-              label={attaching ? t("attachments.adding") : t("editor.toolbar.attach")}
-              variant="secondary"
-              icon="attach-outline"
-              disabled={attaching}
-              onPress={() => void attach()}
-              testID="editor-attach"
-            />
-          </View>
-        </KeyboardAvoidingView>
-      </ResponsiveContent>
+              {error ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={t("editor.dismissErrorA11y")}
+                  onPress={() => setError(null)}
+                  style={styles.error}
+                >
+                  <StoneText variant="caption" tone="danger">
+                    {error}
+                  </StoneText>
+                </Pressable>
+              ) : null}
+              <View
+                style={[
+                  styles.commandBar,
+                  { backgroundColor: colors.surface, borderTopColor: colors.border },
+                ]}
+              >
+                {(
+                  [
+                    ["toggleBold", t("editor.toolbar.bold")],
+                    ["toggleItalic", t("editor.toolbar.italic")],
+                    ["toggleBulletList", t("editor.toolbar.list")],
+                    ["toggleTask", t("editor.toolbar.task")],
+                    ["cycleHeading", t("editor.toolbar.heading")],
+                    ["undo", t("editor.toolbar.undo")],
+                    ["redo", t("editor.toolbar.redo")],
+                  ] as const
+                ).map(([command, label]) => (
+                  <StoneButton
+                    key={command}
+                    label={label}
+                    variant="secondary"
+                    onPress={() =>
+                      webViewRef.current?.post({
+                        protocolVersion: 1,
+                        type: "executeCommand",
+                        payload: { command },
+                      })
+                    }
+                  />
+                ))}
+                <StoneButton
+                  label={attaching ? t("attachments.adding") : t("editor.toolbar.attach")}
+                  variant="secondary"
+                  icon="attach-outline"
+                  disabled={attaching}
+                  onPress={() => void attach()}
+                  testID="editor-attach"
+                />
+              </View>
+            </KeyboardAvoidingView>
+          </ResponsiveContent>
+        </View>
+        {video.element}
+      </View>
     </Screen>
   );
 }
@@ -591,17 +624,20 @@ function statusLabel(
 }
 
 const styles = StyleSheet.create({
+  area: { flex: 1 },
   container: { flex: 1 },
   toolbar: {
     minHeight: 72,
     borderBottomWidth: 1,
     flexDirection: "row",
+    flexWrap: "wrap",
     alignItems: "center",
     gap: spacing.sm,
     paddingHorizontal: spacing.sm,
   },
-  titleInput: { flex: 1 },
-  toolbarActions: { flexDirection: "row", alignItems: "center", gap: spacing.xs },
+  // In a narrow column (split view, beside a video) the actions wrap under the title.
+  titleInput: { flex: 1, minWidth: 220 },
+  toolbarActions: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: spacing.xs },
   recovery: {
     borderBottomWidth: 1,
     paddingHorizontal: spacing.lg,
