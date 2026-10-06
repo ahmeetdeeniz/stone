@@ -7,6 +7,13 @@ import {
   type InkShape,
   type InkStroke,
 } from "./index.js";
+import {
+  objectBounds,
+  validateImages,
+  validateTexts,
+  type InkImage,
+  type InkText,
+} from "./page-objects.js";
 
 /**
  * A notebook is an ordered list of pages that share a size and a paper style. Each page holds
@@ -15,6 +22,13 @@ import {
  * one-page notebook, so existing `.stoneink` files keep working.
  */
 export const INK_NOTEBOOK_SCHEMA_VERSION = 2 as const;
+/**
+ * Written instead of 2 only when a page holds images or text boxes, so older builds refuse such
+ * a notebook ("unsupported schema") instead of opening it and dropping those objects on save.
+ */
+export const INK_NOTEBOOK_RICH_SCHEMA_VERSION = 3 as const;
+export type InkNotebookSchema =
+  typeof INK_NOTEBOOK_SCHEMA_VERSION | typeof INK_NOTEBOOK_RICH_SCHEMA_VERSION;
 
 export type InkPaper = "blank" | "lined" | "grid" | "dotted" | "cornell";
 export type InkLayout = "pages" | "infinite";
@@ -36,10 +50,14 @@ export interface InkPage {
   height: number;
   strokes: readonly InkStroke[];
   shapes: readonly InkShape[];
+  /** Photos placed on the page (schema 3). */
+  images?: readonly InkImage[];
+  /** Typed text boxes (schema 3). */
+  texts?: readonly InkText[];
 }
 
 export interface InkNotebook {
-  schema: typeof INK_NOTEBOOK_SCHEMA_VERSION;
+  schema: InkNotebookSchema;
   id: string;
   title: string;
   layout: InkLayout;
@@ -92,10 +110,15 @@ export function serializeNotebook(notebook: InkNotebook): string {
   const valid = validateNotebook(notebook);
   return `${JSON.stringify({
     ...valid,
-    pages: valid.pages.map((page) => ({
-      ...page,
-      strokes: page.strokes.map((stroke) => ({ ...stroke, points: quantize(stroke.points) })),
-    })),
+    pages: valid.pages.map((page) => {
+      const { images, texts, ...rest } = page;
+      return {
+        ...rest,
+        strokes: page.strokes.map((stroke) => ({ ...stroke, points: quantize(stroke.points) })),
+        ...(images?.length ? { images } : {}),
+        ...(texts?.length ? { texts } : {}),
+      };
+    }),
   })}\n`;
 }
 
@@ -122,7 +145,11 @@ export function notebookFromInk(document: InkDocument): InkNotebook {
 }
 
 export function validateNotebook(value: unknown): InkNotebook {
-  if (!isRecord(value) || value.schema !== INK_NOTEBOOK_SCHEMA_VERSION)
+  if (
+    !isRecord(value) ||
+    (value.schema !== INK_NOTEBOOK_SCHEMA_VERSION &&
+      value.schema !== INK_NOTEBOOK_RICH_SCHEMA_VERSION)
+  )
     throw new InkValidationError("Unsupported Stone Ink schema version.");
   if (value.layout !== "pages" && value.layout !== "infinite")
     throw new InkValidationError("Notebook layout is invalid.");
@@ -161,7 +188,16 @@ export function validateNotebook(value: unknown): InkNotebook {
       strokes: page.strokes,
       shapes: page.shapes,
     });
-    return { id: page.id, height, strokes: checked.strokes, shapes: checked.shapes };
+    const images = validateImages(page.images);
+    const texts = validateTexts(page.texts);
+    return {
+      id: page.id,
+      height,
+      strokes: checked.strokes,
+      shapes: checked.shapes,
+      ...(images.length ? { images } : {}),
+      ...(texts.length ? { texts } : {}),
+    };
   });
   const first = validateInk({
     ...base,
@@ -171,13 +207,22 @@ export function validateNotebook(value: unknown): InkNotebook {
     shapes: [],
   });
   if (
-    pages.reduce((total, page) => total + page.strokes.length + page.shapes.length, 0) > MAX_OBJECTS
+    pages.reduce(
+      (total, page) =>
+        total +
+        page.strokes.length +
+        page.shapes.length +
+        (page.images?.length ?? 0) +
+        (page.texts?.length ?? 0),
+      0,
+    ) > MAX_OBJECTS
   )
     throw new InkValidationError("Notebook contains too many objects.");
   if (new Set(pages.map((page) => page.id)).size !== pages.length)
     throw new InkValidationError("Notebook page ids must be unique.");
+  const rich = pages.some((page) => page.images?.length || page.texts?.length);
   return {
-    schema: INK_NOTEBOOK_SCHEMA_VERSION,
+    schema: rich ? INK_NOTEBOOK_RICH_SCHEMA_VERSION : INK_NOTEBOOK_SCHEMA_VERSION,
     id: first.id,
     title: first.title,
     layout: value.layout,
@@ -249,7 +294,7 @@ export function removePage(
   if (notebook.pages.length === 1)
     return {
       ...notebook,
-      pages: [{ ...page, height: notebook.pageHeight, strokes: [], shapes: [] }],
+      pages: [{ id: page.id, height: notebook.pageHeight, strokes: [], shapes: [] }],
       updatedAt: now,
     };
   return {
@@ -344,6 +389,10 @@ function grownHeight(notebook: InkNotebook, current: number, document: InkDocume
     for (let index = 1; index < stroke.points.length; index += INK_POINT_STRIDE)
       bottom = Math.max(bottom, stroke.points[index]!);
   for (const shape of document.shapes) bottom = Math.max(bottom, shape.from.y, shape.to.y);
+  return heightFor(notebook, current, bottom);
+}
+
+function heightFor(notebook: InkNotebook, current: number, bottom: number): number {
   // Keep at least half a page of empty paper below the lowest ink.
   const needed = bottom + notebook.pageHeight / 2;
   if (needed <= current) return current;
@@ -365,4 +414,82 @@ function quantize(points: readonly number[]): readonly number[] {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/** Replaces a page's photos and text boxes (an infinite page grows to keep them on paper). */
+export function setPageObjects(
+  notebook: InkNotebook,
+  index: number,
+  objects: { images?: readonly InkImage[]; texts?: readonly InkText[] },
+  now = new Date().toISOString(),
+): InkNotebook {
+  const page = requirePage(notebook, index);
+  const images = objects.images ?? page.images ?? [];
+  const texts = objects.texts ?? page.texts ?? [];
+  let height = page.height;
+  if (notebook.layout === "infinite") {
+    const bottom = Math.max(
+      0,
+      ...[...images, ...texts].map((object) => objectBounds(object).bottom),
+    );
+    height = Math.max(height, heightFor(notebook, height, bottom));
+  }
+  const next: InkPage = {
+    id: page.id,
+    height,
+    strokes: page.strokes,
+    shapes: page.shapes,
+    ...(images.length ? { images } : {}),
+    ...(texts.length ? { texts } : {}),
+  };
+  return {
+    ...notebook,
+    pages: notebook.pages.map((item, position) => (position === index ? next : item)),
+    updatedAt: now,
+  };
+}
+
+/** Moves a page to another position (indexes are clamped). */
+export function movePage(
+  notebook: InkNotebook,
+  from: number,
+  to: number,
+  now = new Date().toISOString(),
+): InkNotebook {
+  const page = requirePage(notebook, from);
+  const target = Math.max(0, Math.min(notebook.pages.length - 1, to));
+  if (target === from) return notebook;
+  const pages = notebook.pages.filter((_, position) => position !== from);
+  pages.splice(target, 0, page);
+  return { ...notebook, pages, updatedAt: now };
+}
+
+/** Inserts a copy of a page right after it; every object in the copy gets a fresh id. */
+export function duplicatePage(
+  notebook: InkNotebook,
+  index: number,
+  newId: () => string,
+  now = new Date().toISOString(),
+): InkNotebook {
+  const page = requirePage(notebook, index);
+  if (notebook.pages.length >= MAX_PAGES)
+    throw new InkValidationError("Notebook has too many pages.");
+  const copy: InkPage = {
+    ...page,
+    id: newId(),
+    strokes: page.strokes.map((stroke) => ({ ...stroke, id: newId() })),
+    shapes: page.shapes.map((shape) => ({ ...shape, id: newId() })),
+    ...(page.images ? { images: page.images.map((image) => ({ ...image, id: newId() })) } : {}),
+    ...(page.texts ? { texts: page.texts.map((text) => ({ ...text, id: newId() })) } : {}),
+  };
+  const pages = [...notebook.pages];
+  pages.splice(index + 1, 0, copy);
+  return { ...notebook, pages, updatedAt: now };
+}
+
+/** Attachment files (`<sha256>.<ext>`) the notebook's pages refer to. */
+export function notebookAttachments(notebook: InkNotebook): readonly string[] {
+  const files = new Set<string>();
+  for (const page of notebook.pages) for (const image of page.images ?? []) files.add(image.file);
+  return [...files];
 }

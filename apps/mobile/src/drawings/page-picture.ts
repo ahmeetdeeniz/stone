@@ -1,22 +1,37 @@
 import {
   BlendMode,
+  ClipOp,
   PaintStyle,
   Skia,
   StrokeCap,
   StrokeJoin,
   type SkCanvas,
+  type SkFont,
+  type SkImage,
   type SkPath,
   type SkPicture,
+  type SkTypeface,
 } from "@shopify/react-native-skia";
 import {
   flatToPoints,
   paperGuides,
+  type InkImage,
   type InkPaper,
   type InkPage,
   type InkShape,
   type InkStroke,
+  type InkText,
 } from "@stone/ink";
 import { strokeOutline } from "./notebook-view";
+import { layoutText, lineHeightFor } from "./text-layout";
+
+/** What a page needs besides its own data: decoded photos and the typeface for text boxes. */
+export interface PageAssets {
+  images: ReadonlyMap<string, SkImage>;
+  typeface: SkTypeface | null;
+}
+
+export const NO_ASSETS: PageAssets = { images: new Map(), typeface: null };
 
 export interface PaperPalette {
   paper: string;
@@ -130,27 +145,99 @@ export function drawPaper(
   for (const point of guides.dots) canvas.drawCircle(point.x, point.y, 1.4, dot);
 }
 
-/** Records a whole page (paper, then shapes and strokes) once; it is redrawn from the picture. */
+/** A photo scaled into its box; a placeholder frame while it is still loading or downloading. */
+export function drawImage(canvas: SkCanvas, image: InkImage, decoded: SkImage | undefined): void {
+  const rect = Skia.XYWHRect(image.x, image.y, image.width, image.height);
+  if (decoded) {
+    const paint = Skia.Paint();
+    paint.setAntiAlias(true);
+    canvas.drawImageRect(
+      decoded,
+      Skia.XYWHRect(0, 0, decoded.width(), decoded.height()),
+      rect,
+      paint,
+    );
+    return;
+  }
+  const fill = Skia.Paint();
+  fill.setColor(Skia.Color("#F5F5F4"));
+  canvas.drawRect(rect, fill);
+  const frame = Skia.Paint();
+  frame.setStyle(PaintStyle.Stroke);
+  frame.setStrokeWidth(1);
+  frame.setColor(Skia.Color("#D6D3D1"));
+  canvas.drawRect(rect, frame);
+}
+
+export function drawText(canvas: SkCanvas, text: InkText, typeface: SkTypeface | null): void {
+  if (!typeface || !text.text) return;
+  const font = Skia.Font(typeface, text.size);
+  const paint = Skia.Paint();
+  paint.setAntiAlias(true);
+  paint.setColor(Skia.Color(text.color));
+  const lineHeight = lineHeightFor(text.size);
+  const lines = layoutText(text.text, text.width, (value) => textWidth(font, value));
+  lines.forEach((line, index) => {
+    // Baseline at roughly 80 % of the line box, so the first line starts at the box top.
+    canvas.drawText(line, text.x, text.y + lineHeight * index + text.size * 1.05, paint, font);
+  });
+}
+
+/** Advance width of a string (summed glyph widths: works on native and on CanvasKit web). */
+function textWidth(font: SkFont, value: string): number {
+  let width = 0;
+  for (const glyph of font.getGlyphWidths(font.getGlyphIDs(value))) width += glyph;
+  return width;
+}
+
+/** Height a text box needs for its content at its width (for hit-testing and selection). */
+export function measureTextHeight(text: InkText, typeface: SkTypeface | null): number {
+  if (!typeface) return Math.max(text.height, lineHeightFor(text.size));
+  const font = Skia.Font(typeface, text.size);
+  const lines = layoutText(text.text, text.width, (value) => textWidth(font, value));
+  return Math.max(1, lines.length) * lineHeightFor(text.size);
+}
+
+/**
+ * Records a whole page once (paper, photos, text, shapes, then strokes on top, so ink can
+ * annotate a photo); it is redrawn from the picture.
+ */
 export function recordPage(
   page: InkPage,
   paper: InkPaper,
   width: number,
+  assets: PageAssets = NO_ASSETS,
   palette: PaperPalette = PAPER_PALETTE,
 ): SkPicture {
   const recorder = Skia.PictureRecorder();
-  const canvas = recorder.beginRecording(Skia.XYWHRect(0, 0, width, page.height));
+  const bounds = Skia.XYWHRect(0, 0, width, page.height);
+  const canvas = recorder.beginRecording(bounds);
+  // Nothing (a photo dragged to the edge, a long stroke) draws past the paper onto the desk.
+  canvas.clipRect(bounds, ClipOp.Intersect, true);
   drawPaper(canvas, paper, width, page.height, palette);
+  for (const image of page.images ?? []) drawImage(canvas, image, assets.images.get(image.file));
+  for (const text of page.texts ?? []) drawText(canvas, text, assets.typeface);
   for (const shape of page.shapes) drawShape(canvas, shape);
   for (const stroke of page.strokes) drawStroke(canvas, stroke);
   return recorder.finishRecordingAsPicture();
 }
 
-/** PNG of one page, used as the drawing preview embedded in notes. */
-export function renderPagePng(page: InkPage, paper: InkPaper, width: number): Uint8Array | null {
-  const surface = Skia.Surface.MakeOffscreen(Math.round(width), Math.round(page.height));
+/** PNG of one page: the drawing preview embedded in notes, and pages of a PDF export. */
+export function renderPagePng(
+  page: InkPage,
+  paper: InkPaper,
+  width: number,
+  assets: PageAssets = NO_ASSETS,
+  scale = 1,
+): Uint8Array | null {
+  const surface = Skia.Surface.MakeOffscreen(
+    Math.round(width * scale),
+    Math.round(page.height * scale),
+  );
   if (!surface) return null;
   const canvas = surface.getCanvas();
-  canvas.drawPicture(recordPage(page, paper, width));
+  canvas.scale(scale, scale);
+  canvas.drawPicture(recordPage(page, paper, width, assets));
   surface.flush();
   return surface.makeImageSnapshot().encodeToBytes();
 }

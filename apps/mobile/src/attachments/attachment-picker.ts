@@ -21,6 +21,24 @@ export async function pickAttachment(): Promise<PickedAttachment | null> {
   };
 }
 
+/** Lets the user pick one photo (for a notebook page); null when they cancel. */
+export async function pickImage(): Promise<PickedAttachment | null> {
+  const result = await DocumentPicker.getDocumentAsync({
+    type: ATTACHMENT_MIME_TYPES.filter((type) => type.startsWith("image/")),
+    copyToCacheDirectory: true,
+    multiple: false,
+  });
+  if (result.canceled) return null;
+  const asset = result.assets[0];
+  if (!asset) return null;
+  return {
+    uri: asset.uri,
+    name: asset.name,
+    mimeType: asset.mimeType ?? null,
+    size: asset.size ?? null,
+  };
+}
+
 /** Hands a local attachment to the system (Quick Look / an installed viewer, or share). */
 export async function openAttachmentExternally(uri: string, fileName: string): Promise<void> {
   const type = attachmentTypeOf(fileName);

@@ -155,6 +155,6 @@ describe("Stone Ink notebooks", () => {
     ) as Record<string, unknown>;
     expect(() => parseNotebook(JSON.stringify({ ...valid, paper: "papyrus" }))).toThrow();
     expect(() => parseNotebook(JSON.stringify({ ...valid, pages: [] }))).toThrow();
-    expect(() => parseNotebook(JSON.stringify({ ...valid, schema: 3 }))).toThrow(/schema/u);
+    expect(() => parseNotebook(JSON.stringify({ ...valid, schema: 4 }))).toThrow(/schema/u);
   });
 });

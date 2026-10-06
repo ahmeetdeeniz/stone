@@ -16,6 +16,7 @@ import {
   referencedAttachmentFiles,
   sanitizeFileName,
 } from "@stone/markdown";
+import { notebookAttachments, parseNotebook } from "@stone/ink";
 import { readLocalAttachmentBase64 } from "../../attachments/expo-attachment-files";
 import type { StoneDatabase } from "./database";
 
@@ -77,13 +78,15 @@ export async function exportWorkspace(
     ownerId,
   );
   const assets: ExportedProjectFile[] = [];
+  // Photos placed in notebooks are attachments too; they travel with the export like note ones.
+  const notebookFiles = new Set<string>();
   for (const drawing of drawings) {
     const sourceFile = new File(drawing.source_path);
-    if (sourceFile.exists)
-      assets.push({
-        path: `assets/drawings/${drawing.id}.stoneink`,
-        content: await sourceFile.text(),
-      });
+    if (sourceFile.exists) {
+      const content = await sourceFile.text();
+      assets.push({ path: `assets/drawings/${drawing.id}.stoneink`, content });
+      for (const fileName of notebookAttachmentFiles(content)) notebookFiles.add(fileName);
+    }
     const previewFile = new File(drawing.preview_path);
     if (previewFile.exists)
       assets.push({
@@ -94,7 +97,10 @@ export async function exportWorkspace(
       });
   }
   // Attachments live at the workspace root so `attachments/<file>` links resolve from it.
-  const attachmentFiles = new Set(rows.flatMap((row) => referencedAttachmentFiles(row.markdown)));
+  const attachmentFiles = new Set([
+    ...rows.flatMap((row) => referencedAttachmentFiles(row.markdown)),
+    ...notebookFiles,
+  ]);
   for (const fileName of [...attachmentFiles].sort()) {
     const content = await readLocalAttachmentBase64(ownerId, fileName);
     const type = attachmentTypeOf(fileName);
@@ -188,4 +194,13 @@ function standalonePath(row: ExportDocumentRow): string {
   const title = sanitizeFileName(row.title, "untitled");
   const folder = row.kind === "note" ? "Notes" : "Workspace";
   return `${folder}/${title}-${row.id.slice(0, 8)}.md`;
+}
+
+/** Attachment files a `.stoneink` file refers to; an unreadable file refers to none. */
+export function notebookAttachmentFiles(source: string): readonly string[] {
+  try {
+    return notebookAttachments(parseNotebook(source));
+  } catch {
+    return [];
+  }
 }

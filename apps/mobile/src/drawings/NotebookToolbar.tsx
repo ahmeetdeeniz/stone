@@ -3,6 +3,7 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useTheme } from "../design/theme";
 import { radii, spacing } from "../design/tokens";
 import { useI18n } from "../i18n/provider";
+import { TEXT_SIZES } from "@stone/ink";
 import type { NotebookTool } from "./NotebookCanvas";
 
 type IconName = keyof typeof MaterialCommunityIcons.glyphMap;
@@ -16,6 +17,7 @@ const tools: ReadonlyArray<{ tool: NotebookTool; icon: IconName }> = [
   { tool: "highlighter", icon: "marker" },
   { tool: "eraser", icon: "eraser" },
   { tool: "lasso", icon: "lasso" },
+  { tool: "text", icon: "format-text" },
   { tool: "line", icon: "vector-line" },
   { tool: "arrow", icon: "arrow-top-right" },
   { tool: "rectangle", icon: "rectangle-outline" },
@@ -23,21 +25,30 @@ const tools: ReadonlyArray<{ tool: NotebookTool; icon: IconName }> = [
   { tool: "pan", icon: "hand-back-right-outline" },
 ];
 
-/** One quiet row: tools, then colours and widths for the active tool. Wraps on phones. */
+/**
+ * One quiet row: tools, inserting a photo, then colours and widths (or text sizes) for the
+ * active tool. Scrolls sideways on phones.
+ */
 export function NotebookToolbar({
   tool,
   color,
   width,
+  textSize,
   onTool,
   onColor,
   onWidth,
+  onTextSize,
+  onInsertImage,
 }: {
   tool: NotebookTool;
   color: string;
   width: number;
+  textSize: number;
   onTool: (tool: NotebookTool) => void;
   onColor: (color: string) => void;
   onWidth: (width: number) => void;
+  onTextSize: (size: number) => void;
+  onInsertImage: () => void;
 }) {
   const { colors } = useTheme();
   const { t } = useI18n();
@@ -60,6 +71,7 @@ export function NotebookToolbar({
             onPress={() => onTool(item.tool)}
           />
         ))}
+        <ToolButton icon="image-plus" label={t("notebook.insertImage")} onPress={onInsertImage} />
       </View>
       {showsInk ? (
         <>
@@ -80,27 +92,48 @@ export function NotebookToolbar({
               />
             ))}
           </View>
-          <View style={[styles.group, { backgroundColor: colors.backgroundSecondary }]}>
-            {PEN_WIDTHS.map((item) => (
-              <Pressable
-                key={item}
-                accessibilityRole="button"
-                accessibilityLabel={t("drawing.widthA11y", { width: item })}
-                accessibilityState={{ selected: width === item }}
-                onPress={() => onWidth(item)}
-                style={[styles.tool, width === item && { backgroundColor: colors.surface }]}
-              >
-                <View
-                  style={{
-                    width: 18,
-                    height: item * 1.4,
-                    borderRadius: 4,
-                    backgroundColor: tool === "highlighter" ? color : colors.text,
-                  }}
-                />
-              </Pressable>
-            ))}
-          </View>
+          {tool === "text" ? (
+            <View style={[styles.group, { backgroundColor: colors.backgroundSecondary }]}>
+              {TEXT_SIZES.map((item, index) => (
+                <Pressable
+                  key={item}
+                  accessibilityRole="button"
+                  accessibilityLabel={t("notebook.textSizeA11y", { size: item })}
+                  accessibilityState={{ selected: textSize === item }}
+                  onPress={() => onTextSize(item)}
+                  style={[styles.tool, textSize === item && { backgroundColor: colors.surface }]}
+                >
+                  <MaterialCommunityIcons
+                    name="format-text"
+                    size={14 + index * 5}
+                    color={textSize === item ? colors.primary : colors.textSecondary}
+                  />
+                </Pressable>
+              ))}
+            </View>
+          ) : (
+            <View style={[styles.group, { backgroundColor: colors.backgroundSecondary }]}>
+              {PEN_WIDTHS.map((item) => (
+                <Pressable
+                  key={item}
+                  accessibilityRole="button"
+                  accessibilityLabel={t("drawing.widthA11y", { width: item })}
+                  accessibilityState={{ selected: width === item }}
+                  onPress={() => onWidth(item)}
+                  style={[styles.tool, width === item && { backgroundColor: colors.surface }]}
+                >
+                  <View
+                    style={{
+                      width: 18,
+                      height: item * 1.4,
+                      borderRadius: 4,
+                      backgroundColor: tool === "highlighter" ? color : colors.text,
+                    }}
+                  />
+                </Pressable>
+              ))}
+            </View>
+          )}
         </>
       ) : null}
     </ScrollView>
