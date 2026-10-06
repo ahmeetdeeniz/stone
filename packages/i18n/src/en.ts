@@ -1079,6 +1079,16 @@ export const en = {
   "notebook.insertBlankAfter": "Insert blank page after",
   "notebook.sharePdf": "Share as PDF",
   "notebook.exporting": "Creating PDF…",
+  "notebook.addPdf": "Add PDF pages",
+  "notebook.pdfImporting": "Preparing PDF",
+  "notebook.pdfOpening": "Opening the file…",
+  "notebook.pdfProgress": "Page {{done}} of {{total}}",
+  "notebook.pdfFailed": "Couldn't add the PDF",
+  "notebook.pdfPassword":
+    "Password-protected PDFs can't be opened yet. Save an unlocked copy and try again.",
+  "notebook.pdfTooLong":
+    "Only the first {{count}} pages were added (a notebook holds up to 500 pages, 300 per import).",
+  "notes.notebookFromPdf": "Notebook from PDF",
   "widgets.privacy": "Widget privacy",
   "widgets.privacyDescription":
     "Counts only is the safe default for information visible outside Stone.",

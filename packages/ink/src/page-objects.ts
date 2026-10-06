@@ -28,6 +28,18 @@ export interface InkText {
   createdAt: string;
 }
 
+/**
+ * A page drawn on top of another document instead of paper: page `page` (1-based) of the PDF
+ * attachment `file`, pre-rendered to the image attachment `image` so every device can show it
+ * without a PDF engine. Exports go back to `file` to keep the original page's vectors.
+ */
+export interface InkPageBackground {
+  kind: "pdf";
+  file: string;
+  page: number;
+  image: string;
+}
+
 export type InkPageObject = { kind: "image"; object: InkImage } | { kind: "text"; object: InkText };
 
 export const MAX_PAGE_IMAGES = 100;
@@ -131,6 +143,24 @@ export function placeImage(
   const width = Math.max(8, natural.width * scale);
   const height = Math.max(8, natural.height * scale);
   return { x: centre.x - width / 2, y: centre.y - height / 2, width, height };
+}
+
+export function validateBackground(value: unknown): InkPageBackground | undefined {
+  if (value === undefined) return undefined;
+  if (
+    !isRecord(value) ||
+    value.kind !== "pdf" ||
+    !isInkAttachmentFile(value.file) ||
+    !value.file.endsWith(".pdf") ||
+    !isInkAttachmentFile(value.image) ||
+    value.image.endsWith(".pdf") ||
+    typeof value.page !== "number" ||
+    !Number.isInteger(value.page) ||
+    value.page < 1 ||
+    value.page > 100_000
+  )
+    throw new InkValidationError("Page background is invalid.");
+  return { kind: "pdf", file: value.file, page: value.page, image: value.image };
 }
 
 function validBox(

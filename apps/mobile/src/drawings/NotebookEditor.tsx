@@ -6,6 +6,7 @@ import {
   Alert,
   AppState,
   Image,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -23,6 +24,7 @@ import {
   duplicatePage,
   duplicateSelection,
   eraseAt,
+  insertPdfPages,
   movePage,
   pageDocument,
   placeImage,
@@ -49,6 +51,7 @@ import {
   ActionSheet,
   Chip,
   Overline,
+  ProgressBar,
   Screen,
   SegmentedControl,
   StoneButton,
@@ -68,8 +71,11 @@ import {
 } from "../drawings/NotebookCanvas";
 import { lineHeightFor } from "../drawings/text-layout";
 import { usePageAssets } from "../drawings/use-page-assets";
-import { pickImage } from "../attachments/attachment-picker";
+import { pickImage, pickPdf } from "../attachments/attachment-picker";
 import { shareNotebookPdf } from "../drawings/notebook-pdf";
+import { PdfRenderer, PdfRenderError, type PdfRendererHandle } from "../pdf/PdfRenderer";
+import { importPdf, PdfImportCancelled } from "../pdf/pdf-import";
+import type { PickedAttachment } from "../attachments/attachment-service";
 import {
   HIGHLIGHTER_COLORS,
   INK_COLORS,
@@ -92,6 +98,8 @@ export interface NotebookEditorProps {
   id: string | undefined;
   layout?: string | undefined;
   paper?: string | undefined;
+  /** "pdf": a new notebook starts by picking a PDF, whose pages become the notebook's pages. */
+  from?: string | undefined;
   /** Leaves the notebook; defaults to navigating back. */
   onBack?: () => void;
   /** Called after each save with the drawing id (a "new" notebook gets its id on first save). */
@@ -99,8 +107,15 @@ export interface NotebookEditorProps {
 }
 
 /** The handwriting notebook, as a full screen route or embedded in the tablet split view. */
-export function NotebookEditor({ id, layout, paper, onBack, onChanged }: NotebookEditorProps) {
-  const params = { layout, paper };
+export function NotebookEditor({
+  id,
+  layout,
+  paper,
+  from,
+  onBack,
+  onChanged,
+}: NotebookEditorProps) {
+  const params = { layout, paper, from };
   const router = useRouter();
   const back = onBack ?? (() => router.back());
   const changedRef = useRef(onChanged);
@@ -127,6 +142,16 @@ export function NotebookEditor({ id, layout, paper, onBack, onChanged }: Noteboo
   const [textSize, setTextSize] = useState(20);
   const [pageMenu, setPageMenu] = useState<number | null>(null);
   const [exporting, setExporting] = useState(false);
+  /** A PDF being turned into pages: the hidden renderer is mounted while this is set. */
+  const [pdfJob, setPdfJob] = useState<{
+    picked: PickedAttachment;
+    startsNotebook: boolean;
+    done: number;
+    total: number;
+  } | null>(null);
+  const [autoPdf, setAutoPdf] = useState(false);
+  const pdfRenderer = useRef<PdfRendererHandle>(null);
+  const pdfCancelled = useRef(false);
   const [pageIndex, setPageIndex] = useState(0);
   const [title, setTitle] = useState(() => t("notebook.newTitle"));
   /** Until the title is edited, a new notebook follows the UI language for its default name. */
@@ -177,6 +202,19 @@ export function NotebookEditor({ id, layout, paper, onBack, onChanged }: Noteboo
             deletedAt: null,
             updatedByDeviceId: deviceId,
           });
+          if (params.from === "pdf") {
+            const blank = createNotebook({
+              id: nextId,
+              title: t("notebook.newTitle"),
+              pageId: Crypto.randomUUID(),
+              layout: "pages",
+              paper: "blank",
+            });
+            historyRef.current = new InkHistory(blank);
+            setNotebook(blank);
+            setAutoPdf(true);
+            return;
+          }
           setSetup({
             layout: params.layout === "infinite" ? "infinite" : "pages",
             paper: INK_PAPERS.includes(params.paper as InkPaper)
@@ -416,7 +454,9 @@ export function NotebookEditor({ id, layout, paper, onBack, onChanged }: Noteboo
     setExporting(true);
     try {
       await save();
-      await shareNotebookPdf(current, title, assetsRef.current);
+      await shareNotebookPdf(current, title, assetsRef.current, (file) =>
+        user ? attachments.resolve(user.uid, file) : Promise.reject(new Error("Signed out.")),
+      );
     } catch (caught) {
       Alert.alert(
         t("notebook.exportFailed"),
@@ -426,6 +466,84 @@ export function NotebookEditor({ id, layout, paper, onBack, onChanged }: Noteboo
       setExporting(false);
     }
   };
+
+  /** Picks a PDF; its pages are inserted after the current page (or start a new notebook). */
+  const startPdfImport = async (startsNotebook: boolean) => {
+    const picked = await pickPdf().catch(() => null);
+    if (!picked) {
+      if (startsNotebook) back();
+      return;
+    }
+    pdfCancelled.current = false;
+    setPdfJob({ picked, startsNotebook, done: 0, total: 0 });
+  };
+
+  useEffect(() => {
+    if (!autoPdf || !notebook) return;
+    setAutoPdf(false);
+    void startPdfImport(true);
+  }, [autoPdf, notebook]);
+
+  // The renderer mounts with the job; the import runs once its ref exists.
+  const pdfPicked = pdfJob?.picked;
+  useEffect(() => {
+    if (!pdfPicked || !pdfJob || !user) return;
+    const job = pdfJob;
+    const run = async () => {
+      const renderer = pdfRenderer.current;
+      const current = notebookRef.current;
+      if (!renderer || !current) return;
+      try {
+        const result = await importPdf(
+          pdfPicked,
+          {
+            renderer,
+            readBase64: (uri) => new File(uri).base64(),
+            addAttachment: (picked) => attachments.add(user.uid, picked),
+            writeTemp: (base64, name) => {
+              const file = new File(Paths.cache, name);
+              if (file.exists) file.delete();
+              file.write(base64, { encoding: "base64" });
+              return Promise.resolve({ uri: file.uri, size: file.size });
+            },
+            newId: () => Crypto.randomUUID(),
+          },
+          {
+            pageWidth: current.pageWidth,
+            maxPages: 500 - current.pages.length,
+            onProgress: (done, total) =>
+              setPdfJob((value) => (value ? { ...value, done, total } : value)),
+            isCancelled: () => pdfCancelled.current,
+          },
+        );
+        const latest = notebookRef.current ?? current;
+        const insertAt = job.startsNotebook ? -1 : pageIndex;
+        const next = insertPdfPages(latest, insertAt, result.pages, undefined, true);
+        pendingPage.current = next.pages.findIndex((page) => page.id === result.pages[0]?.id);
+        commit(next);
+        if (job.startsNotebook && !titleEdited.current) setTitle(result.title);
+        if (result.skipped > 0)
+          Alert.alert(t("notebook.pdfTooLong", { count: result.pages.length }));
+      } catch (caught) {
+        if (caught instanceof PdfImportCancelled) {
+          if (job.startsNotebook) back();
+          return;
+        }
+        Alert.alert(
+          t("notebook.pdfFailed"),
+          caught instanceof PdfRenderError && caught.code === "password"
+            ? t("notebook.pdfPassword")
+            : caught instanceof Error
+              ? caught.message
+              : t("app.unknownError"),
+        );
+        if (job.startsNotebook) back();
+      } finally {
+        setPdfJob(null);
+      }
+    };
+    void run();
+  }, [pdfPicked]);
 
   const editSelection = (edit: (page: InkDocument, current: PageSelection) => InkDocument) => {
     if (!selection) return;
@@ -853,6 +971,11 @@ export function NotebookEditor({ id, layout, paper, onBack, onChanged }: Noteboo
                 ]
               : []),
             {
+              label: t("notebook.addPdf"),
+              icon: "document-attach-outline",
+              onPress: () => void startPdfImport(false),
+            },
+            {
               label: exporting ? t("notebook.exporting") : t("notebook.sharePdf"),
               icon: "share-outline",
               onPress: () => void sharePdf(),
@@ -941,6 +1064,34 @@ export function NotebookEditor({ id, layout, paper, onBack, onChanged }: Noteboo
             onPress: () => commit(setPaper(notebook, paper)),
           }))}
         />
+        {pdfJob ? (
+          <>
+            <PdfRenderer ref={pdfRenderer} />
+            <Modal transparent animationType="fade" visible>
+              <View style={[styles.pdfOverlay, { backgroundColor: colors.overlay }]}>
+                <View style={[styles.pdfCard, { backgroundColor: colors.surface }]}>
+                  <StoneText variant="title3">{t("notebook.pdfImporting")}</StoneText>
+                  <StoneText variant="bodySmall" tone="secondary">
+                    {pdfJob.total > 0
+                      ? t("notebook.pdfProgress", { done: pdfJob.done, total: pdfJob.total })
+                      : t("notebook.pdfOpening")}
+                  </StoneText>
+                  <ProgressBar
+                    value={pdfJob.total > 0 ? pdfJob.done / pdfJob.total : 0}
+                    accessibilityLabel={t("notebook.pdfImporting")}
+                  />
+                  <StoneButton
+                    label={t("common.cancel")}
+                    variant="quiet"
+                    onPress={() => {
+                      pdfCancelled.current = true;
+                    }}
+                  />
+                </View>
+              </View>
+            </Modal>
+          </>
+        ) : null}
         {video.element}
       </View>
     </Screen>
@@ -1005,6 +1156,14 @@ function NotebookSetup({
 
 const styles = StyleSheet.create({
   area: { flex: 1 },
+  pdfOverlay: { flex: 1, alignItems: "center", justifyContent: "center", padding: spacing.lg },
+  pdfCard: {
+    width: "100%",
+    maxWidth: 420,
+    gap: spacing.md,
+    padding: spacing.lg,
+    borderRadius: radii.xl,
+  },
   header: {
     minHeight: 64,
     borderBottomWidth: 1,
