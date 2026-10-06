@@ -25,8 +25,11 @@
     "@codemirror/search": "^6.7.1",
     "@codemirror/state": "^6.7.1",
     "@codemirror/view": "^6.43.6",
-    "@stone/markdown": "workspace:*",
     "@stone/i18n": "workspace:*",
+    "@stone/markdown": "workspace:*",
     "codemirror": "^6.0.2"
+  },
+  "devDependencies": {
+    "@fontsource-variable/inter": "^5.3.0"
   }
 }

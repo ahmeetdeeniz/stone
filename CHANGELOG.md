@@ -5,6 +5,11 @@ tag, so no release date or semantic version is claimed.
 
 ## Unreleased
 
+- Inter now ships with the app everywhere: the desktop app bundles it and the mobile note editor
+  embeds it, so neither falls back to a system font (Segoe UI, Roboto) when Inter isn't
+  installed. Screen headings read their face from one token, ready for a licensed display font.
+- The mobile note editor's bundled script is regenerated from current sources; it had fallen
+  behind the attachment helpers added to `@stone/markdown`.
 - Added local reminders on mobile for tasks with a due date and upcoming calendar events, with a
   configurable lead time, an all-day reminder time, and Complete/Snooze notification actions.
 - Desktop Rust now builds, lints (`clippy -D warnings`) and tests on Linux CI.
