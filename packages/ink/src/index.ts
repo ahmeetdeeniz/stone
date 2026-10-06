@@ -597,3 +597,5 @@ function escapeXml(value: string): string {
   );
 }
 export * from "./notebook.js";
+export * from "./page-objects.js";
+export * from "./shape-recognition.js";

@@ -1,21 +1,27 @@
 import { forwardRef, memo, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
-import { StyleSheet, View, type LayoutChangeEvent } from "react-native";
-import { Canvas, Group, Path, Picture, Rect, Skia } from "@shopify/react-native-skia";
+import { StyleSheet, TextInput, View, type LayoutChangeEvent } from "react-native";
+import { Canvas, Circle, Group, Path, Picture, Rect, Skia } from "@shopify/react-native-skia";
 import { Gesture, GestureDetector, PointerType } from "react-native-gesture-handler";
 import {
   locatePoint,
   notebookHeight,
+  objectAt,
+  recognizeShape,
   pageDocument,
   pageOffsets,
   selectLasso,
   selectRectangle,
+  type InkImage,
   type InkNotebook,
   type InkPage,
+  type InkPageObject,
   type InkPoint,
   type InkSelection,
   type InkShape,
   type InkShapeKind,
+  type InkText,
   type InkTool,
+  type RecognizedShape,
 } from "@stone/ink";
 import { useTheme } from "../design/theme";
 import { useI18n } from "../i18n/provider";
@@ -30,9 +36,26 @@ import {
   visibleRange,
   type NotebookView,
 } from "./notebook-view";
-import { drawShape, outlinePath, recordPage } from "./page-picture";
+import { drawShape, NO_ASSETS, outlinePath, recordPage, type PageAssets } from "./page-picture";
+import { lineHeightFor } from "./text-layout";
 
-export type NotebookTool = InkTool | InkShapeKind | "select" | "lasso" | "pan";
+export type NotebookTool = InkTool | InkShapeKind | "select" | "lasso" | "pan" | "text";
+
+/** A photo or text box picked with the selection tools. */
+export interface ObjectSelection {
+  pageIndex: number;
+  kind: InkPageObject["kind"];
+  id: string;
+}
+
+/** A text box being typed into, shown as an inline editor over the page. */
+export interface EditingText {
+  pageIndex: number;
+  text: InkText;
+}
+
+/** How long the pen must rest at the end of a stroke before it snaps to a shape. */
+const SNAP_HOLD_MS = 450;
 
 export interface PageSelection {
   pageIndex: number;
@@ -64,12 +87,41 @@ export interface NotebookCanvasProps {
   onInkEnd?(): void;
   /** A screen strip covered by a floating video: pages are placed in the free width beside it. */
   avoid?: { side: "left" | "right"; width: number } | null;
+  /** Decoded photos and the text typeface; pages re-record when they change. */
+  assets?: PageAssets;
+  objectSelection?: ObjectSelection | null;
+  onObjectSelect?(selection: ObjectSelection | null): void;
+  /** A selected photo or text box was dragged or resized. */
+  onObjectChange?(pageIndex: number, object: InkPageObject): void;
+  /** The text tool tapped a page: on an existing text box, or on empty paper to add one. */
+  onTextTap?(pageIndex: number, point: { x: number; y: number }, existing: InkText | null): void;
+  editingText?: EditingText | null;
+  onEditingTextChange?(value: string): void;
+  onEditingTextDone?(): void;
 }
 
 type Interaction =
   | { kind: "idle" }
   | { kind: "navigate"; start: NotebookView }
-  | { kind: "draw"; pageIndex: number; points: InkPoint[]; realPressure: boolean };
+  | {
+      kind: "draw";
+      pageIndex: number;
+      points: InkPoint[];
+      realPressure: boolean;
+      /** Where the pen last rested (the hold timer restarts when it moves away). */
+      anchor: InkPoint;
+      snapped: RecognizedShape | null;
+    }
+  | {
+      kind: "object";
+      mode: "move" | "resize";
+      pageIndex: number;
+      object: InkPageObject;
+      box: Box;
+    }
+  | { kind: "tap"; pageIndex: number; start: { x: number; y: number }; moved: boolean };
+
+type Box = { x: number; y: number; width: number; height: number };
 
 const SELECTION = "#A13D27";
 /** The surface pages lie on: a shade darker than the UI so white paper reads as paper. */
@@ -87,7 +139,13 @@ export const NotebookCanvas = forwardRef<NotebookCanvasHandle, NotebookCanvasPro
     const { mode } = useTheme();
     const [size, setSize] = useState({ width: 0, height: 0 });
     const [view, setView] = useState<NotebookView | null>(null);
-    const [live, setLive] = useState<{ pageIndex: number; points: InkPoint[] } | null>(null);
+    const [live, setLive] = useState<{
+      pageIndex: number;
+      points: InkPoint[];
+      snapped: RecognizedShape | null;
+    } | null>(null);
+    const [dragBox, setDragBox] = useState<{ pageIndex: number; box: Box } | null>(null);
+    const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const interaction = useRef<Interaction>({ kind: "idle" });
     const pinchStart = useRef<{ view: NotebookView; focal: { x: number; y: number } } | null>(null);
     const propsRef = useRef(props);
@@ -170,28 +228,81 @@ export const NotebookCanvas = forwardRef<NotebookCanvasHandle, NotebookCanvasPro
     const finish = (cancelled: boolean) => {
       const current = interaction.current;
       interaction.current = { kind: "idle" };
+      if (holdTimer.current) clearTimeout(holdTimer.current);
+      holdTimer.current = null;
       setLive(null);
-      if (current.kind === "draw") propsRef.current.onInkEnd?.();
+      setDragBox(null);
+      const latest = propsRef.current;
+      if (current.kind === "object") {
+        const { object, box } = current;
+        const changed =
+          box.x !== object.object.x ||
+          box.y !== object.object.y ||
+          box.width !== object.object.width ||
+          box.height !== object.object.height;
+        if (!cancelled && changed)
+          latest.onObjectChange?.(current.pageIndex, {
+            ...object,
+            object: { ...object.object, ...box },
+          } as InkPageObject);
+        return;
+      }
+      if (current.kind === "tap") {
+        if (cancelled || current.moved) return;
+        const page = latest.notebook.pages[current.pageIndex];
+        const hit = page ? objectAt(page, current.start.x, current.start.y, 4) : null;
+        latest.onTextTap?.(
+          current.pageIndex,
+          current.start,
+          hit?.kind === "text" ? hit.object : null,
+        );
+        return;
+      }
+      if (current.kind === "draw") latest.onInkEnd?.();
       if (current.kind !== "draw" || cancelled) return;
       const { pageIndex, points } = current;
-      const activeTool = propsRef.current.tool;
+      const activeTool = latest.tool;
       const last = points.at(-1);
       if (!last) return;
       if (activeTool === "eraser") {
-        propsRef.current.onErase(pageIndex, last, true);
+        latest.onErase(pageIndex, last, true);
         return;
       }
       if (activeTool === "select" || activeTool === "lasso") {
-        const document = pageDocument(propsRef.current.notebook, pageIndex);
+        const bounds = boundsOf(points);
+        const page = latest.notebook.pages[pageIndex];
+        // A tap (not a loop) picks the photo or text box under it.
+        if (bounds.right - bounds.left < 8 && bounds.bottom - bounds.top < 8 && page) {
+          const hit = objectAt(page, last.x, last.y, 4);
+          latest.onSelect(null);
+          latest.onObjectSelect?.(hit ? { pageIndex, kind: hit.kind, id: hit.object.id } : null);
+          return;
+        }
+        const document = pageDocument(latest.notebook, pageIndex);
         const picked =
           activeTool === "lasso"
             ? selectLasso(document, points)
-            : selectRectangle(document, boundsOf(points));
-        propsRef.current.onSelect(
+            : selectRectangle(document, bounds);
+        latest.onObjectSelect?.(null);
+        latest.onSelect(
           picked.strokeIds.length + picked.shapeIds.length > 0
             ? { pageIndex, selection: picked }
             : null,
         );
+        return;
+      }
+      if (current.snapped) {
+        latest.onShape(pageIndex, {
+          id: `shape-${Date.now()}`,
+          kind: current.snapped.kind,
+          color: latest.color,
+          width: latest.width,
+          opacity: 1,
+          from: current.snapped.from,
+          to: current.snapped.to,
+          filled: false,
+          createdAt: new Date().toISOString(),
+        });
         return;
       }
       if (isShapeTool(activeTool)) {
@@ -200,8 +311,8 @@ export const NotebookCanvas = forwardRef<NotebookCanvasHandle, NotebookCanvasPro
         propsRef.current.onShape(pageIndex, {
           id: `shape-${Date.now()}`,
           kind: activeTool,
-          color: propsRef.current.color,
-          width: propsRef.current.width,
+          color: latest.color,
+          width: latest.width,
           opacity: 1,
           from: first,
           to: last,
@@ -210,7 +321,33 @@ export const NotebookCanvas = forwardRef<NotebookCanvasHandle, NotebookCanvasPro
         });
         return;
       }
-      if (points.length > 1) propsRef.current.onStroke(pageIndex, points);
+      if (points.length > 1) latest.onStroke(pageIndex, points);
+    };
+
+    /** The pen rested at the end of a stroke: snap it to a shape if it looks like one. */
+    const trySnap = () => {
+      holdTimer.current = null;
+      const current = interaction.current;
+      if (current.kind !== "draw" || current.snapped || propsRef.current.tool !== "pen") return;
+      const shape = recognizeShape(current.points);
+      if (!shape) return;
+      current.snapped = shape;
+      setLive({ pageIndex: current.pageIndex, points: current.points, snapped: shape });
+    };
+
+    /** The selected photo or text box, when it sits on this page. */
+    const selectedObject = (pageIndex: number): InkPageObject | null => {
+      const selected = propsRef.current.objectSelection;
+      if (!selected || selected.pageIndex !== pageIndex) return null;
+      const page = propsRef.current.notebook.pages[pageIndex];
+      const object =
+        selected.kind === "image"
+          ? page?.images?.find((item) => item.id === selected.id)
+          : page?.texts?.find((item) => item.id === selected.id);
+      if (!object) return null;
+      return selected.kind === "image"
+        ? { kind: "image", object: object as InkImage }
+        : { kind: "text", object: object as InkText };
     };
 
     const draw = useMemo(
@@ -223,7 +360,8 @@ export const NotebookCanvas = forwardRef<NotebookCanvasHandle, NotebookCanvasPro
             const current = propsRef.current;
             const pen = event.pointerType === PointerType.STYLUS;
             // With pen-only on, a finger scrolls instead of drawing; selecting still works by touch.
-            const touchSelects = current.tool === "select" || current.tool === "lasso";
+            const touchSelects =
+              current.tool === "select" || current.tool === "lasso" || current.tool === "text";
             const navigate =
               current.tool === "pan" || (current.stylusOnly && !pen && !touchSelects);
             if (navigate) {
@@ -237,6 +375,40 @@ export const NotebookCanvas = forwardRef<NotebookCanvasHandle, NotebookCanvasPro
               interaction.current = { kind: "idle" };
               return;
             }
+            if (current.tool === "select" || current.tool === "lasso") {
+              const selected = selectedObject(hit.pageIndex);
+              if (selected) {
+                const box = boxOf(selected.object);
+                const scale = viewRef.current?.scale ?? 1;
+                const handle = 22 / scale;
+                const onHandle =
+                  Math.hypot(hit.x - (box.x + box.width), hit.y - (box.y + box.height)) <= handle;
+                const inside =
+                  hit.x >= box.x &&
+                  hit.x <= box.x + box.width &&
+                  hit.y >= box.y &&
+                  hit.y <= box.y + box.height;
+                if (onHandle || inside) {
+                  interaction.current = {
+                    kind: "object",
+                    mode: onHandle ? "resize" : "move",
+                    pageIndex: hit.pageIndex,
+                    object: selected,
+                    box,
+                  };
+                  return;
+                }
+              }
+            }
+            if (current.tool === "text") {
+              interaction.current = {
+                kind: "tap",
+                pageIndex: hit.pageIndex,
+                start: { x: hit.x, y: hit.y },
+                moved: false,
+              };
+              return;
+            }
             const point = {
               x: hit.x,
               y: hit.y,
@@ -247,6 +419,8 @@ export const NotebookCanvas = forwardRef<NotebookCanvasHandle, NotebookCanvasPro
               pageIndex: hit.pageIndex,
               points: [point],
               realPressure: pen,
+              anchor: point,
+              snapped: null,
             };
             current.onInkStart?.();
             if (current.tool === "eraser") current.onErase(hit.pageIndex, point, false);
@@ -261,6 +435,26 @@ export const NotebookCanvas = forwardRef<NotebookCanvasHandle, NotebookCanvasPro
               });
               return;
             }
+            const scale = viewRef.current?.scale ?? 1;
+            if (current.kind === "tap") {
+              if (Math.hypot(event.translationX, event.translationY) > 10) current.moved = true;
+              return;
+            }
+            if (current.kind === "object") {
+              const dx = event.translationX / scale;
+              const dy = event.translationY / scale;
+              const start = boxOf(current.object.object);
+              const page = propsRef.current.notebook.pages[current.pageIndex];
+              const moved =
+                current.mode === "move"
+                  ? { ...start, x: start.x + dx, y: start.y + dy }
+                  : resizedBox(current.object, start, dx);
+              current.box = page
+                ? keepOnPage(moved, propsRef.current.notebook.pageWidth, page.height)
+                : moved;
+              setDragBox({ pageIndex: current.pageIndex, box: current.box });
+              return;
+            }
             if (current.kind !== "draw") return;
             const local = pageLocal(current.pageIndex, event.x, event.y);
             const point = {
@@ -269,12 +463,32 @@ export const NotebookCanvas = forwardRef<NotebookCanvasHandle, NotebookCanvasPro
             };
             const previous = current.points.at(-1)!;
             if (Math.hypot(point.x - previous.x, point.y - previous.y) < 0.6) return;
+            if (current.snapped) {
+              // After a snap the stroke is a shape; a line still follows the pen to its end.
+              if (current.snapped.kind === "line") {
+                current.snapped = { ...current.snapped, to: point };
+                setLive({
+                  pageIndex: current.pageIndex,
+                  points: current.points,
+                  snapped: current.snapped,
+                });
+              }
+              return;
+            }
             current.points.push(point);
             if (propsRef.current.tool === "eraser") {
               propsRef.current.onErase(current.pageIndex, point, false);
               return;
             }
-            setLive({ pageIndex: current.pageIndex, points: current.points });
+            if (
+              propsRef.current.tool === "pen" &&
+              Math.hypot(point.x - current.anchor.x, point.y - current.anchor.y) > 3 / scale
+            ) {
+              current.anchor = point;
+              if (holdTimer.current) clearTimeout(holdTimer.current);
+              holdTimer.current = setTimeout(trySnap, SNAP_HOLD_MS);
+            }
+            setLive({ pageIndex: current.pageIndex, points: current.points, snapped: null });
           })
           .onEnd(() => finish(false))
           .onFinalize((_event, success) => {
@@ -357,6 +571,10 @@ export const NotebookCanvas = forwardRef<NotebookCanvasHandle, NotebookCanvasPro
                       paper={notebook.paper}
                       width={notebook.pageWidth}
                       top={top}
+                      assets={props.assets ?? NO_ASSETS}
+                      hiddenTextId={
+                        props.editingText?.pageIndex === index ? props.editingText.text.id : null
+                      }
                     />
                   );
                 })}
@@ -366,7 +584,20 @@ export const NotebookCanvas = forwardRef<NotebookCanvasHandle, NotebookCanvasPro
                     color={color}
                     width={width}
                     points={live.points}
+                    snapped={live.snapped}
                     top={offsets[live.pageIndex] ?? 0}
+                  />
+                ) : null}
+                {props.objectSelection ? (
+                  <ObjectSelectionLayer
+                    box={
+                      dragBox && dragBox.pageIndex === props.objectSelection.pageIndex
+                        ? dragBox.box
+                        : selectedBox(notebook, props.objectSelection)
+                    }
+                    dragging={dragBox !== null}
+                    scale={view.scale}
+                    top={offsets[props.objectSelection.pageIndex] ?? 0}
                   />
                 ) : null}
                 {selection ? (
@@ -379,23 +610,121 @@ export const NotebookCanvas = forwardRef<NotebookCanvasHandle, NotebookCanvasPro
             ) : null}
           </Canvas>
         </GestureDetector>
+        {props.editingText && view ? (
+          <TextBoxEditor
+            editing={props.editingText}
+            view={view}
+            top={offsets[props.editingText.pageIndex] ?? 0}
+            onChange={(value) => props.onEditingTextChange?.(value)}
+            onDone={() => props.onEditingTextDone?.()}
+          />
+        ) : null}
       </View>
     );
   },
 );
+
+/** Inline editor for a text box, laid over the page at the box's position and zoom. */
+function TextBoxEditor({
+  editing,
+  view,
+  top,
+  onChange,
+  onDone,
+}: {
+  editing: EditingText;
+  view: NotebookView;
+  top: number;
+  onChange: (value: string) => void;
+  onDone: () => void;
+}) {
+  const { text } = editing;
+  const fontSize = text.size * view.scale;
+  return (
+    <TextInput
+      value={text.text}
+      onChangeText={onChange}
+      onBlur={onDone}
+      autoFocus
+      multiline
+      scrollEnabled={false}
+      style={[
+        styles.textEditor,
+        {
+          left: view.dx + text.x * view.scale,
+          top: view.dy + (top + text.y) * view.scale,
+          width: text.width * view.scale,
+          minHeight: lineHeightFor(text.size) * view.scale,
+          fontSize,
+          lineHeight: lineHeightFor(text.size) * view.scale,
+          color: text.color,
+        },
+      ]}
+    />
+  );
+}
+
+function ObjectSelectionLayer({
+  box,
+  dragging,
+  scale,
+  top,
+}: {
+  box: Box | null;
+  dragging: boolean;
+  scale: number;
+  top: number;
+}) {
+  if (!box) return null;
+  const pad = 4 / scale;
+  return (
+    <Group transform={[{ translateY: top }]}>
+      {dragging ? (
+        <Rect x={box.x} y={box.y} width={box.width} height={box.height} color="#A13D2722" />
+      ) : null}
+      <Rect
+        x={box.x - pad}
+        y={box.y - pad}
+        width={box.width + pad * 2}
+        height={box.height + pad * 2}
+        color={SELECTION}
+        style="stroke"
+        strokeWidth={1.5 / scale}
+      />
+      <Circle cx={box.x + box.width} cy={box.y + box.height} r={8 / scale} color={SELECTION} />
+      <Circle cx={box.x + box.width} cy={box.y + box.height} r={5 / scale} color="#FFFFFF" />
+    </Group>
+  );
+}
 
 const PageLayer = memo(function PageLayer({
   page,
   paper,
   width,
   top,
+  assets,
+  hiddenTextId,
 }: {
   page: InkPage;
   paper: InkNotebook["paper"];
   width: number;
   top: number;
+  assets: PageAssets;
+  /** The text box being edited inline is left out, so it isn't drawn twice. */
+  hiddenTextId: string | null;
 }) {
-  const picture = useMemo(() => recordPage(page, paper, width), [page, paper, width]);
+  const picture = useMemo(
+    () =>
+      recordPage(
+        hiddenTextId
+          ? { ...page, texts: (page.texts ?? []).filter((text) => text.id !== hiddenTextId) }
+          : page,
+        paper,
+        width,
+        assets,
+      ),
+    [page, paper, width, assets, hiddenTextId],
+  );
   return (
     <Group transform={[{ translateY: top }]}>
       <Rect x={-1} y={-1} width={width + 2} height={page.height + 2} color="#00000014" />
@@ -409,12 +738,14 @@ function LiveLayer({
   color,
   width,
   points,
+  snapped,
   top,
 }: {
   tool: NotebookTool;
   color: string;
   width: number;
   points: readonly InkPoint[];
+  snapped: RecognizedShape | null;
   top: number;
 }) {
   const path = useMemo(() => {
@@ -448,17 +779,22 @@ function LiveLayer({
   }, [points, tool, width]);
 
   const last = points.at(-1);
-  if (isShapeTool(tool) && points[0] && last) {
+  const shape = snapped
+    ? snapped
+    : isShapeTool(tool) && points[0] && last
+      ? { kind: tool, from: points[0], to: last }
+      : null;
+  if (shape) {
     const recorder = Skia.PictureRecorder();
     const canvas = recorder.beginRecording();
     drawShape(canvas, {
       id: "live",
-      kind: tool,
+      kind: shape.kind,
       color,
       width,
       opacity: 1,
-      from: points[0],
-      to: last,
+      from: shape.from,
+      to: shape.to,
       filled: false,
       createdAt: "",
     });
@@ -499,6 +835,39 @@ function SelectionLayer({ selection, top }: { selection: InkSelection; top: numb
   );
 }
 
+function boxOf(object: InkImage | InkText): Box {
+  return { x: object.x, y: object.y, width: object.width, height: object.height };
+}
+
+function selectedBox(notebook: InkNotebook, selected: ObjectSelection): Box | null {
+  const page = notebook.pages[selected.pageIndex];
+  const object =
+    selected.kind === "image"
+      ? page?.images?.find((item) => item.id === selected.id)
+      : page?.texts?.find((item) => item.id === selected.id);
+  return object ? boxOf(object) : null;
+}
+
+/** Keeps a photo or text box on its page (shrinking one that is larger than the page). */
+function keepOnPage(box: Box, pageWidth: number, pageHeight: number): Box {
+  const ratio = Math.min(1, pageWidth / box.width, pageHeight / box.height);
+  const width = box.width * ratio;
+  const height = box.height * ratio;
+  return {
+    width,
+    height,
+    x: Math.min(Math.max(0, box.x), pageWidth - width),
+    y: Math.min(Math.max(0, box.y), pageHeight - height),
+  };
+}
+
+/** Dragging the corner handle: photos keep their aspect; text boxes only change wrap width. */
+function resizedBox(object: InkPageObject, start: Box, dx: number): Box {
+  if (object.kind === "text") return { ...start, width: Math.max(60, start.width + dx) };
+  const width = Math.max(24, start.width + dx);
+  return { ...start, width, height: (width * start.height) / start.width };
+}
+
 function isShapeTool(tool: NotebookTool): tool is InkShapeKind {
   return tool === "line" || tool === "arrow" || tool === "rectangle" || tool === "ellipse";
 }
@@ -523,4 +892,15 @@ function pressureOf(value: number | undefined): number {
 const styles = StyleSheet.create({
   container: { flex: 1, overflow: "hidden" },
   canvas: { flex: 1 },
+  textEditor: {
+    position: "absolute",
+    padding: 0,
+    margin: 0,
+    fontFamily: "Inter_400Regular",
+    textAlignVertical: "top",
+    backgroundColor: "#FFFFFFB3",
+    borderWidth: 1,
+    borderColor: SELECTION,
+    borderStyle: "dashed",
+  },
 });

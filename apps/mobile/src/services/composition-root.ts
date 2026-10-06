@@ -15,7 +15,11 @@ import { SQLiteSyncStore } from "../infrastructure/storage/sync";
 import { FirebaseSyncRemote } from "../infrastructure/firebase/firestore";
 import { SyncEngine, type SyncRunResult } from "@stone/sync";
 import { SQLitePrivacyRepository } from "../infrastructure/storage/privacy";
-import { exportWorkspace } from "../infrastructure/storage/workspace-export";
+import {
+  exportWorkspace,
+  notebookAttachmentFiles,
+} from "../infrastructure/storage/workspace-export";
+import { File } from "expo-file-system";
 import { SQLiteDrawingRepository } from "../infrastructure/storage/drawings";
 import { SQLiteAttachmentUploadQueue } from "../infrastructure/storage/attachments";
 import { FirebaseAttachmentStorage } from "../infrastructure/firebase/attachment-storage";
@@ -151,6 +155,12 @@ async function createAppServices(): Promise<AppServices> {
         ownerId,
       );
       const referenced = new Set(rows.flatMap((row) => referencedAttachmentFiles(row.markdown)));
+      for (const drawing of await drawings.list(ownerId)) {
+        const source = new File(drawing.sourcePath);
+        if (source.exists)
+          for (const fileName of notebookAttachmentFiles(await source.text()))
+            referenced.add(fileName);
+      }
       for (const fileName of referenced)
         await attachments.resolve(ownerId, fileName).catch(() => undefined);
       return exportWorkspace(database, ownerId);

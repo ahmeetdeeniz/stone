@@ -5,6 +5,14 @@ tag, so no release date or semantic version is claimed.
 
 ## Unreleased
 
+- Notebook tools: hold the pen still at the end of a stroke to snap it to a clean line, ellipse
+  or rectangle; type text boxes (three sizes, Inter, wrap width adjustable); place photos that
+  sync like note attachments and can be moved and resized; reorder, duplicate or insert pages
+  from the page rail (long-press) or the menu; share a notebook as a PDF. Notebooks with photos
+  or text are saved as Stone Ink schema 3, which older builds refuse to open rather than
+  silently dropping those objects.
+- Workspace exports now include photos placed in notebooks.
+- Fixed the page indicator pointing past the last page after undoing an added page.
 - Inter now ships with the app everywhere: the desktop app bundles it and the mobile note editor
   embeds it, so neither falls back to a system font (Segoe UI, Roboto) when Inter isn't
   installed. Screen headings read their face from one token, ready for a licensed display font.

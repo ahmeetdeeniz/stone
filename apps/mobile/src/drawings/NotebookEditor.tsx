@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Alert,
   AppState,
+  Image,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -19,22 +20,28 @@ import {
   addStroke,
   createNotebook,
   deleteSelection,
+  duplicatePage,
   duplicateSelection,
   eraseAt,
+  movePage,
   pageDocument,
+  placeImage,
   parseNotebook,
   refreshSelection,
   removePage,
   replacePage,
   serializeNotebook,
+  setPageObjects,
   setPaper,
   transformSelection,
   type InkDocument,
   type InkLayout,
   type InkNotebook,
   type InkPaper,
+  type InkPageObject,
   type InkPoint,
   type InkShape,
+  type InkText,
 } from "@stone/ink";
 import type { Drawing } from "@stone/domain";
 import { ErrorState, LoadingState } from "../components/states";
@@ -53,10 +60,16 @@ import { useTheme } from "../design/theme";
 import { radii, spacing } from "../design/tokens";
 import {
   NotebookCanvas,
+  type EditingText,
   type NotebookCanvasHandle,
   type NotebookTool,
+  type ObjectSelection,
   type PageSelection,
 } from "../drawings/NotebookCanvas";
+import { lineHeightFor } from "../drawings/text-layout";
+import { usePageAssets } from "../drawings/use-page-assets";
+import { pickImage } from "../attachments/attachment-picker";
+import { shareNotebookPdf } from "../drawings/notebook-pdf";
 import {
   HIGHLIGHTER_COLORS,
   INK_COLORS,
@@ -64,7 +77,7 @@ import {
   PEN_WIDTHS,
   ToolButton,
 } from "../drawings/NotebookToolbar";
-import { renderPagePng } from "../drawings/page-picture";
+import { measureTextHeight, renderPagePng } from "../drawings/page-picture";
 import { useAuth } from "../providers/auth-provider";
 import { useAppServices } from "../providers/app-provider";
 import { useI18n } from "../i18n/provider";
@@ -95,7 +108,7 @@ export function NotebookEditor({ id, layout, paper, onBack, onChanged }: Noteboo
   const { colors } = useTheme();
   const { width: windowWidth } = useWindowDimensions();
   const { user } = useAuth();
-  const { drawings, deviceId } = useAppServices();
+  const { drawings, deviceId, attachments } = useAppServices();
   const { t } = useI18n();
   const canvasRef = useRef<NotebookCanvasHandle>(null);
   const historyRef = useRef<InkHistory<InkNotebook> | null>(null);
@@ -109,6 +122,11 @@ export function NotebookEditor({ id, layout, paper, onBack, onChanged }: Noteboo
   const [width, setWidth] = useState(PEN_WIDTHS[1]!);
   const [stylusOnly, setStylusOnly] = useState(true);
   const [selection, setSelection] = useState<PageSelection | null>(null);
+  const [objectSelection, setObjectSelection] = useState<ObjectSelection | null>(null);
+  const [editingText, setEditingText] = useState<EditingText | null>(null);
+  const [textSize, setTextSize] = useState(20);
+  const [pageMenu, setPageMenu] = useState<number | null>(null);
+  const [exporting, setExporting] = useState(false);
   const [pageIndex, setPageIndex] = useState(0);
   const [title, setTitle] = useState(() => t("notebook.newTitle"));
   /** Until the title is edited, a new notebook follows the UI language for its default name. */
@@ -122,6 +140,11 @@ export function NotebookEditor({ id, layout, paper, onBack, onChanged }: Noteboo
   const pendingPage = useRef<number | null>(null);
   const [area, setArea] = useState({ width: 0, height: 0 });
   const video = useVideoSession(drawing?.id, area);
+  const assets = usePageAssets(notebook, (file) =>
+    user ? attachments.resolve(user.uid, file) : Promise.reject(new Error("Signed out.")),
+  );
+  const assetsRef = useRef(assets);
+  assetsRef.current = assets;
   const color = tool === "highlighter" ? highlightColor : penColor;
 
   const setNotebook = (next: InkNotebook) => {
@@ -253,8 +276,155 @@ export function NotebookEditor({ id, layout, paper, onBack, onChanged }: Noteboo
     if (!next) return;
     setNotebook(next);
     setSelection(null);
+    setObjectSelection(null);
     dirty.current = true;
     setStatus("unsaved");
+  };
+
+  /** Writes one photo or text box back into its page (adding it when it is new). */
+  const putObject = (pageIndex: number, object: InkPageObject) => {
+    const current = notebookRef.current;
+    const page = current?.pages[pageIndex];
+    if (!current || !page) return;
+    if (object.kind === "image") {
+      const images = page.images ?? [];
+      const exists = images.some((item) => item.id === object.object.id);
+      commit(
+        setPageObjects(current, pageIndex, {
+          images: exists
+            ? images.map((item) => (item.id === object.object.id ? object.object : item))
+            : [...images, object.object],
+        }),
+      );
+    } else {
+      const text = { ...object.object, height: measureTextHeight(object.object, assets.typeface) };
+      const texts = page.texts ?? [];
+      const exists = texts.some((item) => item.id === text.id);
+      commit(
+        setPageObjects(current, pageIndex, {
+          texts: exists
+            ? texts.map((item) => (item.id === text.id ? text : item))
+            : [...texts, text],
+        }),
+      );
+    }
+  };
+
+  const removeObject = (selected: ObjectSelection) => {
+    const current = notebookRef.current;
+    const page = current?.pages[selected.pageIndex];
+    if (!current || !page) return;
+    commit(
+      setPageObjects(
+        current,
+        selected.pageIndex,
+        selected.kind === "image"
+          ? { images: (page.images ?? []).filter((item) => item.id !== selected.id) }
+          : { texts: (page.texts ?? []).filter((item) => item.id !== selected.id) },
+      ),
+    );
+    setObjectSelection(null);
+  };
+
+  const startText = (
+    pageIndex: number,
+    point: { x: number; y: number },
+    existing: InkText | null,
+  ) => {
+    setSelection(null);
+    setObjectSelection(null);
+    if (existing) {
+      setEditingText({ pageIndex, text: existing });
+      return;
+    }
+    const current = notebookRef.current;
+    if (!current) return;
+    const lineHeight = lineHeightFor(textSize);
+    const width = Math.max(160, Math.min(420, current.pageWidth - point.x - 24));
+    setEditingText({
+      pageIndex,
+      text: {
+        id: Crypto.randomUUID(),
+        text: "",
+        x: Math.min(point.x, current.pageWidth - width - 8),
+        y: Math.max(0, point.y - lineHeight / 2),
+        width,
+        height: lineHeight,
+        size: textSize,
+        color: penColor,
+        createdAt: new Date().toISOString(),
+      },
+    });
+  };
+
+  const finishText = () => {
+    const editing = editingText;
+    setEditingText(null);
+    if (!editing) return;
+    const page = notebookRef.current?.pages[editing.pageIndex];
+    const existed = page?.texts?.some((item) => item.id === editing.text.id) ?? false;
+    if (!editing.text.text.trim()) {
+      if (existed)
+        removeObject({ pageIndex: editing.pageIndex, kind: "text", id: editing.text.id });
+      return;
+    }
+    const before = page?.texts?.find((item) => item.id === editing.text.id);
+    if (before && before.text === editing.text.text) return;
+    putObject(editing.pageIndex, { kind: "text", object: editing.text });
+  };
+
+  const insertImage = async () => {
+    if (!user || !notebookRef.current) return;
+    try {
+      const picked = await pickImage();
+      if (!picked) return;
+      const file = await attachments.add(user.uid, picked);
+      const natural = await new Promise<{ width: number; height: number }>((resolve, reject) =>
+        Image.getSize(
+          picked.uri,
+          (imageWidth, imageHeight) => resolve({ width: imageWidth, height: imageHeight }),
+          reject,
+        ),
+      );
+      const current = notebookRef.current;
+      const page = current.pages[pageIndex];
+      if (!page) return;
+      const box = placeImage(
+        natural,
+        { width: current.pageWidth * 0.7, height: Math.min(page.height, current.pageHeight) * 0.6 },
+        { x: current.pageWidth / 2, y: Math.min(page.height, current.pageHeight) / 2 },
+      );
+      const id = Crypto.randomUUID();
+      putObject(pageIndex, {
+        kind: "image",
+        object: { id, file, ...box, createdAt: new Date().toISOString() },
+      });
+      setTool("lasso");
+      setSelection(null);
+      setObjectSelection({ pageIndex, kind: "image", id });
+    } catch (caught) {
+      Alert.alert(
+        t("notebook.insertImageFailed"),
+        caught instanceof Error ? caught.message : t("app.unknownError"),
+      );
+    }
+  };
+
+  const sharePdf = async () => {
+    const current = notebookRef.current;
+    if (!current || exporting) return;
+    setExporting(true);
+    try {
+      await save();
+      await shareNotebookPdf(current, title, assetsRef.current);
+    } catch (caught) {
+      Alert.alert(
+        t("notebook.exportFailed"),
+        caught instanceof Error ? caught.message : t("app.unknownError"),
+      );
+    } finally {
+      setExporting(false);
+    }
   };
 
   const editSelection = (edit: (page: InkDocument, current: PageSelection) => InkDocument) => {
@@ -291,7 +461,7 @@ export function NotebookEditor({ id, layout, paper, onBack, onChanged }: Noteboo
       directory.create({ idempotent: true });
       const preview = new File(directory, `${drawing.id}.png`);
       const firstPage = current.pages[0]!;
-      const bytes = renderPagePng(firstPage, current.paper, current.pageWidth);
+      const bytes = renderPagePng(firstPage, current.paper, current.pageWidth, assetsRef.current);
       if (!bytes) throw new Error(t("drawing.previewFailed"));
       preview.write(bytes);
       const next = await drawings.save(
@@ -324,6 +494,12 @@ export function NotebookEditor({ id, layout, paper, onBack, onChanged }: Noteboo
   useEffect(() => {
     if (id === "new" && !titleEdited.current) setTitle(t("notebook.newTitle"));
   }, [id, t]);
+
+  // Undo or redo can remove the page being shown; keep the page indicator in range.
+  const totalPages = notebook?.pages.length ?? 1;
+  useEffect(() => {
+    setPageIndex((current) => Math.min(current, totalPages - 1));
+  }, [totalPages]);
 
   useEffect(() => {
     if (pendingPage.current === null) return;
@@ -470,14 +646,20 @@ export function NotebookEditor({ id, layout, paper, onBack, onChanged }: Noteboo
             tool={tool}
             color={color}
             width={width}
+            textSize={textSize}
             onTool={(next) => {
               setTool(next);
-              if (next !== "lasso") setSelection(null);
+              if (next !== "lasso") {
+                setSelection(null);
+                setObjectSelection(null);
+              }
             }}
             onColor={(next) =>
               tool === "highlighter" ? setHighlightColor(next) : setPenColor(next)
             }
             onWidth={setWidth}
+            onTextSize={setTextSize}
+            onInsertImage={() => void insertImage()}
           />
           {notebook.layout === "pages" ? (
             <View style={styles.pager}>
@@ -507,6 +689,37 @@ export function NotebookEditor({ id, layout, paper, onBack, onChanged }: Noteboo
             </View>
           ) : null}
         </View>
+        {objectSelection ? (
+          <View style={[styles.selectionBar, { backgroundColor: colors.backgroundSecondary }]}>
+            <StoneText variant="caption" tone="secondary">
+              {objectSelection.kind === "image"
+                ? t("notebook.photoSelected")
+                : t("notebook.textSelected")}
+            </StoneText>
+            {objectSelection.kind === "text" ? (
+              <ToolButton
+                icon="pencil-outline"
+                label={t("notebook.editText")}
+                onPress={() => {
+                  const text = notebook.pages[objectSelection.pageIndex]?.texts?.find(
+                    (item) => item.id === objectSelection.id,
+                  );
+                  if (text) startText(objectSelection.pageIndex, text, text);
+                }}
+              />
+            ) : null}
+            <ToolButton
+              icon="delete-outline"
+              label={t("drawing.deleteSelection")}
+              onPress={() => removeObject(objectSelection)}
+            />
+            <ToolButton
+              icon="close"
+              label={t("common.close")}
+              onPress={() => setObjectSelection(null)}
+            />
+          </View>
+        ) : null}
         {selection ? (
           <View style={[styles.selectionBar, { backgroundColor: colors.backgroundSecondary }]}>
             <StoneText variant="caption" tone="secondary">
@@ -558,6 +771,8 @@ export function NotebookEditor({ id, layout, paper, onBack, onChanged }: Noteboo
                   accessibilityRole="button"
                   accessibilityLabel={t("notebook.goToPage", { page: index + 1 })}
                   onPress={() => goToPage(index)}
+                  onLongPress={() => setPageMenu(index)}
+                  delayLongPress={350}
                   style={[
                     styles.railPage,
                     {
@@ -593,6 +808,18 @@ export function NotebookEditor({ id, layout, paper, onBack, onChanged }: Noteboo
             onInkStart={video.writingStarted}
             onInkEnd={video.writingEnded}
             avoid={video.reservation}
+            assets={assets}
+            objectSelection={objectSelection}
+            onObjectSelect={setObjectSelection}
+            onObjectChange={putObject}
+            onTextTap={startText}
+            editingText={editingText}
+            onEditingTextChange={(value) =>
+              setEditingText((current) =>
+                current ? { ...current, text: { ...current.text, text: value } } : current,
+              )
+            }
+            onEditingTextDone={finishText}
           />
         </View>
         {error ? (
@@ -619,26 +846,90 @@ export function NotebookEditor({ id, layout, paper, onBack, onChanged }: Noteboo
             ...(notebook.layout === "pages"
               ? [
                   {
-                    label: t("notebook.deletePage", { page: pageIndex + 1 }),
+                    label: t("notebook.pageActions", { page: pageIndex + 1 }),
+                    icon: "copy-outline" as const,
+                    onPress: () => setPageMenu(pageIndex),
+                  },
+                ]
+              : []),
+            {
+              label: exporting ? t("notebook.exporting") : t("notebook.sharePdf"),
+              icon: "share-outline",
+              onPress: () => void sharePdf(),
+            },
+          ]}
+        />
+        <ActionSheet
+          visible={pageMenu !== null}
+          title={pageMenu !== null ? t("notebook.pageTitle", { page: pageMenu + 1 }) : undefined}
+          onClose={() => setPageMenu(null)}
+          options={
+            pageMenu === null
+              ? []
+              : [
+                  ...(pageMenu > 0
+                    ? [
+                        {
+                          label: t("notebook.movePageUp"),
+                          icon: "arrow-up-outline" as const,
+                          onPress: () => {
+                            pendingPage.current = pageMenu - 1;
+                            commit(movePage(notebook, pageMenu, pageMenu - 1));
+                          },
+                        },
+                      ]
+                    : []),
+                  ...(pageMenu < pageCount - 1
+                    ? [
+                        {
+                          label: t("notebook.movePageDown"),
+                          icon: "arrow-down-outline" as const,
+                          onPress: () => {
+                            commit(movePage(notebook, pageMenu, pageMenu + 1));
+                            pendingPage.current = pageMenu + 1;
+                          },
+                        },
+                      ]
+                    : []),
+                  {
+                    label: t("notebook.duplicatePage"),
+                    icon: "copy-outline" as const,
+                    onPress: () => {
+                      pendingPage.current = pageMenu + 1;
+                      commit(duplicatePage(notebook, pageMenu, Crypto.randomUUID));
+                    },
+                  },
+                  {
+                    label: t("notebook.insertBlankAfter"),
+                    icon: "add-outline" as const,
+                    onPress: () => {
+                      pendingPage.current = pageMenu + 1;
+                      commit(addPage(notebook, Crypto.randomUUID(), pageMenu));
+                    },
+                  },
+                  {
+                    label: t("notebook.deletePage", { page: pageMenu + 1 }),
                     icon: "trash-outline" as const,
                     destructive: true,
-                    onPress: () =>
+                    onPress: () => {
+                      const index = pageMenu;
                       Alert.alert(t("notebook.deletePageConfirm"), undefined, [
                         { text: t("common.cancel"), style: "cancel" },
                         {
                           text: t("common.delete"),
                           style: "destructive",
                           onPress: () => {
-                            commit(removePage(notebook, pageIndex));
+                            commit(removePage(notebook, index));
                             setSelection(null);
-                            setPageIndex(Math.max(0, Math.min(pageIndex, pageCount - 2)));
+                            setObjectSelection(null);
+                            setPageIndex(Math.max(0, Math.min(index, pageCount - 2)));
                           },
                         },
-                      ]),
+                      ]);
+                    },
                   },
                 ]
-              : []),
-          ]}
+          }
         />
         <ActionSheet
           visible={paperOpen}
