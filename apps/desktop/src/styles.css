@@ -8,7 +8,11 @@
  */
 :root {
   color-scheme: light;
-  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  /* Inter ships with the app (@fontsource-variable/inter), so it no longer depends on the system. */
+  --font-sans: "Inter Variable", Inter, ui-sans-serif, system-ui, sans-serif;
+  /* Screen headings. A licensed display face (e.g. Hanela Rusty) goes here and nowhere else. */
+  --font-display: var(--font-sans);
+  font-family: var(--font-sans);
   font-synthesis: none;
   -webkit-font-smoothing: antialiased;
 
@@ -223,7 +227,7 @@ button:disabled {
   border-radius: 14px;
   background: var(--accent);
   color: white;
-  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-sans);
   font-size: 30px;
   font-weight: 700;
 }
@@ -413,7 +417,7 @@ textarea:focus {
 }
 .brand-wordmark,
 .brand-heading {
-  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-sans);
   font-weight: 700;
   letter-spacing: -0.015em;
 }
@@ -533,6 +537,7 @@ nav {
 }
 .topbar h1 {
   margin: 0;
+  font-family: var(--font-display);
   font-size: 22px;
   font-weight: 700;
   letter-spacing: -0.02em;
@@ -656,7 +661,7 @@ nav {
   outline-offset: -2px;
 }
 .cm-scroller {
-  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-sans);
   line-height: 1.7;
   overflow: auto;
   overscroll-behavior: contain;

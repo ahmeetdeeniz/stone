@@ -72,6 +72,9 @@ importers:
       "@codemirror/view":
         specifier: ^6.43.6
         version: 6.43.6
+      "@fontsource-variable/inter":
+        specifier: ^5.3.0
+        version: 5.3.0
       "@stone/domain":
         specifier: workspace:*
         version: link:../../packages/domain
@@ -298,6 +301,10 @@ importers:
       codemirror:
         specifier: ^6.0.2
         version: 6.0.2
+    devDependencies:
+      "@fontsource-variable/inter":
+        specifier: ^5.3.0
+        version: 5.3.0
 
   packages/i18n: {}
 
@@ -2216,6 +2223,12 @@ packages:
     resolution:
       {
         integrity: sha512-+uGNN7rkfn41HLO0vekTFhTxk61eKa8mTpRGLO0QSqlQdKvIoGAvLp3ppdVIWbTGYJWM6Kp0iN+PjMIOcnVqTw==,
+      }
+
+  "@fontsource-variable/inter@5.3.0":
+    resolution:
+      {
+        integrity: sha512-OupL48va4JNofb97w6NYeF9S7W/kHNKM0Er8Dem5nqi4jeOLrVJDoE8tZEpnMJmtkvNbB1EIPPwHcdkF6b1oUA==,
       }
 
   "@google-cloud/cloud-sql-connector@1.11.3":
@@ -13331,6 +13344,8 @@ snapshots:
       tslib: 2.8.1
 
   "@firebase/webchannel-wrapper@1.0.5": {}
+
+  "@fontsource-variable/inter@5.3.0": {}
 
   "@google-cloud/cloud-sql-connector@1.11.3(supports-color@8.1.1)":
     dependencies:

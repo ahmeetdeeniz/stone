@@ -12,7 +12,11 @@ describe("desktop foundation", () => {
   it("uses the redistribution-safe Inter wordmark and an anchored application shell", () => {
     const desktopRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
     const styles = readFileSync(resolve(desktopRoot, "src/styles.css"), "utf8");
-    expect(styles).toContain("font-family: Inter, ui-sans-serif, system-ui, sans-serif");
+    expect(styles).toContain(
+      '--font-sans: "Inter Variable", Inter, ui-sans-serif, system-ui, sans-serif;',
+    );
+    const main = readFileSync(resolve(desktopRoot, "src/main.tsx"), "utf8");
+    expect(main).toContain('import "@fontsource-variable/inter/wght.css";');
     expect(styles).toContain("height: 100dvh");
     expect(styles).toContain("overflow: hidden");
   });

@@ -100,7 +100,11 @@ function initialize(markdownSource: string, readOnly: boolean, locale: Locale): 
           color: "var(--stone-text)",
           backgroundColor: "var(--stone-background)",
         },
-        ".cm-scroller": { fontFamily: "Inter, sans-serif", lineHeight: "1.65", padding: "20px" },
+        ".cm-scroller": {
+          fontFamily: '"Inter Variable", Inter, sans-serif',
+          lineHeight: "1.65",
+          padding: "20px",
+        },
         ".cm-content": { caretColor: "var(--stone-accent)", maxWidth: "760px", margin: "0 auto" },
         ".cm-cursor, .cm-dropCursor": {
           borderLeftColor: "var(--stone-accent)",

@@ -9,6 +9,7 @@ import {
   type EditorBridgeMessage,
 } from "@stone/editor";
 import { EDITOR_BUNDLE } from "./editor-bundle";
+import { EDITOR_FONT_CSS } from "./editor-fonts";
 import { colors as tokens } from "../design/tokens";
 import { useI18n } from "../i18n/provider";
 
@@ -94,7 +95,7 @@ function createEditorHtml(theme: "light" | "dark", accessibilityLabel: string): 
     muted: palette.textSecondary,
     border: palette.border,
   };
-  return `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"><style>:root{--stone-background:${editorColors.background};--stone-text:${editorColors.text};--stone-surface:${editorColors.surface};--stone-accent:${editorColors.accent};--stone-muted:${editorColors.muted};--stone-border:${editorColors.border}}html,body,#editor{height:100%;margin:0;background:var(--stone-background);color:var(--stone-text)}body{overflow:hidden;-webkit-font-smoothing:antialiased}button,a{color:var(--stone-accent)}</style></head><body><main id="editor" role="textbox" aria-label="${escapeHtmlAttribute(accessibilityLabel)}"></main><script>${EDITOR_BUNDLE}</script></body></html>`;
+  return `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"><style>:root{--stone-background:${editorColors.background};--stone-text:${editorColors.text};--stone-surface:${editorColors.surface};--stone-accent:${editorColors.accent};--stone-muted:${editorColors.muted};--stone-border:${editorColors.border}}html,body,#editor{height:100%;margin:0;background:var(--stone-background);color:var(--stone-text)}body{overflow:hidden;-webkit-font-smoothing:antialiased}button,a{color:var(--stone-accent)}${EDITOR_FONT_CSS}</style></head><body><main id="editor" role="textbox" aria-label="${escapeHtmlAttribute(accessibilityLabel)}"></main><script>${EDITOR_BUNDLE}</script></body></html>`;
 }
 
 function escapeHtmlAttribute(value: string): string {

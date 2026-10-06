@@ -177,15 +177,22 @@ export const elevation: Record<"light" | "dark", Record<ElevationLevel, ViewStyl
  * Optical tracking: large type is set tight, small caps-ish labels are set open.
  * This is most of what separates a considered screen from a default one.
  */
+/**
+ * Face for screen and section headings (display, title1, title2). It is the one place a licensed
+ * display font (e.g. Hanela Rusty) would go: load it in design/fonts.ts and name it here.
+ * Everything else stays Inter.
+ */
+export const DISPLAY_FONT = "Inter_700Bold";
+
 export const typography = {
   display: {
     fontSize: 30,
     lineHeight: 36,
-    fontFamily: "Inter_700Bold",
+    fontFamily: DISPLAY_FONT,
     letterSpacing: -0.7,
   },
-  title1: { fontSize: 24, lineHeight: 30, fontFamily: "Inter_700Bold", letterSpacing: -0.5 },
-  title2: { fontSize: 20, lineHeight: 26, fontFamily: "Inter_700Bold", letterSpacing: -0.35 },
+  title1: { fontSize: 24, lineHeight: 30, fontFamily: DISPLAY_FONT, letterSpacing: -0.5 },
+  title2: { fontSize: 20, lineHeight: 26, fontFamily: DISPLAY_FONT, letterSpacing: -0.35 },
   title3: { fontSize: 17, lineHeight: 23, fontFamily: "Inter_600SemiBold", letterSpacing: -0.2 },
   body: { fontSize: 16, lineHeight: 24, fontFamily: "Inter_400Regular", letterSpacing: -0.1 },
   bodySmall: { fontSize: 14, lineHeight: 20, fontFamily: "Inter_400Regular", letterSpacing: -0.05 },
